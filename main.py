@@ -18,10 +18,22 @@ import webbrowser
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# QTWEBENGINE должен видеть эти флаги ДО создания QApplication, иначе Chromium:
+#  - ошибочно считает видимое окно перекрытым (CalculateNativeWinOcclusion) и
+#    троттлит отрисовку -> "низкая герцовка", ощущение замершего интерфейса;
+#  - троттлит фоновые таймеры рендера.
+# Ставим в самом начале модуля (до инициализации QtWebEngine).
+os.environ.setdefault(
+    "QTWEBENGINE_CHROMIUM_FLAGS",
+    "--disable-background-timer-throttling --disable-renderer-backgrounding "
+    "--disable-features=CalculateNativeWinOcclusion",
+)
+
 # Guarded: классы PySide6 нужны только для Bridge/окна. Если PySide6 нет,
 # модуль остаётся импортируемым (dev --browser / запасной pywebview).
 try:
     from PySide6.QtCore import QObject, Slot
+    from PySide6.QtWidgets import QFileDialog
     ALLOW_QTSLOT = True
 except Exception:  # noqa: BLE001
     QObject = object
@@ -31,6 +43,7 @@ except Exception:  # noqa: BLE001
             return fn
         return _decorator
 
+    QFileDialog = None
     ALLOW_QTSLOT = False
 
 
@@ -239,12 +252,22 @@ class Bridge(QObject):
 
 def _run_qt(app, config, url, base_dir):
     from config import WINDOW_SIZES
-    from PySide6.QtCore import Qt, QUrl
+    from PySide6.QtCore import Qt, QUrl, QTimer
     from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication, QMainWindow
     from PySide6.QtWebEngineWidgets import QWebEngineView
-    from PySide6.QtWebEngineCore import QWebEngineScript
+    from PySide6.QtWebEngineCore import QWebEngineScript, QWebEnginePage
     from PySide6.QtWebChannel import QWebChannel
+
+    class _Page(QWebEnginePage):
+        """Печатает JS-ошибки в консоль, чтобы видеть сбои фронтенда."""
+
+        def javaScriptConsoleMessage(self, level, message, lineNumber, sourceId):
+            try:
+                if int(level) >= 2:  # 2=warning, 3=error
+                    print("[JS:%s] %s" % (lineNumber, message), file=sys.stderr)
+            except Exception:  # noqa: BLE001
+                pass
 
     qt_app = QApplication.instance() or QApplication(sys.argv)
     qt_app.setQuitOnLastWindowClosed(True)
@@ -261,12 +284,13 @@ def _run_qt(app, config, url, base_dir):
 
     view = QWebEngineView()
     win.setCentralWidget(view)
+    page = _Page(view)
+    view.setPage(page)
 
     # нативный мост: window.pywebview.api
     channel = QWebChannel()
     bridge = Bridge(win)
     channel.registerObject("bridge", bridge)
-    page = view.page()
     page.setWebChannel(channel)
 
     # JS-шим (qwebchannel + мост + drag) на этапе DocumentCreation, main world
@@ -282,6 +306,26 @@ def _run_qt(app, config, url, base_dir):
     w, h = _clamp_to_workarea(*size)
     win.resize(w, h)
     view.setUrl(QUrl(url))
+
+    # Отладочный хук: при TS_DIAG=1 снять состояние фронта и завершиться.
+    if os.environ.get("TS_DIAG"):
+        def _diag():
+            js = ("(function(){"
+                  " var c=document.getElementById('window-controls');"
+                  " var sb=document.getElementById('sidebar');"
+                  " var pt=document.getElementById('project-tree');"
+                  " var gl=document.createElement('canvas').getContext('webgl');"
+                  " var ren='?'; try{ ren=gl?gl.getParameter(gl.RENDERER):'no-gl'; }catch(e){ren='err';}"
+                  " return JSON.stringify({api:(window.pywebview&&typeof window.pywebview.api),"
+                  "  hidden:c?c.hidden:'no-el',"
+                  "  sbHidden:sb?sb.hidden:'no-el',"
+                  "  treeChildren:pt?pt.children.length:'no-el',"
+                  "  treeHtmlLen:pt?pt.innerHTML.length:-1, renderer:String(ren)});})()")
+            def cb(v):
+                _log("diag: %s" % v)
+                QTimer.singleShot(200, lambda: os._exit(0))
+            page.runJavaScript(js, cb)
+        QTimer.singleShot(4000, _diag)
 
     if config.get("fullscreen"):
         win.showFullScreen()
