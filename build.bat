@@ -1,7 +1,7 @@
 @echo off
-rem Build TerminatorSheet.exe (onefile, windowed)
+rem Build TerminatorSheetQt.exe (PySide6 + QtWebEngine, onefile, windowed)
 cd /d "%~dp0"
 python -m PyInstaller --noconfirm --clean TerminatorSheet.spec
 echo.
-echo Done. Artifact: %cd%\dist\TerminatorSheet.exe
+echo Done. Artifact: %cd%\dist\TerminatorSheetQt.exe
 pause
