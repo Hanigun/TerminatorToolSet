@@ -58,6 +58,19 @@ except Exception:  # noqa: BLE001
     ALLOW_QTSLOT = False
 
 
+def _exit_timeout(delay: float = 2.0) -> None:
+    """Daemon-таймер принудительного выхода.
+
+    НЕ блокирует чистую остановку QtWebEngine (не даёт процессу зависнуть в
+    ожидании не-daemon потока), но гарантирует выход, если событийный цикл
+    реально завис. Иначе os._exit(0) жёстко убивает WebEngine, не давая
+    DXGI/композитору финализироваться -> "QDxgiVSyncService not destroyed in time".
+    """
+    t = threading.Timer(delay, lambda: os._exit(0))
+    t.daemon = True
+    t.start()
+
+
 def _free_port() -> int:
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
@@ -230,7 +243,7 @@ class Bridge(QObject):
         except Exception:  # noqa: BLE001
             pass
         # safety net in case the Qt event loop does not exit on its own
-        threading.Timer(2.0, lambda: os._exit(0)).start()
+        _exit_timeout()
         return True
 
     @Slot(int, int, result=bool)
@@ -365,7 +378,7 @@ def _run_qt(app, config, url, base_dir):
         except Exception:  # noqa: BLE001
             pass
         # страховка: если событийный цикл QtWebEngine не выйдет сам
-        threading.Timer(2.0, lambda: os._exit(0)).start()
+        _exit_timeout()
 
     signal.signal(signal.SIGINT, _sigint_handler)
 
@@ -529,7 +542,7 @@ def main(browser: bool = False):
             except Exception:  # noqa: BLE001
                 pass
             # safety net in case the webview loop does not exit on its own
-            threading.Timer(2.0, lambda: os._exit(0)).start()
+            _exit_timeout()
             return True
 
         def apply_window_size(self, width, height):

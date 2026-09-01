@@ -300,7 +300,7 @@ input, textarea, select, [contenteditable="true"] { user-select: text; -webkit-u
 .sidebar-resizer {
   width: 4px;
   background: transparent;
-  cursor: col-resize;
+  cursor: ew-resize;
   position: relative;
   z-index: 20;
   transition: background 0.1s;
@@ -816,7 +816,7 @@ input, textarea, select, [contenteditable="true"] { user-select: text; -webkit-u
 /* drag handle to resize the sticky sysname column */
 .th-resizer {
   position: absolute; top: 0; right: -3px; width: 7px; height: 100%;
-  cursor: col-resize; z-index: 8;
+  cursor: ew-resize; z-index: 8;
 }
 .th-resizer:hover { background: var(--accent-glow); }
 .grid thead th.sticky-col {
@@ -834,7 +834,7 @@ input, textarea, select, [contenteditable="true"] { user-select: text; -webkit-u
 .grid tbody td {
   border-right: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft);
   padding: 3px 8px; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; cursor: cell;
+  overflow: hidden; text-overflow: ellipsis; cursor: default;
   height: calc(var(--grid-font) + 16px);
 }
 .grid tbody tr.tr-add td { height: auto; }
@@ -1012,10 +1012,10 @@ textarea.cm-input { resize: vertical; line-height: 1.45; }
 }
 
 /* tree: multi-select + drag */
-.tree-file { cursor: grab; }
+.tree-file { cursor: default; }
 .tree-file.selected { background: rgba(232, 184, 75, .16); box-shadow: inset 2px 0 0 var(--accent); }
 .tree-file.dragging { opacity: .45; }
-.tree-cat { cursor: grab; }
+.tree-cat { cursor: default; }
 .tree-cat.dragging { opacity: .45; }
 .tree-group.dragging { opacity: .5; }
 .tree-drag-ghost { position: fixed; top: -200px; left: -200px; z-index: 999;
