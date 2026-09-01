@@ -1,0 +1,5 @@
+127.0.0.1 - - [01/Sep/2026 17:05:16] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [01/Sep/2026 17:05:16] "GET /static/css/style.css?v=1788271516 HTTP/1.1" 200 -
+127.0.0.1 - - [01/Sep/2026 17:05:16] "GET /assets/icons/dark/icons/folder_home.svg HTTP/1.1" 200 -
+127.0.0.1 - - [01/Sep/2026 17:05:16] "GET /assets/icons/app_icon.png HTTP/1.1" 200 -
+127.0.0.1 - - [01/Sep/2026 17:05:16] "GET /static/js/app.js?v=1788271516 HTTP/1.1" 200 -

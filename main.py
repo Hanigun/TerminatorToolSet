@@ -11,6 +11,7 @@ to the executable (frozen).
 from __future__ import annotations
 
 import os
+import signal
 import socket
 import sys
 import threading
@@ -354,6 +355,19 @@ def _run_qt(app, config, url, base_dir):
     else:
         win.show()
     _log("mode=qt window=%s size=%sx%s" % (url, w, h))
+
+    # Ctrl+C в консоли: закрыть окно так же чисто, как кнопка ✕, вместо
+    # KeyboardInterrupt-трейсбека из exec() (PySide6 свой обработчик не ставит).
+    def _sigint_handler(signum, frame):
+        try:
+            win.close()
+            qt_app.quit()
+        except Exception:  # noqa: BLE001
+            pass
+        # страховка: если событийный цикл QtWebEngine не выйдет сам
+        threading.Timer(2.0, lambda: os._exit(0)).start()
+
+    signal.signal(signal.SIGINT, _sigint_handler)
 
     qt_app.exec()
 
