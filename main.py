@@ -41,7 +41,7 @@ def _apply_chromium_flags(config):
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (cur + " " + extra).strip()
 
 # Guarded: классы PySide6 нужны только для Bridge/окна. Если PySide6 нет,
-# модуль остаётся импортируемым (dev --browser / запасной pywebview).
+# модуль остаётся импортируемым (dev --browser / браузер-fallback).
 try:
     from PySide6.QtCore import QObject, Slot
     from PySide6.QtWidgets import QFileDialog

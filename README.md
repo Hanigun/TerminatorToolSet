@@ -16,7 +16,7 @@ Deluxe SpreadsheetML-редактор для мода **TERMINATOR OVERHAUL ASSE
 - Подсказки по колонкам из `<Comment>` шапки.
 - Бэкапы + история правок в SQLite (откат к любой версии) — перед каждой записью полная копия файла.
 - Автосохранение (галочка), тёмная/светлая тема, RU/EN, JSON-конфиг рядом с программой; список горячих клавиш в настройках.
-- pywebview/WebView2 + сборка в один `.exe` (иконка из `assets/icons/app_icon.ico`).
+- **PySide6/QtWebEngine** frameless-окно (тот же HTML/CSS/JS, что и в браузере) + сборка в один `.exe` (иконка из `assets/icons/app_icon.ico`).
 - Фоновый индекс связей и LRU-кэш сессий (незакрытые правки не вытесняются).
 
 ## Запуск из исходников (dev, браузер)
@@ -28,17 +28,18 @@ python main.py --browser
 ```
 python main.py
 ```
+Стартует нативный frameless-окно PySide6/QtWebEngine (встроенный Chromium, тот же вид что в браузере).
 
 ## Сборка .exe
 ```
 build.bat
 ```
-Результат: `dist\TerminatorSheet.exe`. Конфиг (`config.json`), БД (`terminator_sheet.db`) и журнал (`boot.log`) создаются рядом с exe.
+Результат: `dist\TerminatorSheetQt.exe` (PySide6 + QtWebEngine, onefile, windowed). Конфиг (`config.json`), БД (`terminator_sheet.db`) и журнал (`boot.log`) создаются рядом с exe.
 
 ## Структура
 ```
 app.py            Flask-бэкенд (JSON API, фоновый индекс, LRU-сессии)
-main.py           frameless-окно pywebview / браузер + сборка
+main.py           frameless-окно PySide6 (QtWebEngine) / браузер + сборка
 spreadsheet_ml.py ядро: SpreadsheetML parse/serialize (lxml, минимально-инвазивная запись) + стриминговый iterparse
 xmlgrid.py        сессия редактирования (grid, dirty-флаг, правки)
 project.py        реестр файлов мода: оверлеи, категории, дружеские имена
@@ -55,4 +56,4 @@ test_api.py       интеграционный тест API
 ```
 
 ## Замечание по Python
-Стек (Flask + pywebview + lxml + PyInstaller) проверен на **Python 3.14**. Если `pywebview` не поднимет окно в вашем окружении, `main.py` автоматически переключится на обычный браузер.
+Стек (Flask + **PySide6/QtWebEngine** + lxml + PyInstaller) проверен на **Python 3.14**. Если QtWebEngine не поднимет окно, `main.py` автоматически переключится на обычный браузер (`--browser` для явного dev-режима).
