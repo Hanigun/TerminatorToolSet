@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Инструменты проекта (индексация/состояние агентов)
+.codegraph/
+.unlazy/
+
+# Артефакты сборки / упаковки
+build/
+dist/
+
+# Логи и рантайм-данные рядом с программой
+boot.log
+*.db
+config.json
+
+# Внешние утилиты и рабочие заметки (не входят в проект)
+7z/
+UprisingMap Editor/
+SWT Editor.exe
+list.txt

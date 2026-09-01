@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="/static/css/style.css?v={{ v }}">
+</head>
+<body>
+  <header class="topbar pywebview-drag-region">
+    <div class="brand pywebview-no-drag">
+      <img class="brand-logo" src="/assets/icons/app_icon.png" alt="">
+      <span class="brand-name" data-i18n="app_title">Terminator Sheet</span>
+    </div>
+    <div class="topbar-center pywebview-no-drag">
+      <div class="file-path" id="file-path"></div>
+    </div>
+    <div class="topbar-right pywebview-no-drag">
+    <button class="icon-btn" id="btn-history" data-i18n-title="history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>
+    <button class="lang-toggle" id="lang-toggle"><span class="lang-flag">RU</span></button>
+    <button class="icon-btn" id="btn-settings" data-i18n-title="settings" title="Settings">⚙</button>
+    <span class="tb-sep"></span>
+    <div class="window-controls" id="window-controls" hidden>
+      <button class="wc-btn" id="btn-min" data-i18n-title="minimize" title="Minimize"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 5h10" stroke="currentColor" stroke-width="1.2"/></svg></button>
+      <button class="wc-btn" id="btn-max" data-i18n-title="maximize" title="Maximize"><svg width="10" height="10" viewBox="0 0 10 10"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+      <button class="wc-btn wc-close" id="btn-close" data-i18n-title="close" title="Close"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    </div>
+    </div>
+  </header>
+
+  <div class="toolbar" id="sheet-toolbar" hidden>
+    <button class="btn-fab" id="btn-save" data-i18n-title="save" title="Сохранить">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
+    </button>
+    <button class="btn-fab" id="btn-undo" disabled data-i18n-title="undo" title="Отменить">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+    </button>
+    <button class="btn-fab" id="btn-redo" disabled data-i18n-title="redo" title="Вернуть">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg>
+    </button>
+    <button class="btn-fab" id="btn-project-side" data-i18n-title="open_project" title="Открыть проект">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg>
+    </button>
+    <span class="toolbar-sep"></span>
+    <span class="toolbar-hint" data-i18n="find_hint">Ctrl+F — поиск</span>
+    <div class="spacer"></div>
+    <div class="dirty-dot" id="dirty-dot" title=""></div>
+    <button class="btn-fab" id="btn-create-mod" data-i18n-title="create_mod" title="Создать мод">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/><path d="M12 10v6"/><path d="M9 13h6"/></svg>
+    </button>
+    <button class="btn-fab" id="btn-unpacker" data-i18n-title="up_title" title="Распаковщик архивов">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
+    </button>
+    <button class="btn-fab glow" id="btn-compare" data-i18n-title="compare" title="Сравнить">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg>
+    </button>
+  </div>
+
+<main class="app-body">
+    <!-- Sidebar (project tree) - always visible when project loaded -->
+    <aside id="sidebar" class="sidebar" hidden>
+      <div class="tree-body">
+      <div class="sidebar-header">
+        <span class="sidebar-title" id="sidebar-title"></span>
+        <button class="icon-btn sidebar-clear-edited" id="sidebar-clear-edited" data-i18n-title="clear_edited" title="Очистить пометки редактирования">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M6.2 6.2l11.6 11.6"/></svg>
+        </button>
+        <button class="icon-btn sidebar-close" id="sidebar-close" data-i18n-title="close_project" title="Закрыть проект">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+        <button class="icon-btn sidebar-toggle" id="sidebar-toggle" data-i18n-title="close" title="Collapse">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+      </div>
+      <div class="sidebar-path" id="sidebar-path"></div>
+      <div class="tree-toolbar" id="tree-toolbar" hidden>
+        <input type="search" id="tree-filter" class="tree-filter" placeholder="Поиск в дереве…" data-i18n-ph="tree_filter_ph">
+        <button class="icon-btn tree-filter-btn" id="tree-filter-btn" data-i18n-title="tree_filter_title" title="Фильтры дерева">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v5.5l-4 2V13L3 5z"/></svg>
+        </button>
+        <div id="tree-filter-menu" class="tree-filter-menu" hidden>
+          <div class="tfm-presets">
+            <button id="tfm-default" data-i18n="tree_filter_default">По умолчанию</button>
+            <button id="tfm-all" data-i18n="tree_filter_all">Всё</button>
+          </div>
+          <input type="search" id="tfm-search" placeholder="Поиск в фильтре…" data-i18n-ph="tree_filter_search_ph">
+          <div class="tfm-section">
+            <div class="tfm-title" data-i18n="tree_filter_exts">Расширения</div>
+            <div id="tfm-exts" class="tfm-list"></div>
+          </div>
+          <div class="tfm-section">
+            <div class="tfm-title" data-i18n="tree_filter_folders">Папки</div>
+            <div id="tfm-folders" class="tfm-list"></div>
+          </div>
+        </div>
+      </div>
+      <div id="project-tree" class="tree"></div>
+      </div>
+    </aside>
+
+    <!-- Sidebar resize handle -->
+    <div id="sidebar-resizer" class="sidebar-resizer" hidden></div>
+
+    <!-- Main content area -->
+    <div id="main-content" class="main-content">
+      <!-- Floating button to restore the collapsed sidebar -->
+      <button class="sidebar-fab" id="sidebar-fab" data-i18n-title="open_sidebar" title="Показать панель" hidden>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <path d="M4 5h10M4 12h16M4 19h13"/>
+          <circle cx="4" cy="5" r="1.3" fill="currentColor" stroke="none"/>
+        </svg>
+      </button>
+      <!-- Tab bar -->
+      <div class="tab-bar" id="tab-bar" role="tablist">
+        <button class="tab-bar-btn tab-open-file" id="tab-open-file" data-i18n-title="home" title="Главная">
+          <img src="/assets/icons/dark/icons/folder_home.svg" alt="">
+        </button>
+        <div class="tab-bar-scroll" id="tab-bar-scroll">
+          <div class="tab-bar-inner" id="tab-bar-inner"></div>
+        </div>
+        <button class="tab-bar-btn tab-bar-menu" id="tab-bar-menu" data-i18n-title="more_tabs" title="Все вкладки" hidden>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+        </button>
+      </div>
+
+      <!-- Tab panels container -->
+      <div class="tab-panels" id="tab-panels">
+        <!-- Find & Replace bar -->
+        <div class="find-bar" id="find-bar" hidden>
+          <div class="find-row">
+            <input type="text" id="find-input" placeholder="Найти…" data-i18n-ph="find_ph">
+            <span class="find-count" id="find-count">0/0</span>
+            <button class="icon-btn" id="find-prev" data-i18n-title="find_prev_t" title="Назад (Shift+F3)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6"/></svg></button>
+            <button class="icon-btn" id="find-next" data-i18n-title="find_next_t" title="Вперёд (F3)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>
+            <button class="icon-btn" id="find-toggle-rep" data-i18n-title="find_rep_t" title="Замена (Ctrl+H)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button>
+            <button class="icon-btn" id="find-close" data-i18n-title="find_close_t" title="Закрыть (Esc)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+          </div>
+          <div class="find-row" id="find-rep-row" hidden>
+            <input type="text" id="replace-input" placeholder="Заменить на…" data-i18n-ph="replace_ph">
+            <button class="btn sm" id="rep-one" data-i18n="replace_one">Заменить</button>
+            <button class="btn sm ghost" id="rep-all" data-i18n="replace_all">Все</button>
+          </div>
+        </div>
+        <!-- Welcome tab (permanent, first) -->
+        <section class="tab-panel welcome-tab" id="welcome-tab" role="tabpanel" data-tab-id="welcome">
+          <div class="dropzone" id="dropzone">
+            <div class="dz-icon">🗀</div>
+            <div class="dz-title" data-i18n="open_file">Открыть документ</div>
+            <div class="dz-sub" data-i18n="projects_hint">Перетащите сюда файл .xml или папку проекта мода</div>
+            <div class="dz-buttons">
+              <button class="btn big" id="landing-open-file"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span data-i18n="open_doc_short">Файл</span></button>
+              <button class="btn big" id="landing-open-project"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg><span data-i18n="open_folder_short">Папка</span></button>
+              <button class="btn big" id="landing-create-mod"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg><span data-i18n="create_mod">Создать мод</span></button>
+              <button class="btn big" id="landing-unpacker" data-i18n-title="up_title" title="Распаковщик архивов"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg><span data-i18n="up_title">Распаковщик</span></button>
+              <button class="btn big" id="landing-compare" data-i18n-title="compare" title="Сравнить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg><span data-i18n="compare">Сравнить</span></button>
+            </div>
+            <input type="file" id="file-input" accept=".xml" hidden>
+            <button class="btn ghost" id="landing-records-btn" data-i18n="recent">Недавние</button>
+          </div>
+        </section>
+
+        <!-- Compare page (permanent tab) -->
+        <section class="tab-panel compare-tab" id="compare-tab" data-tab-id="compare">
+          <div class="cmp-page">
+            <div class="cmp-top">
+              <div class="cmp-side">
+                <span class="cmp-tag base" data-i18n="cmp_base">Основа</span>
+                <div class="cmp-path-row">
+                  <input type="text" id="cmp-left-path" class="cmp-path" data-i18n-ph="cmp_path_ph" placeholder="Файл или папка…" spellcheck="false">
+                  <button class="icon-btn" id="cmp-left-file" data-i18n-title="cmp_pick_file_t" title="Выбрать файл"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></button>
+                  <button class="icon-btn" id="cmp-left-dir" data-i18n-title="cmp_pick_folder_t" title="Выбрать папку"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg></button>
+                  <button class="icon-btn cmp-clear" id="cmp-left-clear" data-i18n-title="close" title="Закрыть"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+                </div>
+                <div class="cmp-dd" id="cmp-left-dd" hidden>
+                  <button type="button" class="cmp-dd-btn" id="cmp-left-dd-btn">
+                    <span class="cmp-dd-face" id="cmp-left-dd-face">Файл…</span>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                  </button>
+                  <div class="cmp-list cmp-dd-pop" id="cmp-left-list" hidden></div>
+                </div>
+                <div class="cmp-side-status" id="cmp-left-status" hidden></div>
+              </div>
+              <div class="cmp-mid">
+                <label class="cmp-key-label"><span data-i18n="cmp_key">Ключ</span>
+                  <select id="cmp-keycol"></select></label>
+                <div class="cmp-btns">
+                  <button class="btn accent" id="cmp-run" data-i18n="compare">Сравнить</button>
+                  <button class="btn accent" id="cmp-merge" data-i18n="cmp_merge" title="Перенести всё новое справа налево">Слияние</button>
+                </div>
+                <div class="cmp-filters" id="cmp-filters" hidden></div>
+              </div>
+              <div class="cmp-side">
+                <span class="cmp-tag src" data-i18n="cmp_source">Источник</span>
+                <div class="cmp-path-row">
+                  <input type="text" id="cmp-right-path" class="cmp-path" data-i18n-ph="cmp_path_ph" placeholder="Файл или папка…" spellcheck="false">
+                  <button class="icon-btn" id="cmp-right-file" data-i18n-title="cmp_pick_file_t" title="Выбрать файл"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></button>
+                  <button class="icon-btn" id="cmp-right-dir" data-i18n-title="cmp_pick_folder_t" title="Выбрать папку"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg></button>
+                  <button class="icon-btn cmp-clear" id="cmp-right-clear" data-i18n-title="close" title="Закрыть"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+                </div>
+                <div class="cmp-dd" id="cmp-right-dd" hidden>
+                  <button type="button" class="cmp-dd-btn" id="cmp-right-dd-btn">
+                    <span class="cmp-dd-face" id="cmp-right-dd-face">Файл…</span>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                  </button>
+                  <div class="cmp-list cmp-dd-pop" id="cmp-right-list" hidden></div>
+                </div>
+                <div class="cmp-side-status" id="cmp-right-status" hidden></div>
+              </div>
+            </div>
+            <div class="cmp-search-row" id="cmp-search-row" hidden>
+              <div class="cmp-search-side" id="cmp-search-side-left">
+                <input type="search" id="cmp-search-left" data-i18n-ph="cmp_search_ph" placeholder="Поиск по таблице…" spellcheck="false">
+              </div>
+              <div class="cmp-search-gap"></div>
+              <div class="cmp-search-side" id="cmp-search-side-right">
+                <input type="search" id="cmp-search-right" data-i18n-ph="cmp_search_ph" placeholder="Поиск по таблице…" spellcheck="false">
+              </div>
+            </div>
+            <div class="cmp-grid-wrap" id="cmp-grid-wrap">
+              <div class="cmp-empty" id="cmp-empty" data-i18n="cmp_hint">Укажите файл или папку слева (основа) и справа (источник), затем нажмите «Сравнить»</div>
+              <div class="cmp-pane" id="cmp-pane-left">
+                <table class="cmp-grid" id="cmp-table-left"><thead></thead><tbody></tbody></table>
+                <div class="cmp-loading hidden" id="cmp-loading-left"><div class="loading-spinner"></div></div>
+              </div>
+              <div class="cmp-divider" id="cmp-divider"></div>
+              <div class="cmp-pane" id="cmp-pane-right">
+                <table class="cmp-grid" id="cmp-table-right"><thead></thead><tbody></tbody></table>
+                <div class="cmp-loading hidden" id="cmp-loading-right"><div class="loading-spinner"></div></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Create mod page (permanent tab) -->
+        <section class="tab-panel create-mod-tab" id="create-mod-tab" data-tab-id="create-mod">
+          <div class="cm-page">
+            <h2 class="cm-title" data-i18n="cm_title">Создать мод</h2>
+            <div class="cm-form">
+              <div class="cm-duo-main">
+                <div class="cm-col">
+                  <label class="cm-row">
+                    <span class="cm-label" data-i18n="cm_name">Название мода</span>
+                    <input type="text" id="cm-name" class="cm-input" spellcheck="false" data-i18n-ph="cm_name_ph" placeholder="Мой мод">
+                  </label>
+                  <label class="cm-row">
+                    <span class="cm-label" data-i18n="cm_desc">Описание мода</span>
+                    <textarea id="cm-desc" class="cm-input" rows="6" spellcheck="false"
+                              placeholder="Описание мода… (\n — перенос строки)"></textarea>
+                  </label>
+                </div>
+                <div class="cm-col cm-col-icon">
+                  <div class="cm-row">
+                    <span class="cm-label cm-ghost-label" aria-hidden="true">Превью</span>
+                    <div class="cm-icon-top">
+                      <button class="btn" id="cm-pick-icon" data-i18n="cm_pick_icon">Выбрать превью…</button>
+                      <div class="cm-hint" data-i18n="cm_icon_hint">Картинка 16:9 — будет сохранена как basis/THUMBNAIL.dds</div>
+                    </div>
+                  </div>
+                  <div class="cm-preview" id="cm-preview">
+                    <span class="cm-no-icon" data-i18n="cm_no_icon">Нет превью (16:9)</span>
+                  </div>
+                </div>
+              </div>
+              <div class="cm-row">
+                <span class="cm-label" data-i18n="cm_files">Файлы мода</span>
+                <div class="cm-drop" id="cm-dropzone">
+                  <div class="cm-drop-head">
+                    <span class="cm-drop-count" id="cm-drop-count"></span>
+                    <button class="icon-btn cm-clear-btn" id="cm-clear-files" data-i18n-title="cm_clear_all" title="Удалить все файлы" disabled>✕</button>
+                  </div>
+                  <div class="cm-drop-hint" id="cm-drop-hint" data-i18n="cm_drop_hint">Перетащите файлы из дерева слева (Ctrl — несколько файлов)</div>
+                  <div class="cm-file-list" id="cm-file-list"></div>
+                </div>
+              </div>
+              <label class="cm-row">
+                <span class="cm-label" data-i18n="cm_game_dir">Путь к установленной игре</span>
+                <div class="cm-dir-row">
+                  <input type="text" id="cm-game-dir" class="cm-input" spellcheck="false"
+                         placeholder="C:\Games\Terminator Dark Fate - Defiance">
+                  <button class="btn" id="cm-pick-dir" data-i18n="cm_pick_dir">Указать путь к игре</button>
+                </div>
+              </label>
+              <div class="cm-actions">
+                <select id="cm-target-mod" class="cm-input cm-select" title=""></select>
+                <button class="btn" id="cm-copy-files" data-i18n="cm_copy_files" disabled>Скопировать файлы</button>
+                <button class="btn accent big" id="cm-create" data-i18n="cm_create">Создать мод</button>
+              </div>
+              <div class="cm-result" id="cm-result" hidden></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Unpacker page (permanent tab) -->
+        <section class="tab-panel unpacker-tab" id="unpacker-tab" data-tab-id="unpacker">
+          <div class="up-page">
+            <h2 class="cm-title" data-i18n="up_title">Распаковщик архивов</h2>
+            <div class="up-form">
+              <label class="cm-row">
+                <span class="cm-label" data-i18n="up_game_root">Корень игры</span>
+                <div class="cm-dir-row">
+                  <input type="text" id="up-root" class="cm-input" spellcheck="false"
+                         placeholder="C:\Games\Terminator Dark Fate - Defiance">
+                  <button class="btn" id="up-pick-root" data-i18n="cm_pick_dir">Указать путь к игре</button>
+                </div>
+              </label>
+              <label class="cm-row">
+                <span class="cm-label" data-i18n="up_dest">Папка распаковки</span>
+                <div class="cm-dir-row">
+                  <input type="text" id="up-dest" class="cm-input" spellcheck="false"
+                         placeholder="C:\TDF_Unpacked">
+                  <button class="btn" id="up-pick-dest" data-i18n="up_pick_dest">Выбрать папку</button>
+                </div>
+              </label>
+              <div class="up-actions">
+                <button class="btn" id="up-scan" data-i18n="up_scan">Сканировать</button>
+                <button class="btn accent" id="up-run" data-i18n="up_run" disabled>Распаковать</button>
+                <button class="icon-btn up-abort" id="up-abort" data-i18n-title="up_abort" title="Прервать" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+              </div>
+              <div class="up-progress" id="up-progress" hidden>
+                <div class="up-progress-fill" id="up-progress-fill"></div>
+                <span class="up-progress-text" id="up-progress-text"></span>
+              </div>
+              <div class="up-hint" data-i18n="up_hint">Все пакы игры распаковываются в basis\: сначала basis.pak, затем патчи по номерам — каждый следующий перезаписывает файлы. Legion → dlc\legion\basis, Resistance → dlc\resistance\basis, Evolution → dlc\evolution\basis.</div>
+              <div class="up-plan" id="up-plan" hidden></div>
+              <div class="up-log" id="up-log" hidden></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <!-- Settings modal -->
+  <div class="modal" id="settings-modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <span data-i18n="settings">Настройки</span>
+        <button class="icon-btn" data-close>✕</button>
+      </div>
+      <div class="settings-body">
+        <label class="setting-row"><span data-i18n="auto_save">Автосохранение</span>
+          <input type="checkbox" id="set-auto-save"></label>
+        <label class="setting-row"><span data-i18n="fullscreen">Полный экран</span>
+          <input type="checkbox" id="set-fullscreen"></label>
+        <label class="setting-row"><span data-i18n="theme">Тема</span>
+          <select id="set-theme"><option value="dark" data-i18n="dark">Тёмная</option><option value="light" data-i18n="light">Светлая</option></select></label>
+        <label class="setting-row"><span data-i18n="window_size">Размер окна</span>
+          <select id="set-window-size">
+            <option value="normal">1280×800</option>
+            <option value="wide">1536×800</option>
+            <option value="big">1536×960</option>
+          </select></label>
+        <label class="setting-row"><span data-i18n="grid_font">Шрифт таблицы</span>
+          <select id="set-grid-font"></select></label>
+        <label class="setting-row"><span data-i18n="default_key_column">Колонка-ключ</span>
+          <input type="text" id="set-keycol"></label>
+        <div class="hotkeys-info">
+          <div class="hk-title" data-i18n="hotkeys">Горячие клавиши</div>
+          <div class="hk-row"><kbd>Ctrl+F</kbd><span data-i18n="hk_find">Поиск</span></div>
+          <div class="hk-row"><kbd>Ctrl+H</kbd><span data-i18n="hk_replace">Замена</span></div>
+          <div class="hk-row"><kbd>Ctrl +</kbd> / <kbd>Ctrl −</kbd> / <kbd>Ctrl+0</kbd><span data-i18n="hk_font">Размер шрифта таблицы / сброс</span></div>
+          <div class="hk-row"><kbd>F3</kbd> / <kbd>Shift+F3</kbd><span data-i18n="hk_next_prev">Следующее / предыдущее совпадение</span></div>
+          <div class="hk-row"><kbd>Ctrl+S</kbd><span data-i18n="hk_save">Сохранить</span></div>
+          <div class="hk-row"><kbd>Ctrl+O</kbd><span data-i18n="hk_open_file">Открыть файл</span></div>
+          <div class="hk-row"><kbd>Ctrl+Shift+O</kbd><span data-i18n="hk_open_project">Открыть проект</span></div>
+          <div class="hk-row"><kbd>Ctrl+W</kbd><span data-i18n="hk_close_tab">Закрыть вкладку</span></div>
+          <div class="hk-row"><kbd>Ctrl+Z</kbd><span data-i18n="hk_undo">Отменить</span></div>
+          <div class="hk-row"><kbd>Ctrl+Shift+Z</kbd> / <kbd>Ctrl+Y</kbd><span data-i18n="hk_redo">Вернуть</span></div>
+          <div class="hk-row"><kbd>Ctrl+C</kbd><span data-i18n="hk_copy">Копировать</span></div>
+          <div class="hk-row"><kbd>Ctrl+X</kbd><span data-i18n="hk_cut">Вырезать</span></div>
+          <div class="hk-row"><kbd>Ctrl+V</kbd><span data-i18n="hk_paste">Вставить</span></div>
+          <div class="hk-row"><kbd>Esc</kbd><span data-i18n="hk_esc_tree">Снять выделение в дереве</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- History modal -->
+  <div class="modal" id="history-modal" hidden>
+    <div class="modal-card mid">
+      <div class="modal-head">
+        <span data-i18n="history">История</span>
+        <button class="icon-btn" id="history-clear" data-i18n-title="hist_clear" title="Очистить историю"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
+        <button class="icon-btn" data-close>✕</button>
+      </div>
+      <div id="history-body" class="history-body"></div>
+    </div>
+  </div>
+
+  <!-- Recent files / projects modal -->
+  <div class="modal" id="recents-modal" hidden>
+    <div class="modal-card mid">
+      <div class="modal-head">
+        <span data-i18n="recent">Недавние</span>
+        <span class="head-actions">
+          <button class="btn sm ghost" id="recents-clear" data-i18n="recents_clear">Очистить</button>
+          <button class="icon-btn" data-close>✕</button>
+        </span>
+      </div>
+      <div class="recents-body" id="recents-body"></div>
+    </div>
+  </div>
+
+  <!-- Generic confirm dialog (replaces browser confirm()) -->
+  <div class="modal" id="confirm-modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head"><span id="confirm-title"></span></div>
+      <div class="confirm-msg" id="confirm-msg"></div>
+      <div class="modal-actions" id="confirm-actions"></div>
+    </div>
+  </div>
+
+  <!-- Text prompt modal (replaces browser prompt) -->
+  <div class="modal" id="prompt-modal" hidden>
+    <div class="modal-card prompt-card">
+      <div class="modal-head"><span id="prompt-title"></span></div>
+      <div class="prompt-body">
+        <input type="text" id="prompt-input" class="prompt-input" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="modal-actions" id="prompt-actions"></div>
+    </div>
+  </div>
+
+  <!-- Row/column context menu -->
+  <div class="ctx-menu" id="ctx-menu" hidden>
+    <div class="ctx-item" data-act="open-link"><span class="ctx-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span><span data-i18n="ctx_open_link">Открыть связанный файл</span></div>
+    <div class="ctx-sep" data-sep="link"></div>
+    <div class="ctx-item" data-act="copy-cell"><span class="ctx-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span data-i18n="ctx_copy">Копировать</span></div>
+    <div class="ctx-item" data-act="cut-cell"><span class="ctx-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/></svg></span><span data-i18n="ctx_cut">Вырезать</span></div>
+    <div class="ctx-item" data-act="paste-cell"><span class="ctx-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg></span><span data-i18n="ctx_paste">Вставить</span></div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" data-act="copy-col"><span class="ctx-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg></span><span data-i18n="ctx_copy_col">Скопировать столбец</span></div>
+    <div class="ctx-item danger" data-act="del-col"><span class="ctx-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span><span data-i18n="ctx_del_col">Удалить колонку</span></div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" data-act="copy-row"><span class="ctx-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 12h18"/></svg></span><span data-i18n="ctx_copy_row">Копировать строку</span></div>
+    <div class="ctx-item" data-act="dup-row"><span class="ctx-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/><path d="M15.5 12.5v6M12.5 15.5h6"/></svg></span><span data-i18n="ctx_dup_row">Дублировать строку</span></div>
+    <div class="ctx-item danger" data-act="del-row"><span class="ctx-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span><span data-i18n="ctx_del_row">Удалить строку</span></div>
+  </div>
+
+  <!-- Dropdown list of all tabs (tab bar overflow) -->
+  <div class="tabs-dropdown" id="tabs-dropdown" hidden></div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="/static/js/app.js?v={{ v }}"></script>
+</body>
+</html>

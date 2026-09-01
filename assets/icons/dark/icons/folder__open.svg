@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <defs>
+    <linearGradient id="tf-f" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e8b84b" stop-opacity=".30"/>
+      <stop offset="1" stop-color="#e8b84b" stop-opacity=".08"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#tf-f)" fill-rule="evenodd" stroke="#e8b84b" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" d="m1.87 8 .7-2.74a1 1 0 0 1 .96-.76h10.94a1 1 0 0 1 .97 1.24l-1.75 7a1 1 0 0 1-.97.76H2A1.5 1.5 0 0 1 .5 12V3.5a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v1"/>
+</svg>
