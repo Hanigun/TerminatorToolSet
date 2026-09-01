@@ -18,6 +18,9 @@ boot.log
 *.db
 config.json
 
+# Тестовый вывод round-trip
+_roundtrip_out.xml
+
 # Внешние утилиты и рабочие заметки (не входят в проект)
 7z/
 UprisingMap Editor/

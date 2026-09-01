@@ -1,8 +1,9 @@
 """Launch Terminator Sheet.
 
 Runs the Flask backend on a random localhost port (background thread), then opens
-a pywebview window (native WebView2) pointed at it. With --browser (dev mode) a
-normal web browser is used instead.
+a window pointed at it. Default mode is a native PySide6 frameless window
+(QtWebEngineView + QWebChannel native bridge). With --browser (dev mode) a normal
+web browser is used instead.
 
 Config + SQLite database live in the folder next to this file (source) or next
 to the executable (frozen).
@@ -16,6 +17,21 @@ import threading
 import webbrowser
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Guarded: классы PySide6 нужны только для Bridge/окна. Если PySide6 нет,
+# модуль остаётся импортируемым (dev --browser / запасной pywebview).
+try:
+    from PySide6.QtCore import QObject, Slot
+    ALLOW_QTSLOT = True
+except Exception:  # noqa: BLE001
+    QObject = object
+
+    def Slot(*_a, **_k):
+        def _decorator(fn):
+            return fn
+        return _decorator
+
+    ALLOW_QTSLOT = False
 
 
 def _free_port() -> int:
@@ -52,7 +68,7 @@ def _clamp_to_workarea(w, h):
 
 
 def build_app():
-    from config import Config, WINDOW_SIZES
+    from config import Config
     from database import Database
     from app import create_app
 
@@ -72,6 +88,210 @@ def _serve(app, host: str, port: int):
     srv.serve_forever()
 
 
+# ---------------------------------------------------------------------------
+# PySide6 window (frameless QWebEngineView + QWebChannel native bridge)
+# ---------------------------------------------------------------------------
+def _qt_available() -> bool:
+    try:
+        from PySide6.QtCore import QObject, Slot  # noqa: F401
+        from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog  # noqa: F401
+        from PySide6.QtWebEngineWidgets import QWebEngineView  # noqa: F401
+        from PySide6.QtWebEngineCore import QWebEngineScript  # noqa: F401
+        from PySide6.QtWebChannel import QWebChannel  # noqa: F401
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _qt_shim_source() -> str:
+    """JS for the pywebview-compatible bridge: qwebchannel.js + window.pywebview.api.
+
+    Injected at DocumentCreation so index.html/app.js stay byte-identical. The
+    JS already treats pywebview.api.* calls as promises, and QWebChannel resolves
+    them with the slot's return value."""
+    # qwebchannel.js is a Qt resource; importing QtWebChannel registers it
+    from PySide6.QtCore import QFile
+    qwc = ""
+    f = QFile(":/qtwebchannel/qwebchannel.js")
+    if f.open(QFile.ReadOnly):
+        try:
+            qwc = bytes(f.readAll()).decode("utf-8", "replace")
+        finally:
+            f.close()
+    shim = r"""
+;(function () {
+  // Создаём фейк pywebview и его api; реально это мост QWebChannel.
+  try {
+    window.pywebview = window.pywebview || {};
+    new QWebChannel(qt.webChannelTransport, function (channel) {
+      if (channel.objects && channel.objects.bridge) {
+        window.pywebview.api = channel.objects.bridge;
+      }
+      var ev = new Event('pywebviewready');
+      window.dispatchEvent(ev);
+      document.dispatchEvent(ev);
+    });
+  } catch (e) {
+    console.error('PySide6 bridge init failed:', e);
+  }
+
+  // ---------- перетаскивание frameless-окна за шапку ----------
+  var __drag = { on: false, lx: 0, ly: 0 };
+  function __noDrag(t) { return t.closest && t.closest('.pywebview-no-drag'); }
+  document.addEventListener('mousedown', function (e) {
+    if (e.button !== 0) return;
+    var region = e.target.closest ? e.target.closest('.pywebview-drag-region') : null;
+    if (!region || __noDrag(e.target)) return;
+    __drag.on = true;
+    __drag.lx = e.screenX;
+    __drag.ly = e.screenY;
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', function (e) {
+    if (!__drag.on) return;
+    var dx = e.screenX - __drag.lx;
+    var dy = e.screenY - __drag.ly;
+    if (dx === 0 && dy === 0) return;
+    __drag.lx = e.screenX;
+    __drag.ly = e.screenY;
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.move_window) {
+      try { window.pywebview.api.move_window(dx, dy); } catch (ke) { /* noop */ }
+    }
+  });
+  document.addEventListener('mouseup', function () { __drag.on = false; });
+  document.addEventListener('mouseleave', function () { __drag.on = false; });
+})();
+"""
+    return qwc + "\n" + shim
+
+
+class Bridge(QObject):
+    """Native window + dialogs exposed to JS as window.pywebview.api."""
+
+    def __init__(self, win):
+        super().__init__()
+        self._win = win
+
+    @Slot(result=bool)
+    def minimize(self):
+        self._win.showMinimized()
+        return True
+
+    @Slot(result=bool)
+    def toggle_maximize(self):
+        w = self._win
+        if w.isMaximized():
+            w.showNormal()
+            return False
+        w.showMaximized()
+        return True
+
+    @Slot(result=bool)
+    def is_maximized(self):
+        return self._win.isMaximized()
+
+    @Slot(result=bool)
+    def close_window(self):
+        try:
+            self._win.close()
+        except Exception:  # noqa: BLE001
+            pass
+        # safety net in case the Qt event loop does not exit on its own
+        threading.Timer(2.0, lambda: os._exit(0)).start()
+        return True
+
+    @Slot(int, int, result=bool)
+    def apply_window_size(self, width, height):
+        w = self._win
+        if w.isMaximized():
+            w.showNormal()
+        ww, hh = _clamp_to_workarea(width, height)
+        w.resize(ww, hh)
+        _log("resize: %sx%s (asked %sx%s)" % (ww, hh, width, height))
+        return True
+
+    @Slot(int, int, result=bool)
+    def move_window(self, dx, dy):
+        w = self._win
+        if w.isMaximized():
+            return True
+        w.move(w.x() + int(dx), w.y() + int(dy))
+        return True
+
+    @Slot(result=str)
+    def pick_file(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self._win, "Открыть XML", "", "XML (*.xml);;Все файлы (*.*)")
+        return path or None
+
+    @Slot(result=str)
+    def pick_image(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self._win, "Выбрать изображение", "",
+            "Изображения (*.png;*.jpg;*.jpeg;*.bmp;*.webp;*.dds;*.tga);;Все файлы (*.*)")
+        return path or None
+
+    @Slot(result=str)
+    def pick_folder(self):
+        path = QFileDialog.getExistingDirectory(self._win, "Выбрать папку проекта")
+        return path or None
+
+
+def _run_qt(app, config, url, base_dir):
+    from config import WINDOW_SIZES
+    from PySide6.QtCore import Qt, QUrl
+    from PySide6.QtGui import QIcon
+    from PySide6.QtWidgets import QApplication, QMainWindow
+    from PySide6.QtWebEngineWidgets import QWebEngineView
+    from PySide6.QtWebEngineCore import QWebEngineScript
+    from PySide6.QtWebChannel import QWebChannel
+
+    qt_app = QApplication.instance() or QApplication(sys.argv)
+    qt_app.setQuitOnLastWindowClosed(True)
+
+    win = QMainWindow()
+    win.setWindowTitle("Terminator Sheet")
+    win.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
+    win.setMinimumSize(900, 600)
+    icon_path = os.path.join(base_dir, "assets", "icons", "app_icon.ico")
+    if os.path.isfile(icon_path):
+        icon = QIcon(icon_path)
+        win.setWindowIcon(icon)
+        qt_app.setWindowIcon(icon)
+
+    view = QWebEngineView()
+    win.setCentralWidget(view)
+
+    # нативный мост: window.pywebview.api
+    channel = QWebChannel()
+    bridge = Bridge(win)
+    channel.registerObject("bridge", bridge)
+    page = view.page()
+    page.setWebChannel(channel)
+
+    # JS-шим (qwebchannel + мост + drag) на этапе DocumentCreation, main world
+    script = QWebEngineScript()
+    script.setName("pywebview-shim")
+    script.setInjectionPoint(QWebEngineScript.DocumentCreation)
+    script.setWorldId(QWebEngineScript.MainWorld)
+    script.setRunsOnSubFrames(False)
+    script.setSourceCode(_qt_shim_source())
+    page.scripts().insert(script)
+
+    size = WINDOW_SIZES.get(config.get("window_size", "normal"), (1280, 800))
+    w, h = _clamp_to_workarea(*size)
+    win.resize(w, h)
+    view.setUrl(QUrl(url))
+
+    if config.get("fullscreen"):
+        win.showFullScreen()
+    else:
+        win.show()
+    _log("mode=qt window=%s size=%sx%s" % (url, w, h))
+
+    qt_app.exec()
+
+
 def main(browser: bool = False):
     from config import WINDOW_SIZES
     app, config, db, base_dir = build_app()
@@ -87,6 +307,16 @@ def main(browser: bool = False):
         _keep_alive()
         return
 
+    # Основной режим: PySide6 frameless-окно (встроенный Chromium -> одинаковый вид)
+    if _qt_available():
+        try:
+            _run_qt(app, config, url, base_dir)
+        except Exception as e:  # noqa: BLE001
+            _log("qt window error: %s" % e)
+            print("PySide6 window failed (%s) - fallback to browser" % e)
+        return
+
+    # Запасной режим: pywebview/WebView2
     try:
         import webview
     except Exception as e:  # noqa: BLE001
@@ -187,17 +417,6 @@ def main(browser: bool = False):
                 return None
             return result[0] if isinstance(result, (list, tuple)) else result
 
-        def _form(self):
-            """Return (window, winforms Form); Form is None outside winforms."""
-            win = self._win()
-            if win is None:
-                return None, None
-            try:
-                from webview.platforms.winforms import BrowserView
-                return win, BrowserView.instances.get(win.uid)
-            except Exception:  # noqa: BLE001
-                return win, None
-
         def minimize(self):
             try:
                 win = self._win()
@@ -207,35 +426,21 @@ def main(browser: bool = False):
                 _log("minimize: %s" % e)
             return True
 
-        def is_maximized(self):
-            win, form = self._form()
-            if form is None:
-                return False
-            try:
-                from System.Windows.Forms import FormWindowState
-                return form.WindowState == FormWindowState.Maximized
-            except Exception as e:  # noqa: BLE001
-                _log("is_maximized: %s" % e)
-                return False
-
         def toggle_maximize(self):
-            win, form = self._form()
-            if form is None:
+            win = self._win()
+            if win is None:
                 return False
             try:
-                from System.Windows.Forms import FormWindowState
-                if form.WindowState == FormWindowState.Maximized:
+                if win.maximized:
                     win.restore()
                 else:
                     win.maximize()
-                return self.is_maximized()
+                return bool(win.maximized)
             except Exception as e:  # noqa: BLE001
                 _log("toggle_maximize: %s" % e)
                 return False
 
         def close_window(self):
-            # Used for in-app close button (works even in fullscreen where the
-            # title-bar X is hidden by pywebview's borderless fullscreen).
             try:
                 win = self._win()
                 if win is not None:
