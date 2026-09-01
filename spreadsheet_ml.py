@@ -545,9 +545,18 @@ class SpreadsheetML:
 
     def _collect(self):
         self.worksheets = []
-        root = self.tree.getroot()
+        root = self.tree.getroot() if self.tree is not None else None
+        if root is None or root.tag != _SS + "Workbook":
+            # не Excel-2003: обычный xml / текст / пустой файл. Вместо
+            # AttributeError (HTTP 500) даём внятную ошибку, которую
+            # api_open_file перехватывает и показывает пользователю.
+            raise SpreadsheetError(
+                "%s: это не таблица Excel (нет <Workbook>)" % (self.path or ""))
         for ws_elem in root.iter(_SS + "Worksheet"):
             self.worksheets.append(Worksheet(ws_elem))
+        if not self.worksheets:
+            raise SpreadsheetError(
+                "%s: нет листов <Worksheet>" % (self.path or ""))
 
     # -- serialization ----------------------------------------------------
     def to_bytes(self) -> bytes:
