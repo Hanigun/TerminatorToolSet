@@ -19,6 +19,11 @@ DEFAULTS = {
     "default_key_column": "sysname",
     "last_project": "",
     "max_backups_per_file": 200,
+    # Доп. флаги QtWebEngine/Chromium (опционально). Примеры для экспериментов:
+    #   "--disable-frame-rate-limit"        - не резать FPS (соответствует герцам, но грузит CPU)
+    #   "--use-angle=d3d9"                  - другой бэкенд ANGLE (убирает жёлтые артефакты)
+    #   "--disable-gpu-compositing"         - софтверный композитинг (убирает артефакты, тихо)
+    "chromium_flags": "",
 }
 
 WINDOW_SIZES = {

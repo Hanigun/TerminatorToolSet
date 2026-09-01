@@ -29,6 +29,16 @@ os.environ.setdefault(
     "--disable-features=CalculateNativeWinOcclusion",
 )
 
+
+def _apply_chromium_flags(config):
+    """Добавить к флагам QtWebEngine/Chromium доп. настройки из config
+    (chromium_flags). Должно вызываться ДО инициализации QtWebEngine."""
+    extra = config.get("chromium_flags", "") if config else ""
+    if not extra:
+        return
+    cur = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
+    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (cur + " " + extra).strip()
+
 # Guarded: классы PySide6 нужны только для Bridge/окна. Если PySide6 нет,
 # модуль остаётся импортируемым (dev --browser / запасной pywebview).
 try:
@@ -149,12 +159,21 @@ def _qt_shim_source() -> str:
   }
 
   // ---------- перетаскивание frameless-окна за шапку ----------
+  // Тащим из любой точки шапки (.pywebview-drag-region), кроме интерактивных
+  // элементов (кнопки, поля, вкладки-переключатели). Ярлыки no-drag на
+  // контейнерах (brand/center/right) умышленно НЕ считаются препятствием —
+  // иначе тащить не за что.
   var __drag = { on: false, lx: 0, ly: 0 };
-  function __noDrag(t) { return t.closest && t.closest('.pywebview-no-drag'); }
+  function __isCtl(t) {
+    if (!t || !t.closest) return false;
+    return !!t.closest(
+      'button, input, select, textarea, a, label, [contenteditable="true"], ' +
+      '.wc-btn, .window-controls, .tab-bar, [data-i18n-title]');
+  }
   document.addEventListener('mousedown', function (e) {
     if (e.button !== 0) return;
     var region = e.target.closest ? e.target.closest('.pywebview-drag-region') : null;
-    if (!region || __noDrag(e.target)) return;
+    if (!region || __isCtl(e.target)) return;
     __drag.on = true;
     __drag.lx = e.screenX;
     __drag.ly = e.screenY;
@@ -307,24 +326,27 @@ def _run_qt(app, config, url, base_dir):
     win.resize(w, h)
     view.setUrl(QUrl(url))
 
-    # Отладочный хук: при TS_DIAG=1 снять состояние фронта и завершиться.
+    # Отладочный хук: при TS_DIAG=1 снять состояние фронта, GPU и FPS и завершиться.
     if os.environ.get("TS_DIAG"):
         def _diag():
-            js = ("(function(){"
-                  " var c=document.getElementById('window-controls');"
-                  " var sb=document.getElementById('sidebar');"
-                  " var pt=document.getElementById('project-tree');"
-                  " var gl=document.createElement('canvas').getContext('webgl');"
-                  " var ren='?'; try{ ren=gl?gl.getParameter(gl.RENDERER):'no-gl'; }catch(e){ren='err';}"
-                  " return JSON.stringify({api:(window.pywebview&&typeof window.pywebview.api),"
-                  "  hidden:c?c.hidden:'no-el',"
-                  "  sbHidden:sb?sb.hidden:'no-el',"
-                  "  treeChildren:pt?pt.children.length:'no-el',"
-                  "  treeHtmlLen:pt?pt.innerHTML.length:-1, renderer:String(ren)});})()")
-            def cb(v):
-                _log("diag: %s" % v)
-                QTimer.singleShot(200, lambda: os._exit(0))
-            page.runJavaScript(js, cb)
+            # 1) Считаем FPS через requestAnimationFrame за ~1.2с (кладу в window.__fps)
+            js1 = ("(function(){var s=0;var t0=performance.now();"
+                   "function f(){s++;var e=performance.now();if(e-t0<1200){requestAnimationFrame(f);}"
+                   "else{window.__fps=Math.round(s*1000/(e-t0));}};requestAnimationFrame(f);})()")
+            # 2) Читаем unscoped renderer + fps + состояние
+            js2 = ("(function(){var r='?';try{var cv=document.createElement('canvas');"
+                   "var g=cv.getContext('webgl');"
+                   "if(g){var ext=g.getExtension('WEBGL_debug_renderer_info');"
+                   "r=(ext&&ext.UNMASKED_RENDERER_WEBGL)?String(g.getParameter(ext.UNMASKED_RENDERER_WEBGL)):String(g.getParameter(g.RENDERER));"
+                   "}}catch(e){r='err';}"
+                   "return JSON.stringify({fps:window.__fps||-1,renderer:r});})()")
+
+            def step1(v):
+                QTimer.singleShot(1500, _read)
+            def _read():
+                page.runJavaScript(js2, lambda v: (_log("diag: %s" % v),
+                                                   QTimer.singleShot(200, lambda: os._exit(0))))
+            page.runJavaScript(js1, step1)
         QTimer.singleShot(4000, _diag)
 
     if config.get("fullscreen"):
@@ -352,6 +374,7 @@ def main(browser: bool = False):
         return
 
     # Основной режим: PySide6 frameless-окно (встроенный Chromium -> одинаковый вид)
+    _apply_chromium_flags(config)
     if _qt_available():
         try:
             _run_qt(app, config, url, base_dir)
