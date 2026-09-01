@@ -2957,6 +2957,8 @@ async function upRun() {
 
 // ---------- tooltip ----------
 let tipEl = null;
+let tipRaf = null;
+let tipX = 0, tipY = 0;
 function showTip(e, text) {
   hideTip();
   tipEl = document.createElement("div");
@@ -2970,10 +2972,18 @@ function moveTip(e) {
   const pad = 14;
   let x = e.clientX + pad, y = e.clientY + pad;
   if (x + 320 > window.innerWidth) x = e.clientX - 330;
-  tipEl.style.left = x + "px";
-  tipEl.style.top = y + "px";
+  tipX = x; tipY = y;
+  // одно перемещение на кадр: коалесим пачку mouseover'ов в один layout/repaint
+  if (tipRaf !== null) return;
+  tipRaf = requestAnimationFrame(() => {
+    tipRaf = null;
+    if (tipEl) { tipEl.style.left = tipX + "px"; tipEl.style.top = tipY + "px"; }
+  });
 }
-function hideTip() { if (tipEl) { tipEl.remove(); tipEl = null; } }
+function hideTip() {
+  if (tipEl) { tipEl.remove(); tipEl = null; }
+  if (tipRaf !== null) { cancelAnimationFrame(tipRaf); tipRaf = null; }
+}
 
 // ---------- settings ----------
 // window_size presets: normal (as-is), +20% width, +20% width & height
