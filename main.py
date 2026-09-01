@@ -340,6 +340,48 @@ def _run_qt(app, config, url, base_dir):
     win.resize(w, h)
     view.setUrl(QUrl(url))
 
+    # ---- Защита от «серого старта» QtWebEngine -----------------------------
+    # Chromium иногда отдаёт страницу (HTML + статические ресурсы), но НЕ
+    # исполняет JS: init() не доходит до /api/config, окно остаётся пустым,
+    # нет даже кнопок окна (⌄ ▢ ✕ остаются hidden). Это и есть «через раз»,
+    # «не запоминает проект» и «не закрывается».
+    #
+    # Решение не зависит от loadFinished/runJavaScript — в зависшем рендере
+    # они молчат. Следим со стороны самого сервера: фронт в init() первым
+    # делом шлёт GET /api/config. Если он не пришёл через пару секунд —
+    # перезагружаем страницу (обычно 1-2 попытки лечатся).
+    boot = {"seen": False, "tries": 0, "max": 6, "done": False}
+
+    def _boot_request_hook():
+        try:
+            from flask import request as _req
+            if _req.path == "/api/config":
+                boot["seen"] = True
+        except Exception:  # noqa: BLE001
+            pass
+
+    app.before_request(_boot_request_hook)
+
+    def _watchdog():
+        if boot["seen"]:
+            if not boot["done"]:
+                boot["done"] = True
+                _log("boot watchdog: booted (config seen)")
+            _boot_timer.stop()
+            return
+        if boot["tries"] >= boot["max"]:
+            _log("boot watchdog: give up after %d reloads" % boot["tries"])
+            _boot_timer.stop()
+            return
+        boot["tries"] += 1
+        _log("boot watchdog: no config request, reload (try %d)" % boot["tries"])
+        view.reload()
+
+    _boot_timer = QTimer()
+    _boot_timer.setInterval(2500)
+    _boot_timer.timeout.connect(_watchdog)
+    _boot_timer.start()
+
     # Отладочный хук: при TS_DIAG=1 снять состояние фронта, GPU и FPS и завершиться.
     if os.environ.get("TS_DIAG"):
         def _diag():
