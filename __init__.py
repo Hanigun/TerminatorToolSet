@@ -1,2 +1,2 @@
 """Terminator ToolSet — SpreadsheetML editor for Terminator: Dark Fate - Defiance mods."""
-__version__ = "0.9.1"
+from terminator_toolset import __version__  # noqa: F401 (single version source)
