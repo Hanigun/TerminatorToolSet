@@ -1194,6 +1194,12 @@ input, textarea, select, [contenteditable="true"] { user-select: text; -webkit-u
   align-items: center; justify-content: center; z-index: 100;
 }
 .modal[hidden] { display: none; }
+/* появление модалки: короткий fade+подъём (перезапускается каждое открытие,
+   т.к. висимость переключается hidden-атрибутом) */
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(10px) scale(.985); }
+}
+.modal:not([hidden]) .modal-card { animation: modalIn .18s ease-out; }
 .modal-card {
   width: min(460px, 92vw); background: var(--bg-elev); border: 1px solid var(--border);
   border-radius: 6px; max-height: 88vh; display: flex; flex-direction: column;
@@ -1770,6 +1776,9 @@ button.upr-map-btn.rnd {
 .src-seg-btn:hover:not(:disabled) { color: var(--text); }
 .src-seg-btn.active { color: #1a1a1a; }
 .src-seg-btn:disabled { opacity: .35; cursor: not-allowed; }
+/* серая кнопка сегмента карты без пути: выглядит недоступной, но кликабельна
+   (ведёт в настройки путей) */
+.src-seg-btn.is-off { opacity: .35; cursor: pointer; }
 .src-seg-sm { height: 27px; min-width: 210px; }
 .src-seg-sm .src-seg-btn { font-size: 11.5px; padding: 0 10px; }
 .upr-panel-toggle:hover { color: var(--accent); border-color: var(--accent); }

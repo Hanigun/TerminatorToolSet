@@ -2443,14 +2443,19 @@ function paintSrcSwitches() {
       b.title = srcRoot(s);
     }
   }
-  // сегмент карты: недоступные пункты темнеют (кнопка disabled), индикатор едет
+  // сегмент карты: недоступные пункты темнеют (кнопка is-off), индикатор едет.
+  // is-off вместо disabled: серая кнопка кликабельна и ведёт в настройки
+  // (нативный disabled гасит клики — до настроек было не добраться)
   const seg = $("#upr-src");
   if (seg) {
     seg.dataset.pos = String(Math.max(0, SRC_ORDER.indexOf(v)));
     $$(".src-seg-btn", seg).forEach(b => {
       const s = b.dataset.src;
+      const ok = srcAvail(s);
       b.classList.toggle("active", v === s);
-      b.disabled = !srcAvail(s);
+      b.classList.toggle("is-off", !ok);
+      b.removeAttribute("disabled");
+      b.setAttribute("aria-disabled", String(!ok));
       b.title = srcRoot(s) || "";
     });
   }
@@ -2906,6 +2911,9 @@ async function saveCurrent(popup) {
         updateDirty();
         renderTabBar();
         toast((t("save_success") || "Сохранено") + " → " + j.dst, "ok");
+        // защита скопировала в проект/мод: дальше правим копию —
+        // открываем её в новой вкладке
+        if (j.dst) await openFile(j.dst);
       }
       else toast((j.error || t("save_failed")), "err");
       return;
@@ -4925,6 +4933,8 @@ async function swtSaveGuarded(popup) {
       if (j.ok && j.saved) {
         swtMarkClean();
         toast((t("saved") || "Сохранено") + " → " + j.dst, "ok");
+        // дальше правим копию: переоткрываем редактор на ней
+        if (j.dst) await openSwt(j.dst);
         res = true;
       }
       else toast(j.error || "error", "err");
@@ -6293,6 +6303,27 @@ function uprPaintNofile() {
   } else {
     mk(t("settings") || "Настройки", () => openSettings(), true);
   }
+  // шапка пустого состояния: путь только существующего файла, кнопки
+  // действий скрыты (иначе после закрытия источника висят старый путь
+  // и рабочие кнопки — фантомная карта)
+  const fp = $("#upr-file");
+  if (fp) { fp.textContent = t("upr_sub") || ""; fp.title = ""; }
+  ["#upr-reload", "#upr-open-grid", "#upr-save", "#upr-fs", "#upr-resizer"]
+    .forEach(s => { const el = $(s); if (el) el.hidden = true; });
+}
+
+// источник карты пропал (проект/мод/распаковка закрыты): снести состояние,
+// чтобы не висела фантомная карта; открытая вкладка — в пустое состояние
+function uprInvalidateSource() {
+  state.uprising = uprFreshState();
+  uprIconMap = {};
+  uprIconsReady = false;
+  try { uprCloseEditPop(); } catch (e) { /* noop */ }
+  if (state.activeTabId === "uprising") {
+    uprPaintNofile();
+    try { renderUprising(); } catch (e) { /* пустое состояние уже показано */ }
+  }
+  renderTabBar();
 }
 
 async function openUprising(path) {
@@ -6439,7 +6470,15 @@ async function uprLoad(reset, seq) {
   // пока грузились — стартовало новое поколение (смена источника, повторный
   // клик): чужой файл не трогаем, иконки не перезаписываем
   if (my !== state.uprising.loadSeq) return;
-  if (!j.ok) { toast(j.error || "error", "err"); hideOwn(); return; }
+  if (!j.ok) {
+    toast(j.error || "error", "err");
+    hideOwn();
+    // файл пропал (источник закрыт/удалён): не оставлять старые строки —
+    // иначе висит фантомная карта от прошлого файла
+    state.uprising.rows = null;
+    uprPaintNofile();
+    return;
+  }
   state.uprising.rows = j.file.rows;
   state.uprising.columns = j.file.columns || [];
   state.uprising.sheetIndex = j.file.sheet_index || 0;
@@ -8028,6 +8067,11 @@ async function uprSaveGuarded(popup) {
         uprMarkClean();
         uprCfgExport(true);
         toast((t("saved") || "Сохранено") + " → " + j.dst, "ok");
+        // дальше правим копию: переключаем карту на неё
+        if (j.dst && j.dst !== state.uprising.path) {
+          state.uprising.path = j.dst;
+          await uprLoad(true);
+        }
       }
       else toast((j.error || "error"), "err");
       return;
@@ -8063,7 +8107,14 @@ function setupUprising() {
   const uprSeg = $("#upr-src");
   if (uprSeg) uprSeg.addEventListener("click", e => {
     const b = e.target.closest(".src-seg-btn");
-    if (!b || b.disabled) return;
+    if (!b) return;
+    if (b.classList.contains("is-off")) {
+      // путь не задан: серая кнопка открывает настройки на вкладке путей
+      // с пульсирующей подсветкой нужной строки
+      openSettingsPaths(b.dataset.src === "mod" ? "set-mod-path"
+        : b.dataset.src === "game" ? "set-unpacked" : undefined);
+      return;
+    }
     uprSwitchSrc(b.dataset.src);
   });
   // раздвижная боковая панель сектора: тянуть левый край
@@ -10910,6 +10961,11 @@ function setupSidebar() {
   $("#sidebar-close").onclick = async e => {
     e.stopPropagation();
     const v = state.treeView;
+    // корень закрываемого источника — для инвалидации карт/файлов,
+    // живших внутри него (фантомы после закрытия)
+    const closedRoot = (v === "mod" || v === "game")
+      ? (state.config[v === "mod" ? "mod_path" : "unpacked_path"] || "")
+      : ((state.project && state.project.root) || "");
     if (v === "mod" || v === "game") {
       const key = v === "mod" ? "mod_path" : "unpacked_path";
       try {
@@ -10946,6 +11002,13 @@ function setupSidebar() {
     paintSrcSwitches();
     renderTree();
     updateToolButtons();
+    // карта жила внутри закрытого корня — снести, иначе фантом
+    if (closedRoot && state.tabs.some(tb => tb.id === "uprising")
+        && state.uprising.path) {
+      const np = normPath(state.uprising.path).toLowerCase();
+      const nr = normPath(closedRoot).toLowerCase();
+      if (np === nr || np.startsWith(nr + "\\")) uprInvalidateSource();
+    }
     const tf = $("#tree-filter");
     if (tf) tf.value = "";
     hideTreeFilterMenu();
