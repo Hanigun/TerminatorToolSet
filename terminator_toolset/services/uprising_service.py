@@ -71,7 +71,7 @@ class Uprising:
                                      "infantry_icons_small"),
             "inventory": os.path.join(self.icon_dir, "inventory"),
         }
-        self.webp_index = {"mt": 0.0, "map": {}}  # stem.lower() -> (bucket, file)
+        self.webp_idx = {"mt": 0.0, "map": {}}  # stem.lower() -> (bucket, file)
         self.icon_cache = {}  # layers-key -> {"mt": float, "map": {...}}
         self.dlc_cache = {}   # root -> (dlc dir mtime, [dlc dirs])
         self.icon_lock = threading.Lock()  # one map rebuild per root
@@ -340,44 +340,54 @@ class Uprising:
 
     def webp_index(self):
         """Ready-made webp icon index: stem.lower() -> (bucket, file).
+        Both the bundled dir and the external one (next to the EXE, which
+        wins at serve time) are indexed; external files override bundled.
         Rebuilt on folder mtimes; *_preselected/*_selected are fallback
         only, when no base icon exists. No dds search or conversion."""
         try:
             mt = 0.0
-            for _d in self.webp_buckets.values():
-                try:
-                    mt = max(mt, os.path.getmtime(_d))
-                except OSError:
-                    pass
+            for bucket in list(self.webp_buckets.keys()):
+                for _d in dict.fromkeys((self.webp_buckets.get(bucket, ""),
+                                         self.webp_bucket_dir(bucket))):
+                    if not _d:
+                        continue
+                    try:
+                        mt = max(mt, os.path.getmtime(_d))
+                    except OSError:
+                        pass
         except OSError:
             mt = 0.0
-        if self.webp_index["map"] and self.webp_index["mt"] == mt:
-            return self.webp_index["map"]
+        if self.webp_idx["map"] and self.webp_idx["mt"] == mt:
+            return self.webp_idx["map"]
         idx = {}
         for _pass in (0, 1):
             for bucket in list(self.webp_buckets.keys()):
-                for _d in dict.fromkeys((self.webp_bucket_dir(bucket),
-                                         self.webp_buckets.get(bucket, ""))):
+                # bundled first, external override (same order as serving)
+                for _d in dict.fromkeys((self.webp_buckets.get(bucket, ""),
+                                         self.webp_bucket_dir(bucket))):
                     if not _d:
                         continue
-                try:
-                    files = os.listdir(_d)
-                except OSError:
-                    continue
-                for fn in files:
-                    if not fn.lower().endswith(".webp"):
+                    try:
+                        files = os.listdir(_d)
+                    except OSError:
                         continue
-                    stem = fn[:-5].lower()
-                    base = stem
-                    for suf in ("_preselected", "_selected"):
-                        if base.endswith(suf):
-                            base = base[: -len(suf)]
-                            break
-                    if (base != stem) == (_pass == 0):
-                        continue  # pass 0: base only; pass 1: variants
-                    idx.setdefault(base, (bucket, fn))
-        self.webp_index["mt"] = mt
-        self.webp_index["map"] = idx
+                    for fn in files:
+                        if not fn.lower().endswith(".webp"):
+                            continue
+                        stem = fn[:-5].lower()
+                        base = stem
+                        for suf in ("_preselected", "_selected"):
+                            if base.endswith(suf):
+                                base = base[: -len(suf)]
+                                break
+                        if (base != stem) == (_pass == 0):
+                            continue  # pass 0: base only; pass 1: variants
+                        if _pass == 0:
+                            idx[base] = (bucket, fn)  # external wins
+                        else:
+                            idx.setdefault(base, (bucket, fn))
+        self.webp_idx["mt"] = mt
+        self.webp_idx["map"] = idx
         return idx
 
     @staticmethod
@@ -430,6 +440,34 @@ class Uprising:
             self._log.warning("uprising placeholder failed: %s", e)
             return ""
 
+    # category stubs for map chips (served as-is, no conversion)
+    _UPR_PLACEHOLDERS = {
+        "cars": ("vehicles", "placeholder_vehicle.webp"),
+        "tanks": ("vehicles", "placeholder_vehicle.webp"),
+        "helicopters": ("vehicles", "placeholder_vehicle.webp"),
+        "squads": ("infantry", "placeholder.webp"),
+        "inventory_items": ("inventory", "upgrd_placeholder.webp"),
+    }
+
+    def category_placeholder(self, cat):
+        """Ready-made webp stub for a map category (as the frontend sends
+        it), or ''. External assets next to the EXE win over bundled."""
+        ent = self._UPR_PLACEHOLDERS.get((cat or "").strip().lower())
+        if not ent:
+            return ""
+        bucket, fn = ent
+        for _d in dict.fromkeys((self.webp_bucket_dir(bucket),
+                                 self.webp_buckets.get(bucket, ""))):
+            if not _d:
+                continue
+            p = os.path.join(_d, fn)
+            try:
+                if os.path.isfile(p):
+                    return p
+            except OSError:
+                pass
+        return ""
+
     def unpacked_root(self):
         try:
             return self._store.normal(self._config.get("unpacked_path") or "") or ""
@@ -466,7 +504,7 @@ class Uprising:
 
     def data_url(self, bucket, fn):
         """Ready-made webp as an in-memory data-URL (mtime-keyed cache)."""
-        idx_mt = self.webp_index["mt"]  # current after webp_index()
+        idx_mt = self.webp_idx["mt"]  # current after webp_index()
         ent = self.data_mem
         if ent["mt"] != idx_mt:
             ent["mt"] = idx_mt
@@ -474,8 +512,13 @@ class Uprising:
         key = bucket + "/" + fn
         hit = ent["map"].get(key)
         if hit is None:
+            # the hit may come from the external dir (next to the EXE);
+            # bundled is the fallback, not the only source
+            path = os.path.join(self.webp_bucket_dir(bucket), fn)
             try:
-                with open(os.path.join(self.webp_buckets[bucket], fn), "rb") as f:
+                if not os.path.isfile(path):
+                    path = os.path.join(self.webp_buckets[bucket], fn)
+                with open(path, "rb") as f:
                     raw = f.read()
             except OSError:
                 return ""

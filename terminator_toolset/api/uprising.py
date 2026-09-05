@@ -43,10 +43,12 @@ def register_uprising(app, ctx):
     def api_uprising_icon():
         """PNG-иконка юнита/предмета карты Uprising по sysname. Сначала готовая
         webp (без конвертации), затем старый поиск dds; если файла иконки нет
-        нигде - заглушка с «?»."""
+        нигде - плейсхолдер категории (?cat=cars|tanks|helicopters|squads|
+        inventory_items), в крайнем случае серая заглушка с «?» (не 404)."""
         from flask import send_file
         root = store.normal(request.args.get("root", ""))
         name = (request.args.get("name") or "").strip()
+        cat = (request.args.get("cat") or "").strip()
         if name:
             hit = upr.icon_webp(root, name)
             if hit:
@@ -71,6 +73,16 @@ def register_uprising(app, ctx):
                 p = upr.icon_file(root, icon_rel, kind)
                 if p and p.lower().endswith(".dds"):
                     p = upr.dds_png(p) or ""
+        if not p and cat:
+            ph = upr.category_placeholder(cat)
+            if ph:
+                try:
+                    resp = send_file(ph, mimetype="image/webp")
+                except OSError:
+                    pass
+                else:
+                    resp.headers["Cache-Control"] = "public, max-age=3600"
+                    return resp
         if not p:
             p = upr.placeholder_png()
         if not p:

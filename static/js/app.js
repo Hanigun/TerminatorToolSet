@@ -6950,14 +6950,28 @@ function uprSetPanel(open) {
 }
 
 // url иконки юнита/предмета карты Uprising по sysname (сначала готовая webp,
-// затем старый поиск dds; нет иконки = заглушка, не 404)
-function uprIconUrl(name) {
+// затем старый поиск dds; нет иконки = плейсхолдер категории cat, не 404)
+function uprIconUrl(name, cat) {
   const p = new URLSearchParams({
     name: name || "",
     root: uprSrcRoot() || "",
     game: (state.config && state.config.unpacked_path) || "",
   });
+  if (cat) p.set("cat", cat);
   return "/api/uprising_icon?" + p.toString();
+}
+
+// категорийный плейсхолдер чипа (прямой URL готовой webp, без бэкенда)
+function uprPlaceholderUrl(cat) {
+  switch (cat) {
+    case "cars": case "tanks": case "helicopters":
+      return "/assets/upr-webp/vehicles/placeholder_vehicle.webp";
+    case "squads":
+      return "/assets/upr-webp/infantry/placeholder.webp";
+    case "inventory_items":
+      return "/assets/upr-webp/inventory/upgrd_placeholder.webp";
+    default: return "";
+  }
 }
 
 // карта иконок: sysname -> data-URL webp (один запрос до первого рендера).
@@ -6965,6 +6979,9 @@ function uprIconUrl(name) {
 // Имён вне карты (правки после загрузки) добираются одиночным
 // /api/uprising_icon (там тоже webp-first).
 let uprIconMap = {};
+// батч долетел целиком: "" в карте = иконки точно нет (можно сразу
+// категорийный плейсхолдер); иначе чипы добирают одиночными запросами
+let uprIconsReady = false;
 
 function uprIconNames() {
   const names = new Set();
@@ -6987,7 +7004,8 @@ async function uprEnsureIcons(seq) {
   const root = uprSrcRoot();
   const names = uprIconNames();
   uprIconMap = {};
-  if (!names.length) return;
+  uprIconsReady = false;
+  if (!names.length) { uprIconsReady = true; return; }
   const fresh = () => my === state.uprising.loadSeq && root === uprSrcRoot();
   try {
     // один ответ со всеми байтами (data-URL): сотни отдельных <img>-запросов
@@ -6996,7 +7014,7 @@ async function uprEnsureIcons(seq) {
       body: JSON.stringify({ root, names }), timeout: 60000 });
     const j = await r.json();
     if (j && j.ok) {
-      if (fresh()) uprIconMap = j.icons || {};
+      if (fresh()) { uprIconMap = j.icons || {}; uprIconsReady = true; }
       return;
     }
     throw new Error("icons_data not ok");
@@ -7010,7 +7028,7 @@ async function uprEnsureIcons(seq) {
       const r2 = await api("/api/uprising_icons_data", { method: "POST",
         body: JSON.stringify({ root, names }), timeout: 60000 });
       const j2 = await r2.json();
-      if (j2 && j2.ok && fresh()) uprIconMap = j2.icons || {};
+      if (j2 && j2.ok && fresh()) { uprIconMap = j2.icons || {}; uprIconsReady = true; }
     } catch (e2) { /* чипы доберут одиночными + onerror-ретраем */ }
   }
 }
@@ -7064,14 +7082,23 @@ function uprChipEditor(container, items, onChange, meta) {
         // фолбек долгой загрузки: спиннер + затемнение чипа
         chip.classList.add("upr-loading");
         img.onload = () => chip.classList.remove("upr-loading");
-        img.src = uprIconMap[it.name] || uprIconUrl(it.name);
+        const phCat = meta && meta.cat;
+        const du = uprIconMap[it.name];
+        if (du) img.src = du;
+        else if (uprIconsReady && uprPlaceholderUrl(phCat)) {
+          // батч подтвердил: иконки нет — сразу категорийный плейсхолдер
+          // (без рамки/фона), спиннер не нужен
+          chip.classList.add("upr-chip-ph");
+          chip.classList.remove("upr-loading");
+          img.src = uprPlaceholderUrl(phCat);
+        } else img.src = uprIconUrl(it.name, phCat);
         // оборванный коннект (HTTP/1.0 без keep-alive, WinError 10054) бил чип
         // навсегда: однократный повтор — data-URL свежим одиночным запросом,
         // одиночный новым коннектом; 503 бэкенда (файл блокирован) тоже лечится
         img.onerror = () => {
           if (img.dataset.uprRetry) { chip.classList.remove("upr-loading"); return; }
           img.dataset.uprRetry = "1";
-          let solo = uprIconUrl(it.name);
+          let solo = uprIconUrl(it.name, phCat);
           if (!img.src.startsWith("data:")) solo += "&retry=1";
           img.src = solo;
         };
@@ -7097,8 +7124,15 @@ function uprChipEditor(container, items, onChange, meta) {
     });
     const add = document.createElement("button");
     add.className = "upr-chip-add";
-    add.textContent = "+";
     add.title = t("upr_add") || "Добавить";
+    add.setAttribute("aria-label", t("upr_add") || "Добавить");
+    // иконка-кнопка всегда последняя в ряду (upgrd_base.webp 72x72)
+    const addImg = document.createElement("img");
+    addImg.className = "upr-chip-add-icon";
+    addImg.src = "/assets/upr-webp/inventory/upgrd_base.webp";
+    addImg.alt = "";
+    addImg.draggable = false;
+    add.appendChild(addImg);
     add.onclick = ev => { ev.stopPropagation(); uprAddNew(meta, items, onChange, add); };
     container.appendChild(add);
     // вставка из буфера правым кликом по пустому месту секции

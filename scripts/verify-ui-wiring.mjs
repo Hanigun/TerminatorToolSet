@@ -100,7 +100,7 @@ function section(name, asserts) {
     [/loadSeq/.test(appjs) && /state\.uprising\.loading/.test(appjs), "map load must carry a generation token + in-flight guard"],
     [/my !== state\.uprising\.loadSeq/.test(appjs), "stale map responses must be dropped by the generation guard"],
     [/const root = uprSrcRoot\(\);[\s\S]{0,400}?fresh\(\)/.test(appjs) || /root === uprSrcRoot\(\)/.test(appjs), "icon bundle must be pinned to the source root it was requested for"],
-    [/dataset\.uprRetry/.test(appjs) && /uprIconUrl\(it\.name\)/.test(appjs), "map chips must retry a broken icon once (torn HTTP/1.0 connection)"],
+    [/dataset\.uprRetry/.test(appjs) && /uprIconUrl\(it\.name(,|\))/.test(appjs), "map chips must retry a broken icon once (torn HTTP/1.0 connection)"],
     [/\/assets\/map\/map\.webp\?v=" \+ Date\.now\(\)/.test(appjs) && /img\.dataset\.uprRetry/.test(appjs), "map texture must reload once on a broken first fetch"],
     [/return \("", 503\)/.test(py), "icon endpoint must answer 503 on a transient serve failure, not the silent placeholder"],
     [/function uprFreshState\(\)[\s\S]{0,500}?loadSeq: 0/.test(appjs) && /uprising: uprFreshState\(\)/.test(appjs), "map state must reset via the single default carrying loadSeq (reopen after close must load)"],

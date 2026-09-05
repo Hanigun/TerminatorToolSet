@@ -1511,14 +1511,27 @@ body.pane-fs .pane-fs-target {
 .upr-loading-spin { width: 46px; height: 46px; border-radius: 50%;
   border: 4px solid rgba(255,255,255,.25); border-top-color: #fff;
   animation: spin .8s linear infinite; }
-/* плейсхолдер чипа, пока иконка грузится: большой бокс с вопросом,
-   фон только внутри плейсхолдера */
+/* плейсхолдер чипа, пока иконка грузится: затемнение + анимированный
+   спиннер по центру (без скачка геометрии — слот остаётся своего размера) */
 .upr-chip.upr-loading { background: transparent; }
-.upr-chip.upr-loading .upr-chip-icon { opacity: .35; min-width: 64px; min-height: 64px;
-  background: rgba(255,255,255,.06); }
-.upr-chip.upr-loading::before { content: "?"; position: absolute; left: 50%; top: 50%;
-  transform: translate(-50%,-50%); font-size: 30px; font-weight: 700;
-  color: var(--text-mute); z-index: 3; pointer-events: none; }
+.upr-chip.upr-loading .upr-chip-icon { opacity: .35; }
+.upr-chip.upr-loading::before {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  width: 26px; height: 26px; margin: -13px 0 0 -13px;
+  border-radius: 50%; border: 3px solid rgba(255,255,255,.22);
+  border-top-color: #fff; animation: spin .8s linear infinite;
+  z-index: 3; pointer-events: none;
+}
+/* категорийный плейсхолдер вместо иконки: чистая картинка без рамки,
+   фона и hover-аутлайна */
+.upr-chip.upr-chip-ph { border-color: transparent; background: transparent; }
+.upr-chip.upr-chip-ph .upr-chip-icon { background: transparent; }
+.upr-chip.upr-chip-ph:hover { outline: none; }
+/* кнопка-добавление — иконка upgrd_base.webp последней в ряду */
+.upr-chip-add { border: none; background: transparent; padding: 3px; cursor: pointer;
+  display: inline-flex; align-items: center; }
+.upr-chip-add-icon { display: block; pointer-events: none; }
+.upr-chip-add:hover .upr-chip-add-icon { outline: 1px dashed var(--accent); }
 .upr-chip-icon { min-width: 32px; min-height: 32px; }
 .upr-map {
   position: relative;
@@ -1789,11 +1802,7 @@ button.upr-map-btn.rnd {
 .upr-chip-n::-webkit-outer-spin-button, .upr-chip-n::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .upr-chip-del { opacity: .5; padding: 2px; }
 .upr-chip-del:hover { opacity: 1; color: #e57373; }
-.upr-chip-add {
-  width: 26px; height: 26px; border: 1px dashed var(--border); background: transparent;
-  color: var(--text-mute); font-size: 14px; cursor: pointer;
-}
-.upr-chip-add:hover { color: var(--accent); border-color: var(--accent); }
+.upr-chip-add:hover { color: var(--accent); }
 /* drag & drop элементов сектора на карту */
 .upr-chip { position: relative; cursor: grab; }
 .upr-chip:active { cursor: grabbing; }
