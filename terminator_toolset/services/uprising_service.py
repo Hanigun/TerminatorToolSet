@@ -591,10 +591,16 @@ class Uprising:
                 except Exception:  # noqa: BLE001
                     pass
             try:
-                with open(os.path.join(self._base, "assets", "UprisingMap Editor",
-                                       "global_map", "converted",
-                                       "map.webp"), "rb") as f:
-                    f.read()
+                for cand in (os.path.join(self.icon_dir_ext, "global_map.webp"),
+                             os.path.join(self._base, "assets",
+                                          "UprisingMap Editor",
+                                          "global_map.webp")):
+                    try:
+                        with open(cand, "rb") as f:
+                            f.read()
+                        break
+                    except OSError:
+                        pass
             except OSError:
                 pass
             self._log.info("upr warmup done in %.2fs", time.time() - t0)
@@ -1028,6 +1034,102 @@ class Uprising:
         return {"ok": True, "path": p, "units": res}
 
     # -- map backup / reset ---------------------------------------------------------
+    _UPR_BACKUP_KEEP = 5    # generations per source root, newest wins
+    _UPR_BACKUP_MIN = 100   # smaller files are failed writes, never restore
+
+    def prune_backups(self, key_dir):
+        """Generations per root: newest 5 shop_presets*.xml survive; tiny
+        failed writes and top-level strays (old test junk, never referenced
+        by any code path) are removed."""
+        try:
+            names = os.listdir(key_dir)
+        except OSError:
+            return
+        cands = []
+        for fn in names:
+            if not (fn == "shop_presets.xml"
+                    or (fn.startswith("shop_presets.")
+                        and fn.endswith(".xml"))):
+                continue
+            p = os.path.join(key_dir, fn)
+            try:
+                if os.path.isfile(p):
+                    cands.append((os.path.getmtime(p), os.path.getsize(p), p))
+            except OSError:
+                pass
+        for _mt, size, p in cands:
+            if size < self._UPR_BACKUP_MIN:
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+        cands = [c for c in cands if c[1] >= self._UPR_BACKUP_MIN]
+        cands.sort()
+        for _mt, _sz, p in cands[:-self._UPR_BACKUP_KEEP]:
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+        top = os.path.dirname(key_dir)
+        try:
+            top_names = os.listdir(top)
+        except OSError:
+            return
+        for fn in top_names:
+            low = fn.lower()
+            if not (low.endswith(".xml") and ("shop_presets" in low
+                                              or low.startswith("polluted_"))):
+                continue
+            try:
+                if os.path.isfile(os.path.join(top, fn)):
+                    os.remove(os.path.join(top, fn))
+            except OSError:
+                pass
+
+    def _rotate_backup(self, key_dir, bpath):
+        """Shift generations (.3->.4 … live->.1) before a fresh snapshot;
+        prune keeps the newest 5 total."""
+        try:
+            if not os.path.isfile(bpath):
+                return
+            if os.path.getsize(bpath) < self._UPR_BACKUP_MIN:
+                os.remove(bpath)
+                return
+        except OSError:
+            return
+        base = os.path.join(key_dir, "shop_presets")
+        try:
+            for i in range(self._UPR_BACKUP_KEEP - 1, 0, -1):
+                src = bpath if i == 1 else base + ".%d.xml" % (i - 1)
+                dst = base + ".%d.xml" % i
+                if os.path.isfile(src):
+                    try:
+                        if os.path.isfile(dst):
+                            os.remove(dst)
+                    except OSError:
+                        pass
+                    try:
+                        os.rename(src, dst)
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+
+    @staticmethod
+    def _same_file(a, b):
+        try:
+            if os.path.getsize(a) != os.path.getsize(b):
+                return False
+            with open(a, "rb") as fa, open(b, "rb") as fb:
+                while True:
+                    ca, cb = fa.read(65536), fb.read(65536)
+                    if ca != cb:
+                        return False
+                    if not ca:
+                        return True
+        except OSError:
+            return False
+
     def backup_dir(self, root: str) -> str:
         """Clean shop_presets.xml copy per source (mod project and unpacked
         game have their own files): key = normalized root. The reserve
@@ -1039,7 +1141,7 @@ class Uprising:
         legacy = os.path.join(self._app_dir, "uprising_backups", key)
         if primary != legacy and not os.path.isfile(os.path.join(primary, "shop_presets.xml")):
             leg = os.path.join(legacy, "shop_presets.xml")
-            if os.path.isfile(leg) and os.path.getsize(leg) > 100:
+            if os.path.isfile(leg) and os.path.getsize(leg) >= self._UPR_BACKUP_MIN:
                 try:
                     os.makedirs(primary, exist_ok=True)
                     shutil.copy2(leg, os.path.join(primary, "shop_presets.xml"))
@@ -1048,18 +1150,54 @@ class Uprising:
         return primary
 
     def reset_map(self, root, path, cfg_path, ensure_only):
-        """ensure_only: snapshot a clean map copy on first open from a root.
+        """ensure_only: snapshot a clean map copy on first open from a root
+        (a changed file re-snapshots with rotation, newest 5 survive).
         Otherwise - reset: restore shop_presets.xml from the clean copy and
-        delete the balance config. The copy predates the first edits, so
-        rollback always lands on the pristine state."""
+        delete the balance config. Tiny failed writes are never restored."""
         if not path or not os.path.isfile(path):
             return {"ok": False, "error": "no file"}
-        bpath = os.path.join(self.backup_dir(root), "shop_presets.xml")
+        key_dir = self.backup_dir(root)
+        try:
+            self.prune_backups(key_dir)
+        except Exception:  # noqa: BLE001
+            pass
+        bpath = os.path.join(key_dir, "shop_presets.xml")
         restored = False
         if not os.path.isfile(bpath):
-            os.makedirs(os.path.dirname(bpath), exist_ok=True)
+            os.makedirs(key_dir, exist_ok=True)
             shutil.copy2(path, bpath)
-        elif not ensure_only:
+            try:
+                self.prune_backups(key_dir)
+            except Exception:  # noqa: BLE001
+                pass
+        elif ensure_only:
+            # file changed since the snapshot (root re-added, external edit):
+            # rotate generations and snapshot the current state
+            try:
+                cur_ok = os.path.getsize(path) >= self._UPR_BACKUP_MIN
+            except OSError:
+                cur_ok = False
+            if cur_ok and not self._same_file(path, bpath):
+                self._rotate_backup(key_dir, bpath)
+                try:
+                    shutil.copy2(path, bpath)
+                except OSError as e:
+                    return {"ok": False, "error": str(e)}
+                try:
+                    self.prune_backups(key_dir)
+                except Exception:  # noqa: BLE001
+                    pass
+        else:
+            try:
+                tiny = os.path.getsize(bpath) < self._UPR_BACKUP_MIN
+            except OSError:
+                return {"ok": False, "error": "no backup"}
+            if tiny:
+                try:
+                    os.remove(bpath)
+                except OSError:
+                    pass
+                return {"ok": False, "error": "backup broken, removed"}
             shutil.copy2(bpath, path)
             restored = True
         cfg_removed = False

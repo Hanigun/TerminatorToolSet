@@ -6581,7 +6581,7 @@ function uprPreloadShields() {
 // загрузка текстуры карты с контролем зависания: fetch с таймаутом 15с,
 // до 3 попыток свежим коннектом; успех — blob в <img> (мимо кэша диска)
 function uprLoadMapImg(img, attempt) {
-  const url = "/assets/map/map.webp?v=" + Date.now() + "&r=" + attempt;
+  const url = "/assets/map/global_map.webp?v=" + Date.now() + "&r=" + attempt;
   const ctrl = ("AbortController" in window) ? new AbortController() : null;
   let done = false;
   const timer = setTimeout(() => {
@@ -6833,26 +6833,35 @@ function uprOpenColors() {
 }
 
 // список пресетов в select шестерёнки (группы: встроенные/пользовательские)
+// встроенные пресеты сложности лежат английскими стволами (easy/normal/
+// hard/chaos.cfg) — в списке показываем локализованные названия;
+// пользовательские — как назвали
+function uprPresetName(fn) {
+  const stem = String(fn || "").replace(/\.cfg$/i, "");
+  const key = { easy: "upr_preset_easy", normal: "upr_preset_normal",
+    hard: "upr_preset_hard", chaos: "upr_preset_chaos" }[stem.toLowerCase()];
+  return (key && t(key)) || stem;
+}
 async function uprPresetFill(sel) {
   sel.innerHTML = "";
   try {
     const r = await api("/api/uprising_presets", { method: "POST" });
     const j = await r.json();
     if (!j.ok) return;
-    const grp = (label, arr, kind) => {
+    const grp = (label, arr, kind, namer) => {
       if (!arr.length) return;
       const g = document.createElement("optgroup");
       g.label = label;
       arr.forEach(n => {
         const o = document.createElement("option");
         o.value = kind + "|" + n;
-        o.textContent = n.replace(/\.cfg$/i, "");
+        o.textContent = namer ? namer(n) : n.replace(/\.cfg$/i, "");
         g.appendChild(o);
       });
       sel.appendChild(g);
     };
-    grp(t("upr_preset_builtin") || "Встроенные", j.built_in || [], "in");
-    grp(t("upr_preset_custom") || "Мои", j.custom || [], "custom");
+    grp(t("upr_preset_builtin") || "Встроенные", j.built_in || [], "in", uprPresetName);
+    grp(t("upr_preset_custom") || "Мои", j.custom || [], "custom", null);
   } catch (e) { /* noop */ }
   if (!sel.options.length) {
     const o = document.createElement("option");

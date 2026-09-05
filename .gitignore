@@ -28,6 +28,11 @@ _roundtrip_out.xml
 # Внешние утилиты и рабочие заметки (не входят в проект)
 7z/
 UprisingMap Editor/
+# исключение: текстура карты Uprising — единственный assets-файл,
+# который версионируется (остальное дерево UprisingMap Editor/ локально)
+!assets/UprisingMap Editor/
+assets/UprisingMap Editor/*
+!assets/UprisingMap Editor/global_map.webp
 SWT Editor.exe
 list.txt
 

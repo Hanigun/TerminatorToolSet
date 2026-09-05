@@ -221,15 +221,19 @@ def register_shell(app, ctx):
 
     @app.route("/assets/map/<path:filename>")
     def map_assets(filename):
-        # внешние assets рядом с EXE в приоритете (в EXE только icons)
+        # одна текстура global_map.webp: внешние assets рядом с EXE
+        # в приоритете (правка без пересборки), иначе встроенные _base
+        fn = (filename or "").replace("\\", "/").strip("/")
+        if fn != "global_map.webp":
+            return ("", 404)
         ext = _resolve_external(
             [config.dir, os.path.dirname(config.dir), os.getcwd()],
-            "assets", "UprisingMap Editor", "global_map", "converted", filename)
+            "assets", "UprisingMap Editor", fn)
         if ext:
-            resp = send_from_directory(os.path.dirname(ext), filename)
+            resp = send_from_directory(os.path.dirname(ext), fn)
         else:
             resp = send_from_directory(
-                os.path.join(base, "assets", "UprisingMap Editor", "global_map", "converted"), filename)
+                os.path.join(base, "assets", "UprisingMap Editor"), fn)
         resp.headers["Cache-Control"] = "public, max-age=86400"
         return resp
 
