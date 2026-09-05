@@ -5757,9 +5757,14 @@ function paneFsToggle(el) {
   if (paneFsEl === el) paneFsExit(); else paneFsEnter(el);
 }
 
-// Esc возвращает маленькое окно - один слушатель на все страницы
+// Esc возвращает маленькое окно - один слушатель на все страницы.
+// Открытая модалка выше fullscreen: Esc достаётся ей (закрытие —
+// в обработчике модалок), а не сворачиванию панели
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape" && paneFsEl) paneFsExit();
+  if (e.key === "Escape" && paneFsEl) {
+    if (document.querySelector(".modal:not([hidden])")) return;
+    paneFsExit();
+  }
 });
 
 // состояние сворачиваемых секций сайдбара SWT (живёт вне state.swt —

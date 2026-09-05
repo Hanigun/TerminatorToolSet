@@ -1189,9 +1189,12 @@ input, textarea, select, [contenteditable="true"] { user-select: text; -webkit-u
 }
 
 /* ---- Modals ---- */
+/* слои поверх всего: модалки 1300 выше fullscreen-панелей (120), тостов (200),
+   прогресса (300), контекстных меню (400), drag-призраков (1200/1201) и
+   поповера правки (1250); ниже только панель автокомплита (1400) */
 .modal {
   position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex;
-  align-items: center; justify-content: center; z-index: 100;
+  align-items: center; justify-content: center; z-index: 1300;
 }
 .modal[hidden] { display: none; }
 /* появление модалки: короткий fade+подъём (перезапускается каждое открытие,
