@@ -2389,7 +2389,9 @@ body.light .btn { color: #1a1a1a; }
 .up-pak { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px;
   padding: 2px 8px; border-radius: 0; color: var(--accent);
   background: rgba(232,184,75,.10); border: 1px solid rgba(232,184,75,.40);
-  max-width: 100%; transition: background .12s ease, border-color .12s ease; }
+  max-width: 100%; transition: background .12s ease, border-color .12s ease;
+  outline: none; }
+.up-pak:hover, .up-pak:focus, .up-pak:focus-visible { outline: none; }
 .up-pak:hover { background: rgba(232,184,75,.20); border-color: var(--accent); }
 .up-pak-n { color: rgba(232,184,75,.55); font-size: 9px; font-weight: 700; flex-shrink: 0; }
 .up-pak-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

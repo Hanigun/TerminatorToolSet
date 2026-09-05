@@ -4188,6 +4188,9 @@ async function upScan() {
   $("#up-abort").disabled = true;
   const prog = $("#up-progress");
   if (prog) prog.hidden = true;
+  // фокус с кнопки: иначе :focus-visible-аутлайн висит рядом с чипами
+  const scanBtn = $("#up-scan");
+  if (scanBtn && scanBtn.blur) scanBtn.blur();
   if (!j.sevenz) toast(t("up_no_7z") || "7-Zip не найден", "err");
   if (!total) toast(t("up_no_paks") || ".pak архивы не найдены", "err");
 }
