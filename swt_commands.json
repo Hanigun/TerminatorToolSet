@@ -1,0 +1,837 @@
+[
+  {
+    "type": "action",
+    "name": "a_waitTime",
+    "description": "swt_a_waitTime"
+  },
+  {
+    "type": "action",
+    "name": "a_setCamera",
+    "description": "swt_a_setCamera"
+  },
+  {
+    "type": "action",
+    "name": "a_setCameraToDeadUnit",
+    "description": "swt_a_setCameraToDeadUnit"
+  },
+  {
+    "type": "action",
+    "name": "a_spawnUnitGroupToZone",
+    "description": "swt_a_spawnUnitGroupToZone"
+  },
+  {
+    "type": "action",
+    "name": "a_moveUnits",
+    "description": "swt_a_moveUnits"
+  },
+  {
+    "type": "action",
+    "name": "a_sitDownInBuildingOrTransport",
+    "description": "swt_a_sitDownInBuildingOrTransport"
+  },
+  {
+    "type": "action",
+    "name": "a_changeTeamForUnits",
+    "description": "swt_a_changeTeamForUnits"
+  },
+  {
+    "type": "action",
+    "name": "a_setUnitPatrolZones",
+    "description": "swt_a_setUnitPatrolZones"
+  },
+  {
+    "type": "action",
+    "name": "a_changeUnitBehaviorAndAiType",
+    "description": "swt_a_changeUnitBehaviorAndAiType"
+  },
+  {
+    "type": "action",
+    "name": "a_attackAction",
+    "description": "swt_a_attackAction"
+  },
+  {
+    "type": "action",
+    "name": "a_stop",
+    "description": "swt_a_stop"
+  },
+  {
+    "type": "action",
+    "name": "a_delete",
+    "description": "swt_a_delete"
+  },
+  {
+    "type": "action",
+    "name": "a_killAction",
+    "description": "swt_a_killAction"
+  },
+  {
+    "type": "action",
+    "name": "a_dropOffUnits",
+    "description": "swt_a_dropOffUnits"
+  },
+  {
+    "type": "action",
+    "name": "a_loadCrewToTransport",
+    "description": "swt_a_loadCrewToTransport"
+  },
+  {
+    "type": "action",
+    "name": "a_setFuelAndAmmo",
+    "description": "swt_a_setFuelAndAmmo"
+  },
+  {
+    "type": "action",
+    "name": "a_setUnitGroupInZone",
+    "description": "swt_a_setUnitGroupInZone"
+  },
+  {
+    "type": "action",
+    "name": "a_setGroupName",
+    "description": "swt_a_setGroupName"
+  },
+  {
+    "type": "action",
+    "name": "a_setIcon",
+    "description": "swt_a_setIcon"
+  },
+  {
+    "type": "action",
+    "name": "a_setVariable",
+    "description": "swt_a_setVariable"
+  },
+  {
+    "type": "action",
+    "name": "a_showAnswers",
+    "description": "swt_a_showAnswers"
+  },
+  {
+    "type": "action",
+    "name": "a_showMessage",
+    "description": "swt_a_showMessage"
+  },
+  {
+    "type": "action",
+    "name": "a_waitEndMessage",
+    "description": "swt_a_waitEndMessage"
+  },
+  {
+    "type": "action",
+    "name": "a_showText",
+    "description": "swt_a_showText"
+  },
+  {
+    "type": "action",
+    "name": "a_playSound",
+    "description": "swt_a_playSound"
+  },
+  {
+    "type": "action",
+    "name": "a_gamePaused",
+    "description": "swt_a_gamePaused"
+  },
+  {
+    "type": "action",
+    "name": "a_getUserCamera",
+    "description": "swt_a_getUserCamera"
+  },
+  {
+    "type": "action",
+    "name": "a_setUserCamera",
+    "description": "swt_a_setUserCamera"
+  },
+  {
+    "type": "action",
+    "name": "a_startScriptScene",
+    "description": "swt_a_startScriptScene"
+  },
+  {
+    "type": "action",
+    "name": "a_endScriptScene",
+    "description": "swt_a_endScriptScene"
+  },
+  {
+    "type": "action",
+    "name": "a_fading",
+    "description": "swt_a_fading"
+  },
+  {
+    "type": "action",
+    "name": "a_workingPauseCutScene",
+    "description": "swt_a_workingPauseCutScene"
+  },
+  {
+    "type": "action",
+    "name": "a_workingUnpauseCutScene",
+    "description": "swt_a_workingUnpauseCutScene"
+  },
+  {
+    "type": "action",
+    "name": "a_switchZoneState",
+    "description": "swt_a_switchZoneState"
+  },
+  {
+    "type": "action",
+    "name": "a_callReinforcement",
+    "description": "swt_a_callReinforcement"
+  },
+  {
+    "type": "action",
+    "name": "a_addDelayedReinforcement",
+    "description": "swt_a_addDelayedReinforcement"
+  },
+  {
+    "type": "action",
+    "name": "a_clearDelayedReinforcement",
+    "description": "swt_a_clearDelayedReinforcement"
+  },
+  {
+    "type": "action",
+    "name": "a_clearReinforcement",
+    "description": "swt_a_clearReinforcement"
+  },
+  {
+    "type": "action",
+    "name": "a_setZonesCapture",
+    "description": "swt_a_setZonesCapture"
+  },
+  {
+    "type": "action",
+    "name": "a_makeAirstrike",
+    "description": "swt_a_makeAirstrike"
+  },
+  {
+    "type": "action",
+    "name": "a_setAirstrikeCount",
+    "description": "swt_a_setAirstrikeCount"
+  },
+  {
+    "type": "action",
+    "name": "a_explosion",
+    "description": "swt_a_explosion"
+  },
+  {
+    "type": "action",
+    "name": "a_smoke",
+    "description": "swt_a_smoke"
+  },
+  {
+    "type": "action",
+    "name": "a_calculate",
+    "description": "swt_a_calculate"
+  },
+  {
+    "type": "action",
+    "name": "a_label",
+    "description": "swt_a_label"
+  },
+  {
+    "type": "action",
+    "name": "a_gotoLabel",
+    "description": "swt_a_gotoLabel"
+  },
+  {
+    "type": "action",
+    "name": "a_gotoIf",
+    "description": "swt_a_gotoIf"
+  },
+  {
+    "type": "action",
+    "name": "a_switchTriggerState",
+    "description": "swt_a_switchTriggerState"
+  },
+  {
+    "type": "action",
+    "name": "a_endTrigger",
+    "description": "swt_a_endTrigger"
+  },
+  {
+    "type": "action",
+    "name": "a_restartTrigger",
+    "description": "swt_a_restartTrigger"
+  },
+  {
+    "type": "action",
+    "name": "a_calculateTeamForceInZone",
+    "description": "swt_a_calculateTeamForceInZone"
+  },
+  {
+    "type": "action",
+    "name": "a_calculateFightResult",
+    "description": "swt_a_calculateFightResult"
+  },
+  {
+    "type": "action",
+    "name": "a_setHeliDontStopBlades",
+    "description": "swt_a_setHeliDontStopBlades"
+  },
+  {
+    "type": "action",
+    "name": "a_setMusicTheme",
+    "description": "swt_a_setMusicTheme"
+  },
+  {
+    "type": "action",
+    "name": "a_completeAcheivement",
+    "description": "swt_a_completeAcheivement"
+  },
+  {
+    "type": "action",
+    "name": "a_reservedUnits",
+    "description": "swt_a_reservedUnits"
+  },
+  {
+    "type": "action",
+    "name": "a_startAnimation",
+    "description": "swt_a_startAnimation"
+  },
+  {
+    "type": "action",
+    "name": "a_changeTeamsRelation",
+    "description": "swt_a_changeTeamsRelation"
+  },
+  {
+    "type": "action",
+    "name": "a_endMission",
+    "description": "swt_a_endMission"
+  },
+  {
+    "type": "action",
+    "name": "a_addAnswer",
+    "description": "swt_a_addAnswer"
+  },
+  {
+    "type": "action",
+    "name": "a_removeAnswer",
+    "description": "swt_a_removeAnswer"
+  },
+  {
+    "type": "action",
+    "name": "a_gotoIfObjectIn",
+    "description": "swt_a_gotoIfObjectIn"
+  },
+  {
+    "type": "action",
+    "name": "a_gotoIfObjectAlive",
+    "description": "swt_a_gotoIfObjectAlive"
+  },
+  {
+    "type": "action",
+    "name": "a_setAmmoAndSpares",
+    "description": "swt_a_setAmmoAndSpares"
+  },
+  {
+    "type": "action",
+    "name": "a_setCommunication",
+    "description": "swt_a_setCommunication"
+  },
+  {
+    "type": "action",
+    "name": "a_setExclusiveTrigger",
+    "description": "swt_a_setExclusiveTrigger"
+  },
+  {
+    "type": "action",
+    "name": "a_resetExclusiveTrigger",
+    "description": "swt_a_resetExclusiveTrigger"
+  },
+  {
+    "type": "action",
+    "name": "a_attachTrailer",
+    "description": "swt_a_attachTrailer"
+  },
+  {
+    "type": "action",
+    "name": "a_detachTrailer",
+    "description": "swt_a_detachTrailer"
+  },
+  {
+    "type": "action",
+    "name": "a_loadGroupToTransportGroup",
+    "description": "swt_a_loadGroupToTransportGroup"
+  },
+  {
+    "type": "action",
+    "name": "a_gmActivatePoint",
+    "description": "swt_a_gmActivatePoint"
+  },
+  {
+    "type": "action",
+    "name": "a_gmActivatePointRoads",
+    "description": "swt_a_gmActivatePointRoads"
+  },
+  {
+    "type": "action",
+    "name": "a_gmSetPlayerMarkerToPoint",
+    "description": "swt_a_gmSetPlayerMarkerToPoint"
+  },
+  {
+    "type": "action",
+    "name": "a_gmStartMission",
+    "description": "swt_a_gmStartMission"
+  },
+  {
+    "type": "action",
+    "name": "a_gmPausePlayerMarker",
+    "description": "swt_a_gmPausePlayerMarker"
+  },
+  {
+    "type": "action",
+    "name": "a_gmAddUnitToPool",
+    "description": "swt_a_gmAddUnitToPool"
+  },
+  {
+    "type": "action",
+    "name": "a_gmAddResourceToPoint",
+    "description": "swt_a_gmAddResourceToPoint"
+  },
+  {
+    "type": "action",
+    "name": "a_spawnAllUnitsFromGarrison",
+    "description": "swt_a_spawnAllUnitsFromGarrison"
+  },
+  {
+    "type": "action",
+    "name": "a_clearGarrison",
+    "description": "swt_a_clearGarrison"
+  },
+  {
+    "type": "action",
+    "name": "a_spawnSpecialWeapon",
+    "description": "swt_a_spawnSpecialWeapon"
+  },
+  {
+    "type": "action",
+    "name": "a_repairYourself",
+    "description": "swt_a_repairYourself"
+  },
+  {
+    "type": "action",
+    "name": "a_gmAddUnitToCityShop",
+    "description": "swt_a_gmAddUnitToCityShop"
+  },
+  {
+    "type": "action",
+    "name": "a_gmSetCityShop",
+    "description": "swt_a_gmSetCityShop"
+  },
+  {
+    "type": "action",
+    "name": "a_gmAddTask",
+    "description": "swt_a_gmAddTask"
+  },
+  {
+    "type": "action",
+    "name": "a_gmRemoveTask",
+    "description": "swt_a_gmRemoveTask"
+  },
+  {
+    "type": "action",
+    "name": "a_gmDeleteUnitFromCityShop",
+    "description": "swt_a_gmDeleteUnitFromCityShop"
+  },
+  {
+    "type": "action",
+    "name": "a_gmEnableCityShop",
+    "description": "swt_a_gmEnableCityShop"
+  },
+  {
+    "type": "action",
+    "name": "a_gmSetBuyFilterCityShop",
+    "description": "swt_a_gmSetBuyFilterCityShop"
+  },
+  {
+    "type": "action",
+    "name": "a_controlPointSound",
+    "description": "swt_a_controlPointSound"
+  },
+  {
+    "type": "action",
+    "name": "a_landHeli",
+    "description": "swt_a_landHeli"
+  },
+  {
+    "type": "action",
+    "name": "a_manipulateSupplyPoint",
+    "description": "swt_a_manipulateSupplyPoint"
+  },
+  {
+    "type": "action",
+    "name": "a_gmChangeActivities",
+    "description": "swt_a_gmChangeActivities"
+  },
+  {
+    "type": "action",
+    "name": "a_changeUnitSysnameParams",
+    "description": "swt_a_changeUnitSysnameParams"
+  },
+  {
+    "type": "action",
+    "name": "a_setNetworkVictory",
+    "description": "swt_a_setNetworkVictory"
+  },
+  {
+    "type": "action",
+    "name": "a_networkAddToPool",
+    "description": "swt_a_networkAddToPool"
+  },
+  {
+    "type": "action",
+    "name": "a_networkCallReinforcement",
+    "description": "swt_a_networkCallReinforcement"
+  },
+  {
+    "type": "action",
+    "name": "a_setNetworkCamera",
+    "description": "swt_a_setNetworkCamera"
+  },
+  {
+    "type": "action",
+    "name": "a_dropOffUnitsTo",
+    "description": "swt_a_dropOffUnitsTo"
+  },
+  {
+    "type": "action",
+    "name": "a_manipulateDecal",
+    "description": "swt_a_manipulateDecal"
+  },
+  {
+    "type": "action",
+    "name": "a_showNetworkMessage",
+    "description": "swt_a_showNetworkMessage"
+  },
+  {
+    "type": "action",
+    "name": "a_showNetworkDialog",
+    "description": "swt_a_showNetworkDialog"
+  },
+  {
+    "type": "action",
+    "name": "a_setNetworkIcon",
+    "description": "swt_a_setNetworkIcon"
+  },
+  {
+    "type": "action",
+    "name": "a_gmPlayerItemAction",
+    "description": "swt_a_gmPlayerItemAction"
+  },
+  {
+    "type": "action",
+    "name": "a_gmShopItemAction",
+    "description": "swt_a_gmShopItemAction"
+  },
+  {
+    "type": "action",
+    "name": "a_gmSetNameBySysname",
+    "description": "swt_a_gmSetNameBySysname"
+  },
+  {
+    "type": "action",
+    "name": "a_changeUnitTags",
+    "description": "swt_a_changeUnitTags"
+  },
+  {
+    "type": "action",
+    "name": "a_gmChangeUnitTags",
+    "description": "swt_a_gmChangeUnitTags"
+  },
+  {
+    "type": "action",
+    "name": "a_gmMoveUnitFromPools",
+    "description": "swt_a_gmMoveUnitFromPools"
+  },
+  {
+    "type": "action",
+    "name": "a_spawnAllUnitsFromPoolByTag",
+    "description": "swt_a_spawnAllUnitsFromPoolByTag"
+  },
+  {
+    "type": "action",
+    "name": "a_gmFlushResourceToPoint",
+    "description": "swt_a_gmFlushResourceToPoint"
+  },
+  {
+    "type": "action",
+    "name": "a_enableEncyclopediaItem",
+    "description": "swt_a_enableEncyclopediaItem"
+  },
+  {
+    "type": "action",
+    "name": "a_gmEnableTraining",
+    "description": "swt_a_gmEnableTraining"
+  },
+  {
+    "type": "action",
+    "name": "a_makeZone",
+    "description": "swt_a_makeZone"
+  },
+  {
+    "type": "action",
+    "name": "a_smartMoveToBuilding",
+    "description": "swt_a_smartMoveToBuilding"
+  },
+  {
+    "type": "action",
+    "name": "a_skirmishSetZonesCaptured",
+    "description": "swt_a_skirmishSetZonesCaptured"
+  },
+  {
+    "type": "action",
+    "name": "a_loadCrewGroupToTechGroup",
+    "description": "swt_a_loadCrewGroupToTechGroup"
+  },
+  {
+    "type": "action",
+    "name": "a_healSquadAction",
+    "description": "swt_a_healSquadAction"
+  },
+  {
+    "type": "action",
+    "name": "a_attachCamera",
+    "description": "swt_a_attachCamera"
+  },
+  {
+    "type": "action",
+    "name": "a_setGroupNameByTag",
+    "description": "swt_a_setGroupNameByTag"
+  },
+  {
+    "type": "action",
+    "name": "a_showIntrotext",
+    "description": "swt_a_showIntrotext"
+  },
+  {
+    "type": "action",
+    "name": "a_makeSave",
+    "description": "swt_a_makeSave"
+  },
+  {
+    "type": "action",
+    "name": "a_networkAddDelayedReinforcement",
+    "description": "swt_a_networkAddDelayedReinforcement"
+  },
+  {
+    "type": "action",
+    "name": "a_networkClearDelayedReinforcement",
+    "description": "swt_a_networkClearDelayedReinforcement"
+  },
+  {
+    "type": "action",
+    "name": "a_networkClearReinforcement",
+    "description": "swt_a_networkClearReinforcement"
+  },
+  {
+    "type": "action",
+    "name": "a_showTutorial",
+    "description": "swt_a_showTutorial"
+  },
+  {
+    "type": "condition",
+    "name": "c_killedUnit",
+    "description": "swt_c_killedUnit"
+  },
+  {
+    "type": "condition",
+    "name": "c_killedAllEnemiesForTeam",
+    "description": "swt_c_killedAllEnemiesForTeam"
+  },
+  {
+    "type": "condition",
+    "name": "c_killedAllUnitsForTeam",
+    "description": "swt_c_killedAllUnitsForTeam"
+  },
+  {
+    "type": "condition",
+    "name": "c_killedOneUnitGroup",
+    "description": "swt_c_killedOneUnitGroup"
+  },
+  {
+    "type": "condition",
+    "name": "c_killedUnitGroup",
+    "description": "swt_c_killedUnitGroup"
+  },
+  {
+    "type": "condition",
+    "name": "c_unitInZone",
+    "description": "swt_c_unitInZone"
+  },
+  {
+    "type": "condition",
+    "name": "c_groupInZone",
+    "description": "swt_c_groupInZone"
+  },
+  {
+    "type": "condition",
+    "name": "c_teamInZone",
+    "description": "swt_c_teamInZone"
+  },
+  {
+    "type": "condition",
+    "name": "c_triggerTimeOut",
+    "description": "swt_c_triggerTimeOut"
+  },
+  {
+    "type": "condition",
+    "name": "c_variableOperations",
+    "description": "swt_c_variableOperations"
+  },
+  {
+    "type": "condition",
+    "name": "c_triggerState",
+    "description": "swt_c_triggerState"
+  },
+  {
+    "type": "condition",
+    "name": "c_escortStop",
+    "description": "swt_c_escortStop"
+  },
+  {
+    "type": "condition",
+    "name": "c_escortCrash",
+    "description": "swt_c_escortCrash"
+  },
+  {
+    "type": "condition",
+    "name": "c_zonesCaptured",
+    "description": "swt_c_zonesCaptured"
+  },
+  {
+    "type": "condition",
+    "name": "c_enemySightedUnit",
+    "description": "swt_c_enemySightedUnit"
+  },
+  {
+    "type": "condition",
+    "name": "c_enemySightedGroup",
+    "description": "swt_c_enemySightedGroup"
+  },
+  {
+    "type": "condition",
+    "name": "c_unitTeam",
+    "description": "swt_c_unitTeam"
+  },
+  {
+    "type": "condition",
+    "name": "c_groupTeam",
+    "description": "swt_c_groupTeam"
+  },
+  {
+    "type": "condition",
+    "name": "c_escortLeaveUnit",
+    "description": "swt_c_escortLeaveUnit"
+  },
+  {
+    "type": "condition",
+    "name": "c_showDialogEnd",
+    "description": "swt_c_showDialogEnd"
+  },
+  {
+    "type": "condition",
+    "name": "c_showMessageEnd",
+    "description": "swt_c_showMessageEnd"
+  },
+  {
+    "type": "condition",
+    "name": "c_unitLoadToTransport",
+    "description": "swt_c_unitLoadToTransport"
+  },
+  {
+    "type": "condition",
+    "name": "c_groupLoadToTransport",
+    "description": "swt_c_groupLoadToTransport"
+  },
+  {
+    "type": "condition",
+    "name": "c_unitChassisBreak",
+    "description": "swt_c_unitChassisBreak"
+  },
+  {
+    "type": "condition",
+    "name": "c_buildingTeam",
+    "description": "swt_c_buildingTeam"
+  },
+  {
+    "type": "condition",
+    "name": "c_unitUnderAttack",
+    "description": "swt_c_unitUnderAttack"
+  },
+  {
+    "type": "condition",
+    "name": "c_groupUnderAttack",
+    "description": "swt_c_groupUnderAttack"
+  },
+  {
+    "type": "condition",
+    "name": "c_sightedCondition",
+    "description": "swt_c_sightedCondition"
+  },
+  {
+    "type": "condition",
+    "name": "c_attackedCondition",
+    "description": "swt_c_attackedCondition"
+  },
+  {
+    "type": "condition",
+    "name": "c_onGetDamagedCondition",
+    "description": "swt_c_onGetDamagedCondition"
+  },
+  {
+    "type": "condition",
+    "name": "c_startTalkCondition",
+    "description": "swt_c_startTalkCondition"
+  },
+  {
+    "type": "condition",
+    "name": "c_GMPlayerMarkerReachPoint",
+    "description": "swt_c_GMPlayerMarkerReachPoint"
+  },
+  {
+    "type": "condition",
+    "name": "c_GMPlayerMarkerLeftPoint",
+    "description": "swt_c_GMPlayerMarkerLeftPoint"
+  },
+  {
+    "type": "condition",
+    "name": "c_killUnitFromTeam",
+    "description": "swt_c_killUnitFromTeam"
+  },
+  {
+    "type": "condition",
+    "name": "c_checkLocation",
+    "description": "swt_c_checkLocation"
+  },
+  {
+    "type": "condition",
+    "name": "c_supplyPercent",
+    "description": "swt_c_supplyPercent"
+  },
+  {
+    "type": "condition",
+    "name": "c_GMStartActivity",
+    "description": "swt_c_GMStartActivity"
+  },
+  {
+    "type": "condition",
+    "name": "c_gmCheckPlayItem",
+    "description": "swt_c_gmCheckPlayItem"
+  },
+  {
+    "type": "condition",
+    "name": "c_checkLocationByTag",
+    "description": "swt_c_checkLocationByTag"
+  },
+  {
+    "type": "condition",
+    "name": "c_destroyObject",
+    "description": "swt_c_destroyObject"
+  },
+  {
+    "type": "condition",
+    "name": "c_zonesSideCaptured",
+    "description": "swt_c_zonesSideCaptured"
+  },
+  {
+    "type": "condition",
+    "name": "c_taskTimeout",
+    "description": "swt_c_taskTimeout"
+  }
+]

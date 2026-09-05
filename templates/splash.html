@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+    body {
+      background: #14161a;
+      color: #d8dce2;
+      font-family: "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      user-select: none;
+      cursor: default;
+    }
+    .logo { margin-top: 26px; width: 72px; height: 72px; }
+    .spin {
+      margin-top: 12px;
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      border: 3px solid rgba(255,255,255,.12);
+      border-top-color: #ff8a00;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .bar {
+      margin-top: 12px;
+      width: 260px;
+      height: 10px;
+      border-radius: 5px;
+      background: rgba(255,255,255,.10);
+      overflow: hidden;
+      position: relative;
+    }
+    .bar-fill {
+      position: absolute;
+      top: 0; left: 0;
+      width: 0;
+      height: 100%;
+      border-radius: 5px;
+      background: #ff8a00;
+      box-shadow: 0 0 12px rgba(255,138,0,.55);
+      transition: width .25s ease;
+    }
+    .barrow { display: flex; align-items: center; gap: 8px; }
+    .pct {
+      position: static;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      font-variant-numeric: tabular-nums;
+      text-shadow: 0 1px 2px rgba(0,0,0,.6);
+      pointer-events: none;
+    }
+    .status { margin-top: 10px; margin-bottom: 10px; font-size: 12px; color: #8a9099; min-height: 16px; }
+    .ver { position: absolute; bottom: 8px; right: 14px; font-size: 11px; color: #565c66; }
+    .name { margin-top: 10px; font-size: 15px; font-weight: 600; color: #e8ebef; letter-spacing: .3px; }
+  </style>
+</head>
+<body>
+  <img class="logo" src="/assets/icons/app_icon.png" alt="">
+  <div class="name">{{ title }}</div>
+  <div class="spin"></div>
+  <div class="barrow"><div class="bar"><div class="bar-fill" id="fill"></div></div><div class="pct" id="pct">0%</div></div>
+  <div class="status" id="status">Запуск…</div>
+  <div class="ver">v{{ version }}</div>
+  <script>
+    // Честный прогресс запуска: опрашиваем /api/boot_progress (его двигают
+    // main.py и интерфейс по мере готовности 0..100). Если сервер пока
+    // молчит — крутим заглушку, чтобы окно не выглядело мёртвым.
+    (function () {
+      var fill = document.getElementById("fill");
+      var pct = document.getElementById("pct");
+      var st = document.getElementById("status");
+      var generic = ["Проверка обновлений…", "Подготовка интерфейса…"];
+      var gi = 0, fails = 0, fake = 0;
+      function setBar(p, label) {
+        p = Math.max(0, Math.min(100, p | 0));
+        if (p > fake || p >= 100) fake = p;
+        fill.style.width = fake + "%";
+        pct.textContent = fake + "%";
+        if (label) st.textContent = label;
+      }
+      async function poll() {
+        try {
+          var r = await fetch("/api/boot_progress", { cache: "no-store" });
+          var j = await r.json();
+          fails = 0;
+          if (j && j.ok) {
+            setBar(j.pct, j.label);
+            if (j.pct >= 100) return; // дальше окно закроет main_ready
+          }
+        } catch (e) {
+          // сервер ещё не поднялся: ползём заглушкой, чтобы бар жил
+          if (++fails > 2) {
+            gi = (gi + 1) % generic.length; st.textContent = generic[gi];
+            if (fake < 90) setBar(fake + 2);
+          }
+        }
+        setTimeout(poll, 200);
+      }
+      poll();
+    })();
+  </script>
+</body>
+</html>

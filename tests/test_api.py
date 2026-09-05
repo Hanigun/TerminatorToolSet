@@ -13,8 +13,22 @@ from config import Config
 from database import Database
 from app import create_app
 
-SAMPLE = r"D:\Games\Terminator Project\TERMINATOR_OVERHAUL_MAIN\TERMINATOR_OVERHAUL\basis\scripts\species\tanks.xml"
-PROJECT_ROOT = r"D:\Games\Terminator Project\TERMINATOR_OVERHAUL_MAIN\TERMINATOR_OVERHAUL"
+_ROOT_CANDIDATES = [
+    # проект переезжал: ищем корень мода в известных местах
+    r"D:\CloudLayer\Projects\Terminator Project\TERMINATOR_OVERHAUL_MAIN\TERMINATOR_OVERHAUL",
+    r"D:\Games\Terminator Project\TERMINATOR_OVERHAUL_MAIN\TERMINATOR_OVERHAUL",
+]
+
+
+def _find_root():
+    for c in _ROOT_CANDIDATES:
+        if os.path.isdir(c):
+            return c
+    raise SystemExit("mod project root not found: %r" % _ROOT_CANDIDATES)
+
+
+PROJECT_ROOT = _find_root()
+SAMPLE = os.path.join(PROJECT_ROOT, "basis", "scripts", "species", "tanks.xml")
 
 
 def test_cross_file_links():
@@ -32,8 +46,16 @@ def test_cross_file_links():
     r = c.post("/api/open_file", json={"path": SAMPLE})
     assert r.get_json()["ok"], r.get_json()
 
-    r = c.get("/api/links", query_string={"path": SAMPLE})
-    j = r.get_json()
+    # /api/links больше НЕ блокирует поток: пока фоновая индексация идёт,
+    # он отвечает pending:true - ждём завершения билда (до 60с)
+    import time
+    j = {}
+    for _ in range(120):
+        r = c.get("/api/links", query_string={"path": SAMPLE})
+        j = r.get_json()
+        if j.get("ok") and not j.get("pending"):
+            break
+        time.sleep(0.5)
     assert j.get("ok"), j
     links = j.get("links", [])
     assert links, "expected cross-file links from tanks.xml"

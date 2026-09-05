@@ -1,8 +1,7 @@
 {
   "project": "D:\\Games\\Terminator Project\\TERMINATOR_OVERHAUL_MAIN\\TestProject",
   "files": [
-    "basis\\scripts\\species\\ammunition.xml",
-    "basis\\scripts\\species\\animations_black_wolf_asrifle.xml",
-    "basis\\scripts\\species\\animations_mech.xml"
+    "dlc\\Resistance\\basis\\scripts\\species\\shop_presets.xml",
+    "dlc\\Resistance\\basis\\spawns\\global_map.swt"
   ]
 }
