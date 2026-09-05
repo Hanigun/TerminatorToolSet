@@ -1188,6 +1188,26 @@ input, textarea, select, [contenteditable="true"] { user-select: text; -webkit-u
   font-family: var(--mono); font-size: var(--grid-font); padding: 1px 4px; border-radius: 2px; outline: none;
 }
 
+/* ---- Self-updates ---- */
+.upd-btn { position: relative; }
+.upd-dot { position: absolute; top: 5px; right: 5px; width: 8px; height: 8px;
+  border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow, rgba(232,184,75,.8)); }
+.upd-dot[hidden] { display: none; }
+.upd-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.upd-notes { white-space: pre-wrap; font-size: 12.5px; line-height: 1.55;
+  color: var(--text); background: var(--bg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 12px; max-height: 300px; overflow-y: auto; }
+.upd-progress[hidden] { display: none; }
+.upd-bar { height: 10px; border-radius: 5px; background: var(--bg);
+  border: 1px solid var(--border); overflow: hidden; }
+.upd-fill { height: 100%; width: 0; background: var(--accent);
+  transition: width .2s linear; }
+.upd-pct { font-size: 11px; color: var(--text-mute); margin-top: 4px; }
+.upd-hint { font-size: 12px; color: var(--text-mute); }
+.upd-hint:not(:empty) { display: block; }
+.upd-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
 /* ---- Modals ---- */
 /* слои поверх всего: модалки 1300 выше fullscreen-панелей (120), тостов (200),
    прогресса (300), контекстных меню (400), drag-призраков (1200/1201) и

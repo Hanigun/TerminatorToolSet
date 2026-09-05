@@ -14,8 +14,10 @@ import webbrowser
 
 from ..application.bootstrap import boot_ping as _boot_ping
 from ..application.state import add_pending_files
+from ..services.update_service import Updates
 from .filesystem import pick_app_dir as _pick_app_dir
 from .logging import boot_log as _log
+from terminator_toolset import __version__ as _APP_VERSION
 
 
 # GUI build has no console (spec console=False): powershell.exe is a
@@ -787,9 +789,10 @@ def run_pywebview(config, url, app=None, app_dir=None):
     )
 
     def _launch_main():
-        # проверка обновлений: заглушка (update_repo пуст - обычный запуск)
+        # проверка обновлений в лаунчере (быстрый опрос воркера; найденный
+        # релиз докачивается фоном, установка — следующим перезапуском)
         try:
-            _check_updates(config)
+            _check_updates(config, app, app_dir)
         except Exception as e:  # noqa: BLE001
             _log("update check error: %s" % e)
         _boot_ping(app, 12)
@@ -866,15 +869,41 @@ def run_pywebview(config, url, app=None, app_dir=None):
         webview.start()
 
 
-def _check_updates(config):
-    """Заглушка автообновления: заполните update_repo в config.json позже.
-    Сейчас: без сервера/релиза - тихий обычный запуск."""
-    repo = (config.get("update_repo") or "").strip()
-    if not repo:
-        _log("updates: disabled (update_repo is empty)")
+def _check_updates(config, app=None, app_dir=None):
+    """Startup update check (launcher stage): fast worker query, daily
+    throttle inside. A newer release downloads in the background (progress
+    in the UI via /api/update_progress); install runs on the next restart
+    from the pending flag. Returns the check dict or None on errors."""
+    _boot_ping(app, 10)
+    try:
+        prog = (os.path.dirname(os.path.abspath(sys.executable))
+                if getattr(sys, "frozen", False)
+                else (app_dir or _pick_app_dir()))
+        svc = Updates(config, _log, prog, _APP_VERSION)
+        res = svc.check()
+    except Exception as e:  # noqa: BLE001
+        _log("update check error: %s" % e)
+        _boot_ping(app, 12)
         return None
-    _log("updates: check skipped (stub) for %s" % repo)
-    return None
+    _boot_ping(app, 12)
+    if not res.get("ok"):
+        _log("updates: check failed (%s)" % res.get("error"))
+        return res
+    avail = res.get("available")
+    if not avail:
+        _log("updates: up to date (%s)" % res.get("current"))
+        return res
+    _log("updates: %s available (%s)"
+         % (avail.get("version"), avail.get("name")))
+    try:
+        if (svc.pending() or {}).get("version") != avail.get("version"):
+            svc.download()
+        else:
+            _log("updates: %s already staged, waiting for restart"
+                 % avail.get("version"))
+    except Exception as e:  # noqa: BLE001
+        _log("update download error: %s" % e)
+    return res
 
 
 def keep_alive():

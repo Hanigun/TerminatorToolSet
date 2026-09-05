@@ -47,8 +47,12 @@ DEFAULTS = {
     # защита распакованной игры: при сохранении файла из unpacked_path
     # предложить сохранить в проект или мод (по умолчанию вкл)
     "guard_unpacked": True,
-    # репозиторий автообновлений (GitHub owner/repo); пусто = обычный запуск
+    # автообновления: Cloudflare Worker поверх GitHub releases;
+    # update_repo пусто = репозиторий по умолчанию воркера
     "update_repo": "",
+    "update_server": "https://terminatortoolsetupdater.hanigunplus.workers.dev/",
+    "update_channel": "release",   # release | beta (бета включает pre-release)
+    "update_last_check": 0,        # unix time последней проверки
     "max_backups_per_file": 200,
 }
 
@@ -115,7 +119,12 @@ class Config:
     def _normalize(self):
         """Coerce known value types so a hand-edited/corrupt config.json cannot
         pass a string where the window code expects an int/bool."""
-        for k in ("window_width", "window_height", "max_backups_per_file"):
+        for k in ("window_width", "window_height", "max_backups_per_file",
+                  "update_last_check"):
+            try:
+                self.data[k] = int(self.data.get(k, DEFAULTS[k]))
+            except (TypeError, ValueError):
+                self.data[k] = DEFAULTS[k]
             try:
                 self.data[k] = int(self.data.get(k, DEFAULTS[k]))
             except (TypeError, ValueError):
@@ -127,6 +136,8 @@ class Config:
                 self.data[k] = str(v).lower() in ("1", "true", "yes", "on")
         if self.data.get("window_size") not in WINDOW_SIZES:
             self.data["window_size"] = DEFAULTS["window_size"]
+        if self.data.get("update_channel") not in ("release", "beta"):
+            self.data["update_channel"] = DEFAULTS["update_channel"]
         if self.data.get("language") not in ("ru", "en", "de", "zh"):
             self.data["language"] = "ru" if str(self.data.get("language", "")).lower().startswith("ru") else "en"
 

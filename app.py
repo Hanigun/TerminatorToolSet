@@ -19,6 +19,7 @@ from flask import Flask, request
 log = logging.getLogger("terminatorsheet.api")
 
 # -- domain + package imports (refactored layout) ---------------------------
+from terminator_toolset import __version__ as VERSION
 from terminator_toolset.api.archive import register_archive
 from terminator_toolset.api.compare import register_compare
 from terminator_toolset.api.config import register_config
@@ -30,6 +31,7 @@ from terminator_toolset.api.shell import register_shell
 from terminator_toolset.api.sheets import register_sheets
 from terminator_toolset.api.swt import register_swt
 from terminator_toolset.api.uprising import register_uprising
+from terminator_toolset.api.updates import register_updates
 from terminator_toolset.domain import swt_editor as swt_mod
 from terminator_toolset.domain.config import Config, Markers
 from terminator_toolset.domain.database import Database
@@ -47,10 +49,9 @@ from terminator_toolset.services.save_service import SavePipeline
 from terminator_toolset.services.session_store import SessionStore
 from terminator_toolset.services.swt_service import Swt
 from terminator_toolset.services.uprising_service import Uprising
+from terminator_toolset.services.update_service import Updates
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-VERSION = "0.9.1"
 
 
 def create_app(config: Config, db: Database, base_dir: Optional[str] = None) -> Flask:
@@ -100,12 +101,19 @@ def create_app(config: Config, db: Database, base_dir: Optional[str] = None) -> 
     cmp = Compare(store, config, saves, hist, db, log)
     # -- swt mission scripts (parse + guarded save) --------------------------
     swt = Swt(store, saves, log)
+    # -- self-updates (worker over GitHub releases; program dir next to the
+    # exe when frozen, sources root in dev)
+    import sys as _sys
+    _program_dir = (os.path.dirname(os.path.abspath(_sys.executable))
+                    if getattr(_sys, "frozen", False) else _base)
+    upd = Updates(config, log, _program_dir, VERSION)
 
     # -- route context (services + deploy values shared by api groups) -------
     ctx = SimpleNamespace(config=config, db=db, i18n=i18n, store=store,
                           entities=entities, hist=hist, guard=guard,
                           saves=saves, mods=mods, arch=arch, upr=upr, cmp=cmp,
                           files=files, swt=swt, markers=markers, log=log,
+                          upd=upd,
                           base=_base, version=VERSION)
     register_shell(app, ctx)
     register_config(app, ctx)
@@ -116,6 +124,7 @@ def create_app(config: Config, db: Database, base_dir: Optional[str] = None) -> 
     register_history(app, ctx)
     register_swt(app, ctx)
     register_uprising(app, ctx)
+    register_updates(app, ctx)
     register_mods(app, ctx)
     register_archive(app, ctx)
     upr.start_warmup()

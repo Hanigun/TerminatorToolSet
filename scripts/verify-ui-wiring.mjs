@@ -207,3 +207,23 @@ function section(name, asserts) {
   ].map(([c, m]) => [c, m]));
   if (bad) process.exit(1);
 }
+
+// ---------- G10: self-updates (worker over GitHub releases) ----------
+{
+  const apiupd = read("terminator_toolset/api/updates.py");
+  const updsvc = read("terminator_toolset/services/update_service.py");
+  const worker = read("../compiler/worker.js");
+  const bad = section("UPD GATE PASSED", [
+    [/\/api\/update_state/.test(apiupd) && /\/api\/update_check/.test(apiupd) && /\/api\/update_download/.test(apiupd) && /\/api\/update_progress/.test(apiupd), "backend must serve the update state/check/download/progress routes"],
+    [/register_updates\(app, ctx\)/.test(read("app.py")) && /upd=upd/.test(read("app.py")), "update service must be composed in app.py context"],
+    [/contents_directory="ToolSetLibs"/.test(read("../compiler/TerminatorToolSet.spec")), "spec must rename _internal to ToolSetLibs"],
+    [/\/release/.test(worker) && /\/prerelease/.test(worker) && /GH_TOKEN/.test(worker), "worker.js must serve /release + /prerelease with a token"],
+    [/id="btn-update"/.test(html) && /id="update-modal"/.test(html) && /id="set-upd-check"/.test(html) && /id="set-upd-channel"/.test(html), "page must have the header update button, modal, settings check and channel"],
+    [/function updCheck\(/.test(appjs) && /function updDownload\(/.test(appjs) && /function updPollTick\(/.test(appjs), "app.js must check, download and poll update progress"],
+    [/\.upd-dot/.test(css) && /\.upd-fill/.test(css) && /\.upd-notes/.test(css), "update button dot, progress bar and notes must be styled"],
+    [/__version__ as VERSION/.test(read("app.py")), "app version must come from the single package source"],
+    [/is_newer/.test(updsvc) && /apply_pending_update/.test(updsvc), "update service must compare versions and apply staged releases"],
+    [/upd_check/.test(read("locales/ru.json")) && /upd_check/.test(read("locales/en.json")) && /upd_check/.test(read("locales/de.json")) && /upd_check/.test(read("locales/zh.json")), "update strings must exist in all 4 locales"],
+  ].map(([c, m]) => [c, m]));
+  if (bad) process.exit(1);
+}

@@ -17,7 +17,8 @@ import time
 import webbrowser
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-VERSION = "0.9.1"
+
+from terminator_toolset import __version__ as VERSION  # noqa: E402
 
 # -- refactored modules (window/tray/webview live in infrastructure.window) ---
 from terminator_toolset.application.bootstrap import build_app
@@ -50,6 +51,19 @@ def main(browser: bool = False):
             pass
         os._exit(0)
     _setup_logging(_pick_app_dir())
+    # staged self-update from the previous run: apply before anything holds
+    # files (a running EXE cannot replace itself on Windows)
+    try:
+        from terminator_toolset.services.update_service import (
+            apply_pending_update as _apply_pending)
+        _prog = (os.path.dirname(os.path.abspath(sys.executable))
+                 if getattr(sys, "frozen", False) else APP_DIR)
+        _applied = _apply_pending(_prog, os.path.join(_prog, "configs"),
+                                  _log)
+        if _applied:
+            _log("update applied at boot: %s" % _applied)
+    except Exception as e:  # noqa: BLE001
+        _log("update apply failed: %s" % e)
     # файлы из командной строки / Drag&Drop второго запуска -> mailbox
     for a in cli_args:
         if a and os.path.exists(a):

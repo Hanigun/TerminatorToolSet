@@ -10466,6 +10466,192 @@ async function openRecentsModal() {
   $("#recents-modal").hidden = false;
 }
 
+// ---------- self-updates (worker over GitHub releases) ----------
+let updState = null;
+let updPollTimer = null;
+
+function updDot(on) {
+  const d = $("#btn-update-dot");
+  if (d) d.hidden = !on;
+}
+
+async function updStateLoad() {
+  try {
+    const r = await api("/api/update_state");
+    const j = await r.json();
+    if (j && j.ok) updState = j;
+  } catch (e) { /* офлайн на старте: молча */ }
+  updPaint();
+  return updState;
+}
+
+function updPaint() {
+  const pend = updState && updState.pending;
+  const has = !!(updState && (updState.available
+    || (pend && pend.version)));
+  updDot(has);
+  const st = $("#set-upd-state");
+  if (st) {
+    if (updState && updState.available) {
+      st.textContent = (t("upd_avail") || "Доступно: ")
+        + updState.available.version;
+    } else if (pend && pend.version) {
+      st.textContent = (t("upd_staged_short") || "Загружено: ")
+        + pend.version;
+    } else if (updState) {
+      st.textContent = (t("upd_uptodate") || "Установлена последняя версия")
+        + " " + updState.current;
+    }
+  }
+  const ch = $("#set-upd-channel");
+  if (ch && updState) ch.value = updState.channel || "release";
+}
+
+async function updCheck(force, silent) {
+  let j = null;
+  try {
+    const r = await api("/api/update_check", { method: "POST",
+      body: JSON.stringify({ force: !!force }), timeout: 30000 });
+    j = await r.json();
+  } catch (e) { j = null; }
+  if (!j || !j.ok) {
+    if (!silent) toast((j && j.error) || "update check failed", "err");
+    return null;
+  }
+  await updStateLoad();
+  if (updState && updState.available) updOpenModal();
+  else if (!silent) {
+    toast((t("upd_uptodate") || "Установлена последняя версия")
+      + (updState ? " " + updState.current : ""), "ok");
+  }
+  return updState;
+}
+
+function updOpenModal() {
+  const avail = updState && updState.available;
+  const pend = updState && updState.pending;
+  const modal = $("#update-modal");
+  if (!modal) return;
+  const ver = (avail && avail.version)
+    || (pend && pend.version) || "";
+  $("#upd-title").textContent = (t("upd_title") || "Обновление")
+    + (ver ? " " + ver : "");
+  $("#upd-notes").textContent = (avail && avail.notes)
+    || (t("upd_no_notes") || "");
+  const hint = $("#upd-hint");
+  const dl = $("#upd-download");
+  const prog = $("#upd-progress");
+  if (pend && pend.version && (!avail || avail.version === pend.version)) {
+    // уже скачано и ждёт перезапуска: только подсказка
+    if (hint) hint.textContent = (t("upd_restart_hint")
+      || "Обновление загружено. Перезапустите программу для установки.")
+      + " (" + pend.version + ")";
+    if (dl) dl.hidden = true;
+    if (prog) prog.hidden = true;
+  } else {
+    if (hint) hint.textContent = "";
+    if (dl) { dl.hidden = false; dl.disabled = false; }
+    if (prog) prog.hidden = true;
+  }
+  modal.hidden = false;
+  updPollStart();
+}
+
+async function updDownload() {
+  const dl = $("#upd-download");
+  if (dl) dl.disabled = true;
+  let j = null;
+  try {
+    const r = await api("/api/update_download", { method: "POST",
+      body: JSON.stringify({}) });
+    j = await r.json();
+  } catch (e) { j = null; }
+  if (!j || !j.ok) {
+    toast((j && j.error) || "download failed", "err");
+    if (dl) dl.disabled = false;
+    return;
+  }
+  updPollStart();
+}
+
+function updPollStart() {
+  updPollStop();
+  updPollTick();
+  updPollTimer = setInterval(updPollTick, 600);
+}
+
+function updPollStop() {
+  if (updPollTimer) { clearInterval(updPollTimer); updPollTimer = null; }
+}
+
+async function updPollTick() {
+  let j = null;
+  try {
+    const r = await api("/api/update_progress");
+    j = await r.json();
+  } catch (e) { return; }
+  const p = j && j.progress;
+  if (!p) return;
+  const bar = $("#upd-progress"), fill = $("#upd-fill"), pct = $("#upd-pct");
+  if (p.state === "downloading" || p.state === "extracting") {
+    if (bar) bar.hidden = false;
+    const total = p.total || 0, done = p.done || 0;
+    const pc = total > 0 ? Math.min(99, Math.floor(done * 100 / total)) : 0;
+    if (fill) fill.style.width = (p.state === "extracting" ? 100 : pc) + "%";
+    if (pct) pct.textContent = p.state === "extracting"
+      ? (t("upd_extracting") || "Распаковка…")
+      : pc + "% · " + fmtSize(done) + " / " + (total ? fmtSize(total) : "?");
+  } else if (p.state === "staged") {
+    updPollStop();
+    if (bar) bar.hidden = true;
+    await updStateLoad();
+    updOpenModal();   // переключить модалку на подсказку про перезапуск
+    toast(t("upd_staged") || "Обновление загружено", "ok");
+  } else if (p.state === "error") {
+    updPollStop();
+    if (bar) bar.hidden = true;
+    toast(p.error || "download failed", "err");
+    const dl = $("#upd-download");
+    if (dl) dl.disabled = false;
+  }
+}
+
+function updSetup() {
+  const b = $("#btn-update");
+  if (b) b.onclick = () => {
+    const pend = updState && updState.pending;
+    if (updState && (updState.available || (pend && pend.version))) {
+      updOpenModal();
+    } else updCheck(true, false);
+  };
+  const sc = $("#set-upd-check");
+  if (sc) sc.onclick = () => updCheck(true, false);
+  const ch = $("#set-upd-channel");
+  if (ch) ch.onchange = async () => {
+    try {
+      const r = await api("/api/update_channel", { method: "POST",
+        body: JSON.stringify({ channel: ch.value }) });
+      const j = await r.json();
+      if (!j || !j.ok) { toast((j && j.error) || "error", "err"); return; }
+      await updStateLoad();
+      if (updState && updState.available) updOpenModal();
+      else {
+        toast((t("upd_uptodate") || "Установлена последняя версия")
+          + (updState ? " " + updState.current : ""), "ok");
+      }
+    } catch (e) { toast(String((e && e.message) || e), "err"); }
+  };
+  const dl = $("#upd-download");
+  if (dl) dl.onclick = updDownload;
+  const later = $("#upd-later");
+  if (later) later.onclick = () => {
+    $("#update-modal").hidden = true;
+    updPollStop();
+  };
+  // суточная автопроверка после старта (не тормозит boot)
+  setTimeout(() => updCheck(false, true), 8000);
+}
+
 // ---------- init ----------
 async function init() {
   document.body.classList.add("dark");
@@ -10562,6 +10748,8 @@ async function init() {
   }
   $("#btn-settings").onclick = openSettings;
   $("#btn-history").onclick = openHistory;
+  updSetup();
+  updStateLoad();
   bindTabCtxMenu();
   bindTreeCtxMenu();
   $("#landing-records-btn").onclick = openRecentsModal;
