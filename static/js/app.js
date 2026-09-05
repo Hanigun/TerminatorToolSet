@@ -5839,7 +5839,7 @@ function uprFreshState() {
   // ЕДИНСТВЕННЫЙ дефолт состояния карты (старт + закрытие вкладки): все поля,
   // включая поколение загрузки loadSeq — без него переоткрытие давало NaN,
   // guard вечно дропал ответы и карта оставалась бледной (.empty, no sectors)
-  return { path: null, rows: null, columns: [], sysnames: [], syscats: {}, prices: {}, sysLoading: false, sel: -1, variant: 0, dirty: false, found: false, panel: true, pick: new Set(), clip: [], sectorClip: null, editing: "", loading: false, loadSeq: 0 };
+  return { path: null, rows: null, columns: [], sheetIndex: 0, sysnames: [], syscats: {}, prices: {}, sysLoading: false, sel: -1, variant: 0, dirty: false, found: false, panel: true, pick: new Set(), clip: [], sectorClip: null, editing: "", loading: false, loadSeq: 0 };
 }
 
 function uprTab() { return state.tabs.find(tb => tb.id === "uprising"); }
@@ -6439,6 +6439,7 @@ async function uprLoad(reset, seq) {
   if (!j.ok) { toast(j.error || "error", "err"); hideOwn(); return; }
   state.uprising.rows = j.file.rows;
   state.uprising.columns = j.file.columns || [];
+  state.uprising.sheetIndex = j.file.sheet_index || 0;
   state.uprising.sel = -1;
   state.uprising.variant = 0;
   uprMarkClean();
@@ -7436,23 +7437,64 @@ function uprWriteCell(ri, ci, items) {
 // правки одного файла гонялись между собой.
 async function uprWriteCells(edits) {
   const cells = [];
+  const stash = [];
   (edits || []).forEach(e => {
     if (!e || !state.uprising.rows[e.ri]) return;
     // e.items (список) или готовый e.val (уже сериализованная строка)
     const val = (e.val !== undefined) ? e.val
       : uprJoinList(((e.items) || []).filter(x => x.name));
-    if (state.uprising.rows[e.ri].values[e.ci] === val) return;
+    const old = state.uprising.rows[e.ri].values[e.ci];
+    if (old === val) return;
+    // оптимистично — для мгновенного рендера; при отказе сервера
+    // откатим по stash (иначе карта покажет ×3, а в файле останется
+    // старое, и повторная правка молча пропустится как «без изменений»)
+    stash.push({ ri: e.ri, ci: e.ci, old });
     state.uprising.rows[e.ri].values[e.ci] = val;
     cells.push({ row: e.ri, col: e.ci, value: val, type: "String" });
   });
   uprMarkDirty();
   if (!cells.length) return;
-  const r = await api("/api/edit_cells", { method: "POST",
-    body: JSON.stringify({ path: state.uprising.path, cells, save: false }) });
   let j = null;
-  try { j = await r.json(); } catch (e) { j = null; }
-  if (!j || !j.ok) toast((j && j.error) || ("error " + r.status), "err");
-  else setUndoRedoButtons(!!j.can_undo, !!j.can_redo);
+  try {
+    const r = await api("/api/edit_cells", { method: "POST",
+      body: JSON.stringify({ path: state.uprising.path, cells, save: false }) });
+    try { j = await r.json(); } catch (e) { j = null; }
+  } catch (e) { j = null; }
+  if (!j || !j.ok) {
+    stash.forEach(s => {
+      if (state.uprising.rows[s.ri]) state.uprising.rows[s.ri].values[s.ci] = s.old;
+    });
+    renderUprising();
+    toast((j && j.error) || "map write failed", "err");
+    return;
+  }
+  setUndoRedoButtons(!!j.can_undo, !!j.can_redo);
+  // открытые вкладки-таблицы того же файла: подменить значения, иначе
+  // таблица покажет старое до переоткрытия
+  try { uprSyncFileTabs(cells); } catch (e) { /* таблица обновится при открытии */ }
+}
+
+// значения карты — в открытые таблицы того же файла (cells как в запросе)
+function uprSyncFileTabs(cells) {
+  const np = normPath(state.uprising.path || "");
+  if (!np) return;
+  const si = state.uprising.sheetIndex || 0;
+  let active = false, any = false;
+  state.tabs.forEach(tb => {
+    if (tb.type !== "file" || !tb.fileData || !tb.fileData.rows) return;
+    if (normPath(tb.path || "") !== np) return;
+    if ((tb.sheetIndex || 0) !== si) return;   // другой лист того же файла
+    any = true;
+    cells.forEach(c => {
+      const row = tb.fileData.rows[c.row];
+      if (row && row.values && c.col < row.values.length) row.values[c.col] = c.value;
+    });
+    if (!tb.dirty) tb.dirty = true;
+    if (tb.id === state.activeTabId) active = true;
+  });
+  if (!any) return;
+  renderTabBar();
+  if (active && state.currentFile && state.currentFile.rows) renderGrid();
 }
 
 function uprRemoveItems(list) {
