@@ -71,7 +71,9 @@ with tempfile.TemporaryDirectory() as tmp:
     for rec in records:
         check(bool(rec.get("summary")), "record %s must have a summary" % rec.get("id"))
         check(os.path.basename(work) in rec.get("file", ""), "record must report the file name")
-        check(rec.get("action") in ("edit", "add_row", "del_row", "add_col", "del_col", "redo"),
+        check(rec.get("action") in ("edit", "edit_cells", "add_row", "del_row",
+                                       "add_col", "del_col", "row_set",
+                                       "col_set", "redo"),
               "unexpected action %r" % rec.get("action"))
         if rec.get("action") != "redo":
             check(bool(rec.get("payload")), "record must carry a diff payload")
@@ -164,6 +166,47 @@ with tempfile.TemporaryDirectory() as tmp:
         if not out.get("ok"):
             break
     check(cell(cl, work) == "H2", "redoing all reverted steps must return to the newest state")
+
+    # ---------------- G5: edit_cells batch = one record, one undo ----------------
+    # (карта Uprising: обмен секторов и другие команды — одна запись журнала)
+    work2 = os.path.join(tmp, "batch.xml")
+    shutil.copy(SRC, work2)
+    cl.post("/api/open_file", json={"path": work2})
+    f0 = cl.get("/api/file", query_string={"path": work2}).get_json()
+    cols = list(range(1, min(len(f0["columns"]), 4)))
+    old_vals = [f0["rows"][1]["values"][c] for c in cols]
+    new_vals = ["G5B%d" % c for c in cols]
+    bj = cl.post("/api/edit_cells", json={
+        "path": work2,
+        "cells": [{"row": 1, "col": c, "value": v, "type": "String"}
+                  for c, v in zip(cols, new_vals)],
+        "summary": "Test batch (%d cells)" % len(cols)}).get_json()
+    check(bj.get("ok") and bj.get("n") == len(cols),
+          "edit_cells must apply the whole batch: %r" % (bj,))
+    got = cl.get("/api/file", query_string={"path": work2}).get_json()["rows"][1]["values"]
+    check(all(got[c] == v for c, v in zip(cols, new_vals)),
+          "batch must land in every cell, got %r" % ([got[c] for c in cols],))
+    recs = cl.get("/api/history", query_string={"path": work2}).get_json().get("records", [])
+    batch_recs = [r for r in recs if r.get("action") == "edit_cells"]
+    check(len(batch_recs) == 1,
+          "one batch must be exactly one record, got %d" % len(batch_recs))
+    check(batch_recs and batch_recs[0].get("summary") == "Test batch (%d cells)" % len(cols),
+          "custom summary must survive, got %r"
+          % (batch_recs[0].get("summary") if batch_recs else None))
+    check(cl.post("/api/undo", json={"path": work2}).get_json().get("ok"),
+          "batch undo must succeed")
+    got2 = cl.get("/api/file", query_string={"path": work2}).get_json()["rows"][1]["values"]
+    check(all(got2[c] == v for c, v in zip(cols, old_vals)),
+          "one undo must revert the whole batch, got %r" % ([got2[c] for c in cols],))
+    check(cl.post("/api/redo", json={"path": work2}).get_json().get("ok"),
+          "batch redo must succeed")
+    got3 = cl.get("/api/file", query_string={"path": work2}).get_json()["rows"][1]["values"]
+    check(all(got3[c] == v for c, v in zip(cols, new_vals)),
+          "redo must re-apply the whole batch, got %r" % ([got3[c] for c in cols],))
+    big = cl.post("/api/edit_cells", json={
+        "path": work2,
+        "cells": [{"row": 0, "col": 1, "value": "x"}] * 2001}).get_json()
+    check(big.get("ok") is False, "2001 cells must be rejected: %r" % (big,))
 
     if len(failures) == n:
         print("UNDO ENGINE GATE PASSED")

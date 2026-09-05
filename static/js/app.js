@@ -1236,7 +1236,10 @@ function focusLinkedCell(ri, ci) {
 // Click on the yellow column button in a history record: close the modal and
 // show the change in place.
 function jumpToHistoryChange(h) {
-  const p = h.payload || {};
+  let p = h.payload || {};
+  // батч из одной ячейки: координаты лежат в cells[0]
+  if ((p.r == null || p.c == null) && Array.isArray(p.cells)
+      && p.cells.length === 1) p = p.cells[0];
   if (p.r == null || p.c == null) return;
   $("#history-modal").hidden = true;
   // on the compare page jump inside the preview pane of that record's file
@@ -7435,7 +7438,9 @@ function uprWriteCell(ri, ci, items) {
 // очистка сектора) — одна запись истории и один undo-шаг. Раньше каждая
 // ячейка шла отдельным /api/edit: отмена шла по одному юниту + параллельные
 // правки одного файла гонялись между собой.
-async function uprWriteCells(edits) {
+// summary — готовая подпись команды для журнала («Обмен секторов 3 ↔ 7»);
+// без неё бэкенд соберёт подпись сам. Возвращает true при успехе.
+async function uprWriteCells(edits, summary) {
   const cells = [];
   const stash = [];
   (edits || []).forEach(e => {
@@ -7453,11 +7458,13 @@ async function uprWriteCells(edits) {
     cells.push({ row: e.ri, col: e.ci, value: val, type: "String" });
   });
   uprMarkDirty();
-  if (!cells.length) return;
+  if (!cells.length) return true;
   let j = null;
   try {
+    const body = { path: state.uprising.path, cells, save: false };
+    if (summary) body.summary = String(summary).slice(0, 160);
     const r = await api("/api/edit_cells", { method: "POST",
-      body: JSON.stringify({ path: state.uprising.path, cells, save: false }) });
+      body: JSON.stringify(body) });
     try { j = await r.json(); } catch (e) { j = null; }
   } catch (e) { j = null; }
   if (!j || !j.ok) {
@@ -7466,12 +7473,13 @@ async function uprWriteCells(edits) {
     });
     renderUprising();
     toast((j && j.error) || "map write failed", "err");
-    return;
+    return false;
   }
   setUndoRedoButtons(!!j.can_undo, !!j.can_redo);
   // открытые вкладки-таблицы того же файла: подменить значения, иначе
   // таблица покажет старое до переоткрытия
   try { uprSyncFileTabs(cells); } catch (e) { /* таблица обновится при открытии */ }
+  return true;
 }
 
 // значения карты — в открытые таблицы того же файла (cells как в запросе)
@@ -7515,7 +7523,8 @@ function uprRemoveItems(list) {
           .filter(x => !m.has(x.name)) });
     });
   }));
-  uprWriteCells(edits);
+  uprWriteCells(edits, (t("upr_h_remove") || "Удаление с карты ({k} шт.)")
+    .replace("{k}", list.length));
 }
 
 // перенос элементов в зону targetNum; дубликаты пропускаются (не ошибка)
@@ -7544,7 +7553,8 @@ function uprMoveItems(list, targetNum) {
     }
     moved.push(it);
   });
-  uprWriteCells(edits);
+  uprWriteCells(edits, (t("upr_h_move") || "Перенос в сектор {n} ({k} шт.)")
+    .replace("{n}", targetNum).replace("{k}", moved.length));
   if (moved.length) {
     toast((t("upr_moved") || "Перенесено в зону {n}: {k}")
       .replace("{n}", targetNum).replace("{k}", moved.length), "ok");
@@ -7630,11 +7640,11 @@ function uprSectorPut(num, vi, cat, items) {
   if (e) uprWriteCells([e]);
 }
 
-function uprSectorWrite(num, snap) {
+function uprSectorWrite(num, snap, summary) {
   const edits = (snap || [])
     .map(s => uprSectorEdit(num, s.vi, s.cat, s.items))
     .filter(e => e);
-  uprWriteCells(edits);
+  uprWriteCells(edits, summary);
   renderUprising();
 }
 
@@ -7657,8 +7667,15 @@ function uprSectorCtx(e, num) {
           return;
         }
         const sa = uprSectorSnap(num), sb = uprSectorSnap(other);
-        uprSectorWrite(num, sb);
-        uprSectorWrite(other, sa);
+        // обмен — одна команда: обе стороны одним батчем = одна запись
+        // истории и один undo-шаг
+        const edits = [
+          ...sb.map(s => uprSectorEdit(num, s.vi, s.cat, s.items)),
+          ...sa.map(s => uprSectorEdit(other, s.vi, s.cat, s.items)),
+        ].filter(e => e);
+        await uprWriteCells(edits, (t("upr_h_swap") || "Обмен секторов {a} ↔ {b}")
+          .replace("{a}", num).replace("{b}", other));
+        renderUprising();
         toast((t("upr_sec_swapped") || "Секторы {a} и {b} поменялись наполнением")
           .replace("{a}", num).replace("{b}", other), "ok");
       } },
@@ -7667,7 +7684,8 @@ function uprSectorCtx(e, num) {
         toast(t("ctx_copied") || "Скопировано", "ok");
       } },
     { label: t("upr_sec_paste_rep") || "Вставить и заменить", disabled: !hasClip, fn: () => {
-        uprSectorWrite(num, state.uprising.sectorClip);
+        uprSectorWrite(num, state.uprising.sectorClip,
+          (t("upr_h_paste") || "Вставка в сектор {n} (замена)").replace("{n}", num));
         toast(t("saved") || "Сохранено", "ok");
       } },
     { label: t("upr_sec_paste_add") || "Вставить и добавить", disabled: !hasClip, fn: () => {
@@ -7690,7 +7708,8 @@ function uprSectorCtx(e, num) {
           const e = uprSectorEdit(num, s.vi, s.cat, merged);
           if (e) edits.push(e);
         });
-        uprWriteCells(edits);
+        uprWriteCells(edits, (t("upr_h_paste_add") || "Вставка в сектор {n} (добавление)")
+          .replace("{n}", num));
         renderUprising();
         toast(t("saved") || "Сохранено", "ok");
       } },
@@ -7707,7 +7726,8 @@ function uprSectorCtx(e, num) {
         if (c !== "ok") return;
         uprWriteCells(uprSectorCells(num)
           .map(cl => uprSectorEdit(num, cl.vi, cl.cat, []))
-          .filter(e => e));
+          .filter(e => e),
+          (t("upr_h_clear") || "Очистка сектора {n}").replace("{n}", num));
         renderUprising();
       } },
   ]);
@@ -10058,8 +10078,11 @@ async function openHistory() {
     const sumEl = item.querySelector(".h-sum");
     const s = h.summary || "—";
     // "sysname colname: old -> new" → sysname as a yellow badge, column name
-    // as a yellow button that jumps to the changed cell
-    const sp = h.action === "edit" ? s.indexOf(" ") : -1;
+    // as a yellow button that jumps to the changed cell (single-cell batches
+    // carry the same summary shape and jump via cells[0])
+    const splittable = h.action === "edit" || (h.action === "edit_cells"
+      && h.payload && (h.payload.cells || []).length === 1);
+    const sp = splittable ? s.indexOf(" ") : -1;
     const colon = sp > 0 ? s.indexOf(":", sp) : -1;
     if (sp > 0 && colon > sp) {
       const keyEl = document.createElement("span");

@@ -812,7 +812,11 @@ async function uprRndApply() {
     edits.push({ ri, ci, val: uprJoinList(arr) });
     prog.update();
   }
-    try { await uprWriteCells(edits); }
+    try {
+      await uprWriteCells(edits,
+        ((typeof t === "function" && t("upr_h_random")) || "Рандомайзер ({k} яч.)")
+          .replace("{k}", edits.length));
+    }
     catch (e) { saveErr += edits.length; }
   } finally {
     prog.close();
