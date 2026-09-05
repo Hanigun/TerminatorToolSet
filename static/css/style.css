@@ -592,13 +592,15 @@ input, textarea, select, [contenteditable="true"] { user-select: text; -webkit-u
   min-width: 0;
 }
 .tab-title {
+  min-width: 0;
+  flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
-  line-height: 1;
+  line-height: 1.25;
 }
 .tab-badge {
   font-size: 8.5px;
@@ -654,7 +656,7 @@ input, textarea, select, [contenteditable="true"] { user-select: text; -webkit-u
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  line-height: 1;
+  line-height: 1.25;
 }
 .tab-close {
   /* exact clone of the sidebar "close project" button:
