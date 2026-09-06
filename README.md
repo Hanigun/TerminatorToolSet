@@ -4,6 +4,7 @@ Deluxe SpreadsheetML-редактор для мода **TERMINATOR OVERHAUL ASSE
 Просмотр и редактирование `basis/scripts/species/*.xml`, понимает структуру проекта и DLC-оверлеи.
 
 ## Возможности
+
 - Чтение/запись SpreadsheetML с **минимально-инвазивной перезаписью**: меняется только текст внутри `<Data>`, вся прочая структура (атрибуты, `<Comment>`, `ss:Index`, пространства имён `ss:`/`x:`/`o:`/`html:`) сохраняется байт-в-байт — файл остаётся 100% совместимым с игровым движком.
 - **Frameless-окно** с кастомной шапкой: кнопки окна, компактные «Документ/Проект», перетаскивание за шапку.
 - **Вкладки-карточки** в стиле редактора: иконка типа файла, заголовок + подзаголовок (путь), бейдж «не сохранено», закреплённая вкладка приветствия, средний клик закрывает.
@@ -20,23 +21,29 @@ Deluxe SpreadsheetML-редактор для мода **TERMINATOR OVERHAUL ASSE
 - Фоновый индекс связей и LRU-кэш сессий (незакрытые правки не вытесняются).
 
 ## Запуск из исходников (dev, браузер)
+
 ```
 python main.py --browser
 ```
 
 ## Запуск окна из исходников
+
 ```
 python main.py
 ```
+
 Стартует нативный frameless-окно PySide6/QtWebEngine (встроенный Chromium, тот же вид что в браузере).
 
 ## Сборка .exe
+
 ```
 build.bat
 ```
+
 Результат: `dist\TerminatorSheetQt.exe` (PySide6 + QtWebEngine, onefile, windowed). Конфиг (`config.json`), БД (`terminator_sheet.db`) и журнал (`boot.log`) создаются рядом с exe.
 
 ## Структура
+
 ```
 app.py            Flask-бэкенд (JSON API, фоновый индекс, LRU-сессии)
 main.py           frameless-окно PySide6 (QtWebEngine) / браузер + сборка
@@ -56,4 +63,7 @@ test_api.py       интеграционный тест API
 ```
 
 ## Замечание по Python
-Стек (Flask + **PySide6/QtWebEngine** + lxml + PyInstaller) проверен на **Python 3.14**. Если QtWebEngine не поднимет окно, `main.py` автоматически переключится на обычный браузер (`--browser` для явного dev-режима).
+
+# Стек (Flask + **PySide6/QtWebEngine** + lxml + PyInstaller) проверен на **Python 3.14**. Если QtWebEngine не поднимет окно, `main.py` автоматически переключится на обычный браузер (`--browser` для явного dev-режима).
+
+# TerminatorToolSet
