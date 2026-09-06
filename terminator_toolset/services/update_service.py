@@ -282,12 +282,21 @@ class Updates:
     # -- download + stage -----------------------------------------------
     def download(self, url="", version=""):
         """Start the download in a background thread (progress via
-        progress()). Empty url = the cached available release."""
+        progress()). Empty url = the cached available release, refreshed
+        with a forced check first: the cache may predate the worker
+        change (direct browser_download_url, 404 on a private repo)."""
         with self._lock:
             if self._progress["state"] == "downloading":
                 return {"ok": False, "error": "already downloading"}
             if not url:
-                avail = self._read_cached().get("available") or {}
+                try:
+                    fresh = self.check(force=True)
+                except Exception:  # noqa: BLE001
+                    fresh = {}
+                avail = (fresh.get("available") if isinstance(fresh, dict)
+                         else None)
+                if not avail:
+                    avail = self._read_cached().get("available") or {}
                 url = avail.get("url") or ""
                 version = version or avail.get("version") or ""
             if not url:

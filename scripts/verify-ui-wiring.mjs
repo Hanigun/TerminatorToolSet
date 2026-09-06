@@ -225,6 +225,7 @@ function section(name, asserts) {
     [/__version__ as VERSION/.test(read("app.py")), "app version must come from the single package source"],
     [/is_newer/.test(updsvc) && /apply_pending_update/.test(updsvc), "update service must compare versions and apply staged releases"],
     [/\/asset/.test(updsvc) && /browser_download_url 404/.test(updsvc), "downloads must go through the worker /asset proxy (direct links 404 on private repos)"],
+    [/def download\(self, url="", version=""\)/.test(updsvc) && /self\.check\(force=True\)/.test(updsvc), "download must force-refresh the cached URL (stale cache may hold a direct 404 link)"],
     [/upd_check/.test(read("locales/ru.json")) && /upd_check/.test(read("locales/en.json")) && /upd_check/.test(read("locales/de.json")) && /upd_check/.test(read("locales/zh.json")), "update strings must exist in all 4 locales"],
   ].map(([c, m]) => [c, m]));
   if (bad) process.exit(1);
