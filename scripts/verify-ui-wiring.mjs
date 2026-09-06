@@ -241,6 +241,8 @@ function section(name, asserts) {
     [/upr_sector_reward/.test(appjs) && /\.replace\("\{n\}"/.test(appjs), "sector heads must render the localized reward name"],
     [/data-i18n="upr_map_settings"/.test(html) && /\.modal-card\.upr-set-card/.test(css), "map settings modal must be renamed and fixed-size"],
     [/paintCmpSrc[\s\S]*?is-off/.test(appjs), "compare source switch must use clickable is-off like the map"],
+    [/dataset\.pos/.test(appjs) && /"-1"/.test(appjs) && /data-pos="-1"/.test(css), "source switches must hide the yellow pill when the source is unavailable"],
+    [/startsWith\("data:image\/"\)/.test(appjs), "tab icons must render data-URL icons as <img>, not base64 text"],
     [/"tray_enabled": True/.test(cfg) && /"browser_to_tray": True/.test(cfg), "tray options must default to on"],
     [/\.donate-btn/.test(css) && /\.social-btn/.test(css) && /\.tab-sub-path/.test(css) && /\.toast \{[^}]*120%/.test(css), "donate/social buttons, readable tab paths and +20% toasts must be styled"],
     [/upr_map_settings/.test(read("locales/ru.json")) && /upr_sector_reward/.test(read("locales/en.json")) && /set_tab_updates/.test(read("locales/de.json")) && /donate/.test(read("locales/zh.json")) && /about_title/.test(read("locales/ru.json")), "batch strings must exist in all 4 locales"],

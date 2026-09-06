@@ -1788,6 +1788,8 @@ button.upr-map-btn.rnd {
 }
 .src-seg[data-pos="1"] .src-seg-ind { transform: translateX(100%); }
 .src-seg[data-pos="2"] .src-seg-ind { transform: translateX(200%); }
+/* источник недоступен: жёлтой пилюли нет (не светим «активность» по умолчанию) */
+.src-seg[data-pos="-1"] .src-seg-ind { display: none; }
 .src-seg-btn {
   position: relative; z-index: 1; flex: 1 1 0; min-width: 0;
   border: none; background: transparent; cursor: pointer;

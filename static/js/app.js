@@ -1383,8 +1383,11 @@ const CATEGORY_ICONS = {
 };
 
 function iconHtml(icon, fallback) {
-  // icons are either asset URLs (file tabs) or legacy emoji
-  if (icon && String(icon).startsWith("/")) return `<img src="${icon}" alt="">`;
+  // icons are either asset URLs (file tabs) or legacy emoji; после
+  // preloadIcons в памяти лежат data-URL — их тоже отдаём <img>, иначе
+  // весь base64 печатается текстом (баг «мусора» во вкладках)
+  const s = String(icon || "");
+  if (s.startsWith("/") || s.startsWith("data:image/")) return `<img src="${s}" alt="">`;
   return escapeHtml(icon || fallback || "📄");
 }
 
@@ -2445,17 +2448,20 @@ function paintSrcSwitches() {
   }
   // сегмент карты: недоступные пункты темнеют (кнопка is-off), индикатор едет.
   // is-off вместо disabled: серая кнопка кликабельна и ведёт в настройки
-  // (нативный disabled гасит клики — до настроек было не добраться)
+  // (нативный disabled гасит клики — до настроек было не добраться).
+  // unavailable current source -> no active button and no yellow pill
+  // (иначе «Проект» подсвечен по умолчанию даже без пути)
   const seg = $("#upr-src");
   if (seg) {
-    seg.dataset.pos = String(Math.max(0, SRC_ORDER.indexOf(v)));
+    const ok = srcAvail(v);
+    seg.dataset.pos = ok ? String(Math.max(0, SRC_ORDER.indexOf(v))) : "-1";
     $$(".src-seg-btn", seg).forEach(b => {
       const s = b.dataset.src;
-      const ok = srcAvail(s);
-      b.classList.toggle("active", v === s);
-      b.classList.toggle("is-off", !ok);
+      const sok = srcAvail(s);
+      b.classList.toggle("active", ok && v === s && sok);
+      b.classList.toggle("is-off", !sok);
       b.removeAttribute("disabled");
-      b.setAttribute("aria-disabled", String(!ok));
+      b.setAttribute("aria-disabled", String(!sok));
       b.title = srcRoot(s) || "";
     });
   }
@@ -8138,11 +8144,8 @@ function setupUprising() {
     if (b.classList.contains("is-off")) {
       // путь не задан: серая кнопка открывает настройки на вкладке путей
       // с пульсирующей подсветкой нужной строки
-      const src = b.dataset.src;
-      const id = src === "mod" ? "set-mod-path"
-        : src === "game" ? "set-unpacked"
-        : "set-project-path";
-      openSettingsPaths(id);
+      openSettingsPaths(b.dataset.src === "mod" ? "set-mod-path"
+        : b.dataset.src === "game" ? "set-unpacked" : undefined);
       return;
     }
     uprSwitchSrc(b.dataset.src);
@@ -9069,10 +9072,11 @@ function paintCmpSrc() {
     if (!seg) continue;
     const other = state.cmpSrc[side === "left" ? "right" : "left"];
     const canElse = SRC_ORDER.some(s => srcAvail(s) && s !== other);
-    seg.dataset.pos = String(Math.max(0, SRC_ORDER.indexOf(state.cmpSrc[side])));
+    seg.dataset.pos = srcAvail(state.cmpSrc[side])
+      ? String(Math.max(0, SRC_ORDER.indexOf(state.cmpSrc[side]))) : "-1";
     $$(".src-seg-btn", seg).forEach(b => {
       const s = b.dataset.src;
-      b.classList.toggle("active", s === state.cmpSrc[side]);
+      b.classList.toggle("active", s === state.cmpSrc[side] && srcAvail(s));
       // как на карте: без пути — серая кликабельная кнопка в настройки
       // (is-off вместо disabled); disabled — только конфликт сторон
       const off = !srcAvail(s);
