@@ -53,6 +53,9 @@ DEFAULTS = {
     "update_server": "https://terminatortoolsetupdater.hanigunplus.workers.dev/",
     "update_channel": "release",   # release | beta (бета включает pre-release)
     "update_last_check": 0,        # unix time последней проверки
+    # автообновление при старте: проверка + скачивание + установка
+    # (по умолчанию выкл — только ручная проверка из настроек)
+    "auto_update": False,
     "max_backups_per_file": 200,
 }
 
@@ -130,7 +133,7 @@ class Config:
             except (TypeError, ValueError):
                 self.data[k] = DEFAULTS[k]
         for k in ("fullscreen", "auto_save", "tray_enabled", "open_in_browser",
-                  "browser_to_tray", "auto_hide_tree"):
+                  "browser_to_tray", "auto_hide_tree", "auto_update"):
             v = self.data.get(k, DEFAULTS[k])
             if not isinstance(v, bool):
                 self.data[k] = str(v).lower() in ("1", "true", "yes", "on")

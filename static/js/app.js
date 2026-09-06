@@ -8263,6 +8263,7 @@ function openSettings(tab) {
   $("#set-lang").value = state.lang || "ru";
   $("#set-window-size").value = state.config.window_size || "normal";
   $("#set-tray").checked = !!state.config.tray_enabled;
+  $("#set-auto-update").checked = !!state.config.auto_update;
   $("#set-open-browser").checked = !!state.config.open_in_browser;
   $("#set-browser-to-tray").checked = !!state.config.browser_to_tray;
   $("#set-auto-hide-tree").checked = !!state.config.auto_hide_tree;
@@ -8451,6 +8452,7 @@ async function saveSettings() {
     window_size: $("#set-window-size").value,
     default_key_column: $("#set-keycol").value || "sysname",
     tray_enabled: $("#set-tray").checked,
+    auto_update: $("#set-auto-update").checked,
     open_in_browser: $("#set-open-browser").checked,
     browser_to_tray: $("#set-browser-to-tray").checked,
     auto_hide_tree: $("#set-auto-hide-tree").checked,
@@ -10583,7 +10585,15 @@ async function updStateLoad() {
   try {
     const r = await api("/api/update_state");
     const j = await r.json();
-    if (j && j.ok) updState = j;
+    if (j && j.ok) {
+      updState = j;
+      // updater поставил новую версию и поднял нас: один тост об этом
+      // (маркер одноразовый, бэкенд его уже съел)
+      if (j.just_updated) {
+        toast((t("upd_just_updated") || "Установлено обновление")
+          + " " + j.just_updated, "ok");
+      }
+    }
   } catch (e) { /* офлайн на старте: молча */ }
   updPaint();
   return updState;
@@ -10627,19 +10637,24 @@ function updPaintInline() {
     notes.hidden = !(avail && avail.notes);
   }
   const acts = $("#upd-actions"), dl = $("#upd-download");
+  const inst = $("#upd-install");
   const prog = $("#upd-progress"), hint = $("#upd-hint");
   if (pend && pend.version && (!avail || avail.version === pend.version)) {
-    // уже скачано и ждёт перезапуска: только подсказка
+    // уже скачано: установка — кнопкой через внешний updater
+    // (сам всё заменит и перезапустит; руками перезапускать не надо)
     if (hint) hint.textContent = (t("upd_restart_hint")
-      || "Обновление загружено. Перезапустите программу для установки.")
+      || "Обновление загружено.")
       + " (" + pend.version + ")";
-    if (acts) acts.hidden = true;
+    if (acts) acts.hidden = false;
+    if (dl) dl.hidden = true;
+    if (inst) inst.hidden = false;
     if (prog) prog.hidden = true;
   } else if (avail) {
     if (hint) hint.textContent = (t("upd_avail") || "Доступно: ")
       + avail.version;
     if (acts) acts.hidden = false;
-    if (dl) dl.disabled = false;
+    if (dl) { dl.hidden = false; dl.disabled = false; }
+    if (inst) inst.hidden = true;
   } else {
     if (hint) hint.textContent = "";
     if (acts) acts.hidden = true;
@@ -10691,6 +10706,33 @@ async function updDownload() {
   updPollStart();
 }
 
+// установка staged-обновления: внешний updater всё заменит и поднимет
+// новую версию сам; текущий процесс выходит сразу после ответа
+async function updDoRestart() {
+  try {
+    const r = await api("/api/update_restart", { method: "POST",
+      body: "{}", timeout: 15000 });
+    const j = await r.json();
+    if (!j || !j.ok) {
+      toast((j && j.error) || "restart failed", "err");
+      return false;
+    }
+    return true;
+  } catch (e) {
+    toast(String((e && e.message) || e), "err");
+    return false;
+  }
+}
+
+async function updInstall() {
+  const inst = $("#upd-install");
+  if (inst) inst.disabled = true;
+  updRestarted = false;
+  toast(t("upd_applying") || "Applying update…", "ok");
+  await updDoRestart();
+  if (inst) inst.disabled = false;
+}
+
 function updPollStart() {
   updPollStop();
   updPollTick();
@@ -10722,18 +10764,16 @@ async function updPollTick() {
     updPollStop();
     if (bar) bar.hidden = true;
     if (!updRestarted) {
-      // обновление скачано: сразу перезапуск в новую версию, руками не надо
+      // обновление скачано: сразу установка через updater, руками не надо
       updRestarted = true;
       toast(t("upd_restarting") || "Restarting…", "ok");
-      try {
-        await api("/api/update_restart", { method: "POST",
-          body: "{}", timeout: 15000 });
-      } catch (e) { updRestarted = false; }
-      return;
+      if (await updDoRestart()) return;
+      updRestarted = false;
     }
+    // рестарт не вышел (updater не стартовал): показать staged-состояние
+    // с кнопкой ручной установки
     await updStateLoad();
     updPaintInline();
-    toast(t("upd_staged") || "Обновление загружено", "ok");
   } else if (p.state === "error") {
     updPollStop();
     if (bar) bar.hidden = true;
@@ -10770,6 +10810,8 @@ function updSetup() {
   };
   const dl = $("#upd-download");
   if (dl) dl.onclick = updDownload;
+  const inst = $("#upd-install");
+  if (inst) inst.onclick = updInstall;
   const aboutC = $("#about-check");
   if (aboutC) aboutC.onclick = () => {
     $("#about-modal").hidden = true;
@@ -10783,11 +10825,59 @@ function updSetup() {
   const aboutD = $("#about-donate");
   if (aboutD) aboutD.onclick = () => api("/api/open_link", { method: "POST",
     body: JSON.stringify({ url: DONATE_URL }) });
-  // фоновая перепроверка каждые 30 минут (forced: суточный троттлинг бэкенда
-  // её бы гасил — обновление, вышедшее после запуска, иначе не находится);
-  // суточная автопроверка после старта не тормозит boot
-  setInterval(() => updCheck(true, true), 30 * 60 * 1000);
-  setTimeout(() => updCheck(false, true), 8000);
+  // автообновление при старте (по умолчанию выкл, галка в настройках):
+  // тихие проверки + добив staged через updater; без галки — только руки
+  if (state.config && state.config.auto_update) {
+    // фоновая перепроверка каждые 30 минут (forced: суточный троттлинг
+    // бэкенда её бы гасил — обновление, вышедшее после запуска, иначе
+    // не находится); суточная автопроверка после старта не тормозит boot
+    setInterval(() => updCheck(true, true), 30 * 60 * 1000);
+    setTimeout(() => updCheck(false, true), 8000);
+    // добив: загрузка идёт фоном в лаунчере — ждём её конца (20с пауза),
+    // затем staged (или висящий pending) уходит в updater сам
+    setTimeout(updAutoStart, 20000);
+  }
+}
+
+let updAutoArmed = false;
+let updAutoTried = false; // авторестарт — разовый, дальше только руками
+function updAutoStart() {
+  if (updAutoArmed) return;
+  updAutoArmed = true;
+  updAutoTick();
+  setInterval(updAutoTick, 2000);
+}
+
+async function updAutoTick() {
+  if (!state.config || !state.config.auto_update || updRestarted
+    || updAutoTried) return;
+  let p = null;
+  try {
+    const r = await api("/api/update_progress");
+    p = (await r.json()).progress;
+  } catch (e) { return; }
+  // качается/распаковывается — ждём; ошибка — ждём рук
+  if (p && (p.state === "downloading" || p.state === "extracting"
+    || p.state === "error")) return;
+  if (p && p.state === "staged") {
+    updAutoTried = true;
+    updRestarted = true;
+    toast(t("upd_restarting") || "Restarting…", "ok");
+    if (await updDoRestart()) return;
+    updRestarted = false;
+    return;
+  }
+  // докачки нет, а pending висит (updater прошлого раза не отработал
+  // или boot-apply не смог): разовый добив через updater
+  await updStateLoad();
+  const pend = updState && updState.pending;
+  if (pend && pend.version) {
+    updAutoTried = true;
+    updRestarted = true;
+    toast(t("upd_restarting") || "Restarting…", "ok");
+    if (await updDoRestart()) return;
+    updRestarted = false;
+  }
 }
 
 // ---------- init ----------

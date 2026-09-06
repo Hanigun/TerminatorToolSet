@@ -2,8 +2,12 @@
 
 Flow: worker (/release or /prerelease) -> pick the .zip asset -> compare
 with the running version -> download to a staging dir -> write a pending
-flag -> apply on the next boot (the running EXE is file-locked on Windows,
-so files are replaced before the server/window starts, see main.py).
+flag -> restart through an EXTERNAL updater script (PowerShell): the app
+exits, the updater waits for our death, copies staged over the program
+dir (nothing is file-locked anymore), then starts the new build.
+
+In-process apply on boot (apply_pending_update) stays as a fallback for
+leftovers (updater failure, crash mid-update): same names, byte-verified.
 
 The release .zip must contain the release root: the EXE, ToolSetLibs/
 (icons, UprisingPresets and pyproject.toml bundled inside), assets/
@@ -26,6 +30,8 @@ import time
 import urllib.parse
 import urllib.request
 import zipfile
+
+from ..infrastructure.procutil import kill_child_processes
 
 CHECK_TTL = 24 * 3600  # auto-check at most once a day
 CHECK_TIMEOUT = 15
@@ -313,7 +319,8 @@ class Updates:
 
     def state(self):
         """Everything the UI needs: current/channel/last check/pending/
-        cached available release."""
+        cached available release. just_updated — версия, поставленная
+        updater'ом (читается один раз, файл-маркер тут же съедается)."""
         try:
             channel = self._config.get("update_channel") or "release"
         except Exception:  # noqa: BLE001
@@ -325,7 +332,29 @@ class Updates:
         return {"ok": True, "current": self._current, "channel": channel,
                 "last_check": last, "pending": self.pending(),
                 "available": self._read_cached().get("available"),
+                "just_updated": self._take_applied(),
                 "progress": self.progress()}
+
+    def _take_applied(self):
+        """Версия из update_applied.json (пишет updater после успеха);
+        одноразовая: прочитали — удалили."""
+        try:
+            cfg_dir = self._config.cfg_dir
+        except Exception:  # noqa: BLE001
+            cfg_dir = self._config.dir
+        path = os.path.join(cfg_dir or "", "update_applied.json")
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, ValueError):
+            return ""
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        if isinstance(data, dict):
+            return str(data.get("version") or "")
+        return ""
 
     def progress(self):
         with self._lock:
@@ -425,36 +454,140 @@ class Updates:
             self._progress.update(kw)
 
     # -- restart into staged update -------------------------------------
-    def restart(self):
-        """Перезапуск в staged-обновление: detached-двойник ждёт смерти
-        этого процесса (иначе мьютекс single-instance не отпустит) и
-        стартует новую версию, текущий выходит после отдачи ответа."""
-        pend = self.pending()
-        if not pend.get("staged"):
-            return {"ok": False, "error": "nothing staged"}
-        if getattr(sys, "frozen", False):
-            cmd = [sys.executable]
-        else:
-            cmd = [sys.executable, os.path.abspath(sys.argv[0] or "main.py")]
-        cmd.append("--relaunch-wait=%d" % os.getpid())
+    # внешний updater: чинить файлы может только тот, кто их не держит.
+    # Замена изнутри процесса обречена: запущенный exe и загруженные DLL
+    # на Windows не переименовываются, итог — полу-новая установка и
+    # «unknown encoding: idna» на следующем старте. Поэтому выходим сами,
+    # а копирует отдельный powershell: ждёт нашей смерти, льёт staged
+    # поверх программы (robocopy с ретраями), чистит staged/pending,
+    # пишет update_applied.json и стартует новый exe.
+    _UPDATER_PS1 = None  # шаблон ниже, собирается _updater_script()
 
-        def _spawn_and_exit():
-            try:
-                if os.name == "nt":
+    @staticmethod
+    def _updater_script():
+        L = []
+        A = L.append
+        A("param([int]$ProcId, [string]$Staged, [string]$Target, "
+          "[string]$Exe, [string]$Version)")
+        A("$log = Join-Path $Target \"Logs\\updater.log\"")
+        A("function L([string]$m) {")
+        A("  try {")
+        A("    $ts = Get-Date -Format \"yyyy-MM-dd HH:mm:ss\"")
+        A("    New-Item -ItemType Directory -Force -Path (Split-Path $log) "
+          "| Out-Null")
+        A("    Add-Content -LiteralPath $log -Value ($ts + \" \" + $m)")
+        A("  } catch {}")
+        A("}")
+        A("L(\"updater start version=\" + $Version + \" pid=\" + $ProcId)")
+        A("try { Wait-Process -Id $ProcId -Timeout 45 -ErrorAction Stop } "
+          "catch { L(\"wait: \" + $_.Exception.Message) }")
+        A("Start-Sleep -Milliseconds 800")
+        A("& robocopy $Staged $Target /E /XD Logs configs uprising_backups "
+          "UprisingCustomPresets /XF *.db *.log "
+          "/R:12 /W:1 /NP /NFL /NDL /MT:4 | Out-Null")
+        A("$code = $LASTEXITCODE")
+        A("L(\"robocopy exit=\" + $code)")
+        A("if ($code -ge 8) {")
+        A("  L(\"copy failed, starting old build as-is\")")
+        A("  try { Start-Process -FilePath (Join-Path $Target $Exe) } "
+          "catch { L(\"start failed: \" + $_.Exception.Message) }")
+        A("  exit 1")
+        A("}")
+        A("Remove-Item -LiteralPath (Join-Path $Target \"UprisingPresets\") "
+          "-Recurse -Force -ErrorAction SilentlyContinue")
+        A("Remove-Item -LiteralPath (Join-Path $Target \"assets\\icons\") "
+          "-Recurse -Force -ErrorAction SilentlyContinue")
+        A("Remove-Item -LiteralPath $Staged -Recurse -Force "
+          "-ErrorAction SilentlyContinue")
+        A("Remove-Item -LiteralPath "
+          "(Join-Path $Target \"configs\\update_pending.json\") -Force "
+          "-ErrorAction SilentlyContinue")
+        A("try { Set-Content -LiteralPath "
+          "(Join-Path $Target \"configs\\update_applied.json\") "
+          "-Value ('{\"version\": \"' + $Version + '\"}') } catch {}")
+        A("L(\"copy ok, starting new build\")")
+        A("try { Start-Process -FilePath (Join-Path $Target $Exe) } "
+          "catch { L(\"start failed: \" + $_.Exception.Message); exit 1 }")
+        # только ASCII: powershell.exe (5.1) читает .ps1 без BOM как ANSI
+        return "\r\n".join(L) + "\r\n"
+
+    def _write_updater(self, staged, version):
+        tmp = os.path.join(tempfile.gettempdir(), "tts_update")
+        os.makedirs(tmp, exist_ok=True)
+        path = os.path.join(
+            tmp, "updater-" + re.sub(r"[^A-Za-z0-9._-]+", "_",
+                                     version or "latest") + ".ps1")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(self._updater_script())
+        return path
+
+    def restart(self):
+        """Перезапуск в staged-обновление через внешний updater: своих
+        webview-призраков прибиваем, updater-скрипт стартует detached,
+        текущий процесс выходит — дальше updater ждёт, копирует и
+        поднимает новую версию сам."""
+        pend = self.pending()
+        staged = pend.get("staged") or ""
+        version = pend.get("version") or ""
+        if not staged or not os.path.isdir(staged):
+            return {"ok": False, "error": "nothing staged"}
+        frozen = bool(getattr(sys, "frozen", False))
+        if os.name != "nt" or not frozen:
+            # dev/не-Windows: updater не нужен, файловых локов exe нет —
+            # простой detached-перезапуск текущего образа
+            if frozen:
+                cmd = [sys.executable]
+            else:
+                cmd = [sys.executable,
+                       os.path.abspath(sys.argv[0] or "main.py")]
+
+            def _spawn_and_exit():
+                try:
                     subprocess.Popen(
-                        cmd, close_fds=True,
-                        creationflags=0x00000008,  # DETACHED_PROCESS
+                        cmd, close_fds=True, start_new_session=True,
                         stdin=subprocess.DEVNULL,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL)
-                else:
-                    subprocess.Popen(cmd, start_new_session=True,
-                                     stdin=subprocess.DEVNULL,
-                                     stdout=subprocess.DEVNULL,
-                                     stderr=subprocess.DEVNULL)
+                except Exception:  # noqa: BLE001
+                    return
+                time.sleep(1.5)
+                os._exit(0)
+
+            threading.Thread(target=_spawn_and_exit, daemon=True,
+                             name="upd-restart").start()
+            return {"ok": True, "restarting": True}
+        try:
+            kill_child_processes(log=self._log)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            ps1 = self._write_updater(staged, version)
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": "updater: %s" % e}
+        exe = os.path.basename(sys.executable)
+        args = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                "-File", ps1,
+                "-ProcId", str(os.getpid()),
+                "-Staged", staged,
+                "-Target", self._program_dir,
+                "-Exe", exe,
+                "-Version", version]
+
+        def _spawn_and_exit():
+            try:
+                subprocess.Popen(
+                    args, close_fds=True,
+                    creationflags=0x00000008 | 0x08000000,  # DETACHED | NO_WINDOW
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL)
             except Exception:  # noqa: BLE001
                 return
-            time.sleep(1.5)  # дать ответу уйти до выхода
+            try:
+                self._log("update restart: updater spawned, exiting")
+            except Exception:  # noqa: BLE001
+                pass
+            time.sleep(0.8)  # дать ответу уйти до выхода
             os._exit(0)
 
         threading.Thread(target=_spawn_and_exit, daemon=True,

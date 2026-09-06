@@ -17,6 +17,7 @@ from ..application.state import add_pending_files
 from ..services.update_service import Updates
 from .filesystem import pick_app_dir as _pick_app_dir
 from .logging import boot_log as _log
+from .procutil import kill_child_processes as _kill_kids
 from terminator_toolset import __version__ as _APP_VERSION
 
 
@@ -555,6 +556,12 @@ def run_pywebview(config, url, app=None, app_dir=None):
                 self._tray_dispose()
             except Exception:  # noqa: BLE001
                 pass
+            # своих webview-призраков — насильно: иначе переживают выход,
+            # держат профиль занятым и мешают следующему запуску/обновлению
+            try:
+                _kill_kids(log=_log)
+            except Exception:  # noqa: BLE001
+                pass
             try:
                 win = self._win()
                 if win is not None:
@@ -867,14 +874,26 @@ def run_pywebview(config, url, app=None, app_dir=None):
         webview.start(private_mode=False, storage_path=storage)
     except TypeError:
         webview.start()
+    # штатный выход через X: своих webview-призраков — насильно, чтобы не
+    # висели в фоне и не держали профиль/файлы для следующего запуска
+    try:
+        _kill_kids(log=_log)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _check_updates(config, app=None, app_dir=None):
     """Startup update check (launcher stage): fast worker query, daily
-    throttle inside. A newer release downloads in the background (progress
-    in the UI via /api/update_progress); install runs on the next restart
-    from the pending flag. Returns the check dict or None on errors."""
+    throttle inside. Runs ONLY when auto_update is on (default off) — else
+    updates are manual from the settings tab. A newer release downloads in
+    the background; the frontend auto-installs it on stage (same restart
+    path as a manual download). Returns the check dict or None."""
     _boot_ping(app, 10)
+    try:
+        if not config.get("auto_update"):
+            return None
+    except Exception:  # noqa: BLE001
+        return None
     try:
         prog = (os.path.dirname(os.path.abspath(sys.executable))
                 if getattr(sys, "frozen", False)
