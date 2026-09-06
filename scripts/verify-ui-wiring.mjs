@@ -127,10 +127,10 @@ function section(name, asserts) {
     [/data-i18n="up_foot"/.test(html), "unpacker tab must have its footer caption"],
     [/data-i18n="cm_foot"/.test(html), "create-mod tab must have its footer caption"],
     [/data-i18n="cmp_foot"/.test(html), "compare tab must have its footer caption"],
-    // главная: кнопки (кроме Файл/Папка) над дропзоной, «Недавние» ниже по центру
+    // главная: кнопки над дропзоной, «Недавние» — в том же ряду справа
     [/class="dz-actions-top"/.test(html), "welcome must have the top actions strip"],
     [/class="dz-actions-top"[\s\S]*?id="landing-create-mod"/.test(html), "create-mod button must live in the top strip"],
-    [/class="dz-actions-sub"[\s\S]{0,200}?id="landing-records-btn"/.test(html), "recents button must live in its own centered row below the strip"],
+    [/class="dz-actions-top"[\s\S]*?id="landing-records-btn"/.test(html), "recents button must live in the top strip, right-aligned"],
     [/id="dropzone"[\s\S]{0,900}?id="landing-open-file"/.test(html), "file button must stay inside the dropzone"],
     [/class="dz-actions-top"[\s\S]*?id="dropzone"/.test(html), "top strip must precede the dropzone"],
     // настройки: фикс. размер + zoom, чекбокс браузер->трей, инлайн-пикер пути
@@ -247,7 +247,10 @@ function section(name, asserts) {
     [/\.donate-btn/.test(css) && /\.social-btn/.test(css) && /\.tab-sub-path/.test(css) && /\.toast \{[^}]*120%/.test(css), "donate/social buttons, readable tab paths and +20% toasts must be styled"],
     [/CTX_ICONS/.test(appjs) && /icon: "save"/.test(appjs) && /icon: "delete"/.test(appjs) && /icon: "swap"/.test(appjs), "dynamic context menus (tabs/tree/swt/map) must carry icons"],
     [/cmpSrc: \{ left: null, right: null \}/.test(appjs), "compare sides must default to unselected"],
-    [/\.cmp-side \.src-seg-sm/.test(css) && /dz-actions-sub \{[^}]*flex-end/.test(css), "compare segs must be compact and recents right-aligned"],
+    [/\.cmp-side \.src-seg-sm[^}]*align-self:\s*flex-start/.test(css) && /#landing-records-btn \{[^}]*margin-left:\s*auto/.test(css) && !/dz-actions-sub/.test(html) && !/dz-actions-sub/.test(css), "compare segs must not stretch and recents must sit in the top row right"],
+    [/id="upr-save"/.test(html) === false && !/upr-save/.test(appjs), "map must not duplicate the header save button"],
+    [/uprCatCol\(c\.cat\)/.test(appjs) && /cat: x\.cat/.test(appjs), "map clipboard must keep the category and paste cars->cars etc"],
+    [/\.tab-title \{[^}]*flex:\s*0 1 auto/.test(css), "tab title must not push origin icons to the right edge"],
     [/id="cmp-fs-min"/.test(html) === false, "compare fullscreen modal must keep a single button"],
     [/border-right-color: var\(--accent\)/.test(css) === false, "home button must not have the yellow right edge"],
     [/upr_map_settings/.test(read("locales/ru.json")) && /upr_sector_reward/.test(read("locales/en.json")) && /set_tab_updates/.test(read("locales/de.json")) && /donate/.test(read("locales/zh.json")) && /about_title/.test(read("locales/ru.json")), "batch strings must exist in all 4 locales"],

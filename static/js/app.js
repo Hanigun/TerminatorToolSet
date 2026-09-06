@@ -5893,16 +5893,12 @@ function uprMarkDirty() {
   state.uprising.dirty = true;
   const tb = uprTab();
   if (tb && !tb.dirty) { tb.dirty = true; renderTabBar(); }
-  const b = $("#upr-save");
-  if (b) b.disabled = false;
 }
 
 function uprMarkClean() {
   state.uprising.dirty = false;
   const tb = uprTab();
   if (tb) { tb.dirty = false; tb.saved = true; renderTabBar(); }
-  const b = $("#upr-save");
-  if (b) b.disabled = true;
 }
 
 // ---------- сложности зон и юнитов + баланс-конфиг (.cfg) ----------
@@ -6340,7 +6336,7 @@ function uprPaintNofile() {
   // и рабочие кнопки — фантомная карта)
   const fp = $("#upr-file");
   if (fp) { fp.textContent = t("upr_sub") || ""; fp.title = ""; }
-  ["#upr-reload", "#upr-open-grid", "#upr-save", "#upr-fs", "#upr-resizer"]
+  ["#upr-reload", "#upr-open-grid", "#upr-fs", "#upr-resizer"]
     .forEach(s => { const el = $(s); if (el) el.hidden = true; });
 }
 
@@ -6414,7 +6410,7 @@ async function openUprising(path) {
   $("#upr-panel-toggle").hidden = !UPR_MODAL_ENABLED;
   uprSetPanel(state.uprising.panel);
   // шестерёнка цветов живёт в оверлее карты (uprRndOverlay), не в шапке
-  ["#upr-reload", "#upr-open-grid", "#upr-save", "#upr-fs", "#upr-src",
+  ["#upr-reload", "#upr-open-grid", "#upr-fs", "#upr-src",
    "#upr-resizer"]
     .forEach(s => { $(s).hidden = false; });
   // сохранённая ширина боковой панели
@@ -7658,18 +7654,34 @@ function uprMoveItems(list, targetNum) {
 }
 
 function uprPasteItems(meta, items, idx) {
+  // вставка строго по своим категориям: cars→cars, tanks→tanks и т.д.
+  // (перенос мышью так уже делает через it.cat в uprMoveItems).
+  // Кликнутая категория игнорируется: каждый элемент ложится в столбец
+  // своей категории того же сектора и ряда.
   const clip = state.uprising.clip || [];
-  const ins = [], skipped = [];
+  const g = uprGroups().find(x => x.num === meta.num);
+  if (!g || !g.list.length) return;
+  const rw = g.list[Math.min(meta.vi, g.list.length - 1)];
+  const byCat = new Map();
   clip.forEach(c => {
-    if (items.some(x => x.name === c.name)) skipped.push(c);
-    else ins.push({ name: c.name, n: c.n });
+    if (!c.name || uprCatCol(c.cat) === -1) return;
+    if (!byCat.has(c.cat)) byCat.set(c.cat, []);
+    byCat.get(c.cat).push(c);
   });
-  if (ins.length) {
-    items.splice(idx + 1, 0, ...ins);
-    const ci = uprCatCol(meta.cat);
-    const g = uprGroups().find(x => x.num === meta.num);
-    const rw = g && g.list[Math.min(meta.vi, g.list.length - 1)];
-    if (rw && ci !== -1) uprWriteCell(rw.ri, ci, items);
+  const edits = [];
+  const skipped = [];
+  byCat.forEach((list, cat) => {
+    const ci = uprCatCol(cat);
+    const cur = uprParseList(state.uprising.rows[rw.ri].values[ci] || "");
+    list.forEach(c => {
+      if (cur.some(x => x.name === c.name)) { skipped.push(c); return; }
+      cur.push({ name: c.name, n: c.n });
+    });
+    edits.push({ ri: rw.ri, ci, items: cur });
+  });
+  if (edits.length) {
+    uprWriteCells(edits, (t("upr_h_paste") || "Вставка в сектор {n}")
+      .replace("{n}", meta.num));
   }
   if (skipped.length === 1) {
     toast((t("upr_drop_dup") || "«{name}» уже есть в зоне {n} — пропущен")
@@ -7844,12 +7856,12 @@ function uprChipCtx(e, meta, items, idx) {
       } },
     { label: t("upr_edit") || "Редактировать", icon: "edit", disabled: !hasIt, fn: () => uprStartEdit(meta, it.name, chipEl) },
     { label: t("ctx_copy") || "Копировать", icon: "copy", disabled: !hasIt, fn: () => {
-        state.uprising.clip = grab().map(x => ({ name: x.name, n: x.n }));
+        state.uprising.clip = grab().map(x => ({ name: x.name, n: x.n, cat: x.cat }));
         toast(t("ctx_copied") || "Скопировано", "ok");
       } },
     { label: t("ctx_cut") || "Вырезать", icon: "cut", disabled: !hasIt, fn: () => {
         const grabbed = grab();
-        state.uprising.clip = grabbed.map(x => ({ name: x.name, n: x.n }));
+        state.uprising.clip = grabbed.map(x => ({ name: x.name, n: x.n, cat: x.cat }));
         uprRemoveItems(grabbed);
         renderUprising();
       } },
@@ -8148,7 +8160,7 @@ function setupUprising() {
   setupUprDeselect();
   // щиты карты — одним запросом в память, фоном (к открытию карты уже в кэше)
   uprPreloadShields();
-  $("#upr-save").onclick = () => uprSaveGuarded(false);
+  // сохранение карты — кнопка шапки и Ctrl+S (saveActive → uprSaveGuarded)
   // без обёртки event клика попал бы в uprLoad как seq и убил бы рендер
   // (guard поколения сравнивает строго с числом)
   $("#upr-reload").onclick = () => uprLoad();

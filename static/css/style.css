@@ -593,7 +593,10 @@ input, textarea, select, [contenteditable="true"] { user-select: text; -webkit-u
 }
 .tab-title {
   min-width: 0;
-  flex: 1 1 auto;
+  /* 0 1 auto, не 1 1 auto: заголовок ужимается с эллипсисом, но не
+     растягивается — иначе чипы происхождения/сейва толкаются к правому
+     краю вкладки вместо места рядом с именем */
+  flex: 0 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -901,9 +904,7 @@ input, textarea, select, [contenteditable="true"] { user-select: text; -webkit-u
   padding: 16px 20px 6px; flex: 0 0 auto;
 }
 .dz-actions-top .btn.big { padding: 8px 16px; font-size: 12.5px; min-width: 0; }
-.dz-actions-top #landing-records-btn { margin-top: 0; }
-/* кнопка «Недавние» — по правому краю */
-.dz-actions-sub { display: flex; justify-content: flex-end; padding: 0 20px; }
+.dz-actions-top #landing-records-btn { margin-top: 0; margin-left: auto; }
 .dropzone {
   width: min(560px, 80vw); padding: 48px 30px; text-align: center;
   background: var(--bg-elev); border: 2px dashed var(--border); border-radius: 8px;
@@ -1810,7 +1811,7 @@ button.upr-map-btn.rnd {
 /* сегменты сторон сравнения: кнопки компактные без растягивания,
    скругление минимальное; скользящей пилюли нет (ширина кнопок разная) —
    активная красится сама */
-.cmp-side .src-seg-sm { min-width: 0; height: 26px; border-radius: 3px; }
+.cmp-side .src-seg-sm { min-width: 0; height: 26px; border-radius: 3px; align-self: flex-start; }
 .cmp-side .src-seg-sm .src-seg-ind { display: none; }
 .cmp-side .src-seg-sm .src-seg-btn { flex: none; font-size: 11px; padding: 0 9px; }
 .cmp-side .src-seg-sm .src-seg-btn.active { background: var(--accent); color: #1a1a1a; border-radius: 2px; }
