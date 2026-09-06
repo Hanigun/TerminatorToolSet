@@ -217,6 +217,7 @@ function section(name, asserts) {
     [/\/api\/update_state/.test(apiupd) && /\/api\/update_check/.test(apiupd) && /\/api\/update_download/.test(apiupd) && /\/api\/update_progress/.test(apiupd), "backend must serve the update state/check/download/progress routes"],
     [/register_updates\(app, ctx\)/.test(read("app.py")) && /upd=upd/.test(read("app.py")), "update service must be composed in app.py context"],
     [/contents_directory="ToolSetLibs"/.test(read("../compiler/TerminatorToolSet.spec")), "spec must rename _internal to ToolSetLibs"],
+    [/"stringprep"/.test(read("../compiler/TerminatorToolSet.spec")), "spec must pin stringprep hiddenimport (else frozen bind dies: unknown encoding: idna)"],
     [/\/release/.test(worker) && /\/prerelease/.test(worker) && /\/asset/.test(worker) && /GH_TOKEN/.test(worker), "worker.js must serve /release + /prerelease + /asset with a token"],
     [/application\/octet-stream/.test(worker) && /asset not in latest release/.test(worker) && /no-store/.test(worker), "worker /asset must stream the binary with membership check and no-store"],
     [/replace\(.+\{2,\}.+\"\/\"\)/.test(worker), "worker must collapse duplicate slashes (server config ends with /)"],
