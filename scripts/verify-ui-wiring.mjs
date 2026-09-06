@@ -230,7 +230,7 @@ function section(name, asserts) {
     [/pyproject\.toml/.test(read("../compiler/TerminatorToolSet.spec")), "spec must bundle pyproject.toml (frozen exe has no importlib.metadata)"],
     [/UprisingPresets/.test(read("../compiler/TerminatorToolSet.spec")) && !/xcopy "%SRC%\\UprisingPresets"/.test(read("../compiler/build.bat")), "presets must ship inside the exe, no external copy in build.bat"],
     [/Terminator_ToolSet_v%VERSION%\.zip/.test(read("../compiler/build.bat")) && /release_util\.py zip/.test(read("../compiler/build.bat")), "build.bat must pack a versioned Terminator_ToolSet_vX.Y.Z.zip"],
-    [/chcp 65001/.test(read("../compiler/build.bat")), "build.bat must switch to UTF-8 codepage (else Cyrillic steps show mojibake)"],
+    [/chcp 65001|^[ -~\r\n]*$/.test(read("../compiler/build.bat")), "build.bat must stay ASCII-only (Cyrillic steps show mojibake under codepage 866)"],
     [/UprisingPresets/.test(updsvc) && /assets", "icons"/.test(updsvc), "apply must drop stale external presets/icons (bundled now, externals would shadow)"],
     [/is_newer/.test(updsvc) && /apply_pending_update/.test(updsvc), "update service must compare versions and apply staged releases"],
     [/\/asset/.test(updsvc) && /browser_download_url 404/.test(updsvc), "downloads must go through the worker /asset proxy (direct links 404 on private repos)"],
