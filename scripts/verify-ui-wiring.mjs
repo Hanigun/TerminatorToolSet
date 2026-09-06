@@ -215,6 +215,9 @@ function section(name, asserts) {
   const worker = read("../compiler/worker.js");
   const bad = section("UPD GATE PASSED", [
     [/\/api\/update_state/.test(apiupd) && /\/api\/update_check/.test(apiupd) && /\/api\/update_download/.test(apiupd) && /\/api\/update_progress/.test(apiupd), "backend must serve the update state/check/download/progress routes"],
+    [/\/api\/update_restart/.test(apiupd) && /def restart\(self\)/.test(updsvc) && /relaunch-wait/.test(updsvc), "backend must relaunch into the staged update via a detached waiter"],
+    [/relaunch-wait=/.test(read("main.py")), "main must wait for the dying process before taking the single-instance mutex"],
+    [/update_restart/.test(appjs) && /updRestarted/.test(appjs), "frontend must auto-restart once the release is staged"],
     [/register_updates\(app, ctx\)/.test(read("app.py")) && /upd=upd/.test(read("app.py")), "update service must be composed in app.py context"],
     [/contents_directory="ToolSetLibs"/.test(read("../compiler/TerminatorToolSet.spec")), "spec must rename _internal to ToolSetLibs"],
     [/"stringprep"/.test(read("../compiler/TerminatorToolSet.spec")), "spec must pin stringprep hiddenimport (else frozen bind dies: unknown encoding: idna)"],
@@ -234,7 +237,10 @@ function section(name, asserts) {
     [/UprisingPresets/.test(updsvc) && /assets", "icons"/.test(updsvc), "apply must drop stale external presets/icons (bundled now, externals would shadow)"],
     [/is_newer/.test(updsvc) && /apply_pending_update/.test(updsvc), "update service must compare versions and apply staged releases"],
     [/\/asset/.test(updsvc) && /browser_download_url 404/.test(updsvc), "downloads must go through the worker /asset proxy (direct links 404 on private repos)"],
-    [/keeping pending/.test(updsvc) && /time\.sleep\(2\)/.test(updsvc), "apply must retry locked files before keeping pending (half-new install crashes next boot)"],    [/server\.rstrip\("\/"\) \+ "\/asset"/.test(updsvc), "asset URL must strip the trailing slash (config server ends with /)"],
+    [/keeping pending/.test(updsvc) && /time\.sleep\(2\)/.test(updsvc), "apply must retry locked files before keeping pending (half-new install crashes next boot)"],
+    [/\.old/.test(updsvc) && /os\.rename\(dst, old\)/.test(updsvc), "apply must rename locked exe/DLLs aside (running image cannot be overwritten)"],
+    [/_same_file/.test(updsvc), "apply must verify staged files byte-for-byte under the same names"],
+    [/upd_restarting/.test(read("locales/ru.json")) && /upd_restarting/.test(read("locales/en.json")) && /upd_restarting/.test(read("locales/de.json")) && /upd_restarting/.test(read("locales/zh.json")), "restart string must exist in all 4 locales"],    [/server\.rstrip\("\/"\) \+ "\/asset"/.test(updsvc), "asset URL must strip the trailing slash (config server ends with /)"],
     [/def download\(self, url="", version=""\)/.test(updsvc) && /self\.check\(force=True\)/.test(updsvc), "download must force-refresh the cached URL (stale cache may hold a direct 404 link)"],
     [/upd_check/.test(read("locales/ru.json")) && /upd_check/.test(read("locales/en.json")) && /upd_check/.test(read("locales/de.json")) && /upd_check/.test(read("locales/zh.json")), "update strings must exist in all 4 locales"],
   ].map(([c, m]) => [c, m]));

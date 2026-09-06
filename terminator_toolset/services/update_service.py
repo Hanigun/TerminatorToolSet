@@ -13,10 +13,12 @@ never overwritten.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
@@ -84,9 +86,30 @@ def fetch_release(server, channel, repo, timeout=CHECK_TIMEOUT):
 
 
 def apply_pending_update(program_dir, cfg_dir, log=None):
-    """Copy a staged release over the program dir (called before boot,
-    when no process holds the files). Returns the applied version or ''."""
+    """Copy a staged release over the program dir (called before boot).
+    Locked targets (the running exe, loaded DLLs) are renamed aside first
+    — Windows forbids overwriting them but allows rename — leftovers are
+    deleted on the next boot. Returns the applied version or ''."""
     pending_path = os.path.join(cfg_dir or "", "update_pending.json")
+    keep_top = {"configs", "Logs", "uprising_backups", "UprisingCustomPresets"}
+
+    # остатки rename-aside трюка (прошлый старт): старого процесса уже нет,
+    # удаляются чисто. Чистка всегда, а не только при pending — иначе .old
+    # останутся навсегда, если новых обновлений больше не придёт.
+    for root, dirs, files in os.walk(program_dir):
+        rel = os.path.relpath(root, program_dir)
+        top = rel.split(os.sep)[0] if rel != "." else ""
+        if top in keep_top:
+            dirs[:] = []
+            continue
+        dirs[:] = [d for d in dirs if d not in keep_top
+                   and not (d.lower().endswith(".db"))]
+        for fn in files:
+            if fn.endswith(".old"):
+                try:
+                    os.remove(os.path.join(root, fn))
+                except OSError:
+                    pass
     try:
         with open(pending_path, "r", encoding="utf-8") as fh:
             pending = json.load(fh)
@@ -102,7 +125,48 @@ def apply_pending_update(program_dir, cfg_dir, log=None):
         except OSError:
             pass
         return ""
-    keep_top = {"configs", "Logs", "uprising_backups", "UprisingCustomPresets"}
+
+    def _same_file(a, b):
+        """Побайтовое равенство (размер + sha256): имена те же по построению
+        _walk (dst повторяет rel staged)."""
+        try:
+            if os.path.getsize(a) != os.path.getsize(b):
+                return False
+        except OSError:
+            return False
+        ha, hb = hashlib.sha256(), hashlib.sha256()
+        try:
+            with open(a, "rb") as fa:
+                for chunk in iter(lambda: fa.read(1 << 20), b""):
+                    ha.update(chunk)
+            with open(b, "rb") as fb:
+                for chunk in iter(lambda: fb.read(1 << 20), b""):
+                    hb.update(chunk)
+        except OSError:
+            return False
+        return ha.digest() == hb.digest()
+
+    def _swap_copy(src, dst):
+        """copy2, but a locked target is renamed aside first: Windows
+        forbids overwriting the running exe / loaded DLLs, yet allows
+        renaming them (the old image unloads with the old process)."""
+        try:
+            shutil.copy2(src, dst)
+            return True
+        except OSError:
+            pass
+        try:
+            if os.path.exists(dst):
+                old = dst + ".old"
+                try:
+                    os.remove(old)
+                except OSError:
+                    pass
+                os.rename(dst, old)
+            shutil.copy2(src, dst)
+            return True
+        except OSError:
+            return False
 
     def _walk():
         for root, dirs, files in os.walk(staged):
@@ -134,9 +198,7 @@ def apply_pending_update(program_dir, cfg_dir, log=None):
                 todo.extend(pairs)
                 continue
             for src, dst in pairs:
-                try:
-                    shutil.copy2(src, dst)
-                except OSError:
+                if not _swap_copy(src, dst):
                     todo.append((src, dst))
         return todo
 
@@ -152,10 +214,19 @@ def apply_pending_update(program_dir, cfg_dir, log=None):
         for src, dst in failed:
             try:
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
-                shutil.copy2(src, dst)
             except OSError:
                 still.append((src, dst))
+                continue
+            if not _swap_copy(src, dst):
+                still.append((src, dst))
         failed = still
+    # сверка: всё staged легло побайтово и под теми же именами. Иначе
+    # pending живёт до следующего старта, файлы ещё отпустят, докопируется.
+    if not failed:
+        for _dst_dir, pairs in _walk():
+            for src, dst in pairs:
+                if not _same_file(src, dst):
+                    failed.append((src, dst))
     if failed:
         if log:
             try:
@@ -352,6 +423,43 @@ class Updates:
     def _set_progress(self, **kw):
         with self._lock:
             self._progress.update(kw)
+
+    # -- restart into staged update -------------------------------------
+    def restart(self):
+        """Перезапуск в staged-обновление: detached-двойник ждёт смерти
+        этого процесса (иначе мьютекс single-instance не отпустит) и
+        стартует новую версию, текущий выходит после отдачи ответа."""
+        pend = self.pending()
+        if not pend.get("staged"):
+            return {"ok": False, "error": "nothing staged"}
+        if getattr(sys, "frozen", False):
+            cmd = [sys.executable]
+        else:
+            cmd = [sys.executable, os.path.abspath(sys.argv[0] or "main.py")]
+        cmd.append("--relaunch-wait=%d" % os.getpid())
+
+        def _spawn_and_exit():
+            try:
+                if os.name == "nt":
+                    subprocess.Popen(
+                        cmd, close_fds=True,
+                        creationflags=0x00000008,  # DETACHED_PROCESS
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL)
+                else:
+                    subprocess.Popen(cmd, start_new_session=True,
+                                     stdin=subprocess.DEVNULL,
+                                     stdout=subprocess.DEVNULL,
+                                     stderr=subprocess.DEVNULL)
+            except Exception:  # noqa: BLE001
+                return
+            time.sleep(1.5)  # дать ответу уйти до выхода
+            os._exit(0)
+
+        threading.Thread(target=_spawn_and_exit, daemon=True,
+                         name="upd-restart").start()
+        return {"ok": True, "restarting": True}
 
     def _download_job(self, url, version):
         staging = os.path.join(tempfile.gettempdir(), "tts_update",

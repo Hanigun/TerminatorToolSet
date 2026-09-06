@@ -695,6 +695,7 @@
   "upd_avail": "Verf\u00fcgbar: ",
   "upd_staged_short": "Geladen: ",
   "upd_staged": "Update geladen",
+  "upd_restarting": "Neustart in die neue Version…",
   "upd_uptodate": "Neueste Version installiert",
   "upd_no_notes": "Kein Changelog.",
   "upd_restart_hint": "Update geladen. App neu starten, um zu installieren.",

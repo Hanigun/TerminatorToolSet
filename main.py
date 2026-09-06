@@ -40,6 +40,24 @@ from terminator_toolset.infrastructure.window import run_pywebview as _run_pyweb
 
 
 def main(browser: bool = False):
+    # перезапуск после обновления: старый процесс ещё жив и держит мьютекс
+    # single-instance — ждём его смерти, затем стартуем как обычно
+    # (staged-обновление применится ниже, до бинда сервера).
+    for _a in sys.argv[1:]:
+        if _a.startswith("--relaunch-wait="):
+            try:
+                _pid = int(_a.split("=", 1)[1])
+            except ValueError:
+                _pid = 0
+            if _pid:
+                _t0 = time.time()
+                while time.time() - _t0 < 30:
+                    try:
+                        os.kill(_pid, 0)
+                    except OSError:
+                        break
+                    time.sleep(0.2)
+            break
     # single-instance: второй запуск уходит к первому, нового процесса нет
     cli_args = [a for a in sys.argv[1:] if not a.startswith("-")]
     first, _mutex = _single_instance_lock()

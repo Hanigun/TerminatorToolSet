@@ -10572,6 +10572,7 @@ async function openRecentsModal() {
 // ---------- self-updates (worker over GitHub releases) ----------
 let updState = null;
 let updPollTimer = null;
+let updRestarted = false;
 
 function updDot(on) {
   const d = $("#btn-update-dot");
@@ -10675,6 +10676,7 @@ async function updCheck(force, silent) {
 async function updDownload() {
   const dl = $("#upd-download");
   if (dl) dl.disabled = true;
+  updRestarted = false;
   let j = null;
   try {
     const r = await api("/api/update_download", { method: "POST",
@@ -10719,6 +10721,16 @@ async function updPollTick() {
   } else if (p.state === "staged") {
     updPollStop();
     if (bar) bar.hidden = true;
+    if (!updRestarted) {
+      // обновление скачано: сразу перезапуск в новую версию, руками не надо
+      updRestarted = true;
+      toast(t("upd_restarting") || "Restarting…", "ok");
+      try {
+        await api("/api/update_restart", { method: "POST",
+          body: "{}", timeout: 15000 });
+      } catch (e) { updRestarted = false; }
+      return;
+    }
     await updStateLoad();
     updPaintInline();
     toast(t("upd_staged") || "Обновление загружено", "ok");

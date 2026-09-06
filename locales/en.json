@@ -695,6 +695,7 @@
   "upd_avail": "Available: ",
   "upd_staged_short": "Downloaded: ",
   "upd_staged": "Update downloaded",
+  "upd_restarting": "Restarting into the new version…",
   "upd_uptodate": "Already on the latest version",
   "upd_no_notes": "No changelog.",
   "upd_restart_hint": "Update downloaded. Restart the app to install.",

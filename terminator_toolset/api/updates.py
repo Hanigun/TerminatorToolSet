@@ -1,4 +1,4 @@
-"""Update routes: check/download/stage self-updates (owned by Updates)."""
+"""Update routes: check/download/stage/restart self-updates (owned by Updates)."""
 from __future__ import annotations
 
 from flask import jsonify, request
@@ -45,3 +45,8 @@ def register_updates(app, ctx):
     def api_update_progress():
         """Download staging progress for the progress bar."""
         return jsonify({"ok": True, "progress": upd.progress()})
+
+    @app.route("/api/update_restart", methods=["POST"])
+    def api_update_restart():
+        """Relaunch into the staged update (applied on boot)."""
+        return jsonify(upd.restart())

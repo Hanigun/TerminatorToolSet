@@ -1,7 +1,7 @@
 [project]
 name = "terminator-toolset"
-version = "0.9.2"
-description = "Terminator: Dark Fate - Defiance mod data toolset"
+version = "0.9.5"
+description = "Terminator: Dark Fate - Defiance Modding ToolSet"
 requires-python = ">=3.11"
 
 [build-system]
