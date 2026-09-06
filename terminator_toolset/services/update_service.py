@@ -265,7 +265,7 @@ class Updates:
                 q = "?repo=" + urllib.parse.quote(repo or "") + "&id=" + str(aid)
                 if channel == "beta":
                     q += "&pre=1"
-                url = server + "/asset" + q
+                url = server.rstrip("/") + "/asset" + q
             available = {"version": version,
                          "notes": str(data.get("notes") or ""),
                          "url": url, "name": asset.get("name") or "",
