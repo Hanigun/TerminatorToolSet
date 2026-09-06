@@ -150,8 +150,8 @@ function section(name, asserts) {
     [/swtFind = mkFindBar\(/.test(appjs), "SWT editor must use the shared find core"],
     [/cmpFindOpen\(side\)/.test(appjs), "Ctrl+F must open the side find popup"],
     [/cmpReplaceAll/.test(appjs) && /cmpSetCell\(side, m\.ri, m\.ci, newVal\)/.test(appjs), "replace-all must edit cells via cmpSetCell"],
-    [/id="cmp-fs-min"/.test(html), "compare fullscreen modal must have the minimize button"],
-    [/minBtn\.onclick = cmpFsMinimize/.test(appjs) && /pywebview\.api\.minimize\(\)/.test(appjs), "fs minimize must minimize the program window"],
+    [/id="cmp-fs-min"/.test(html) === false && /id="cmp-fs-close"/.test(html), "compare fullscreen modal must have a single close button like other modals"],
+    [/function cmpFsClose\(/.test(appjs) && !/function cmpFsMinimize\(/.test(appjs), "fs modal must only restore the pane on close (no minimize path)"],
     [/paneFsWinFs\(true\)/.test(appjs), "compare fullscreen must toggle real window fullscreen (shared paneFsWinFs)"],
     [/.key-dd-pop\[hidden\]\s*\{\s*display:\s*none/.test(css), "key dropdown search must hide with the popup ([hidden] rule)"],
     [/\.sb-tab \{[^}]*flex:\s*1 1 0/.test(css), "sidebar tabs must split tree width in half"],
@@ -245,6 +245,11 @@ function section(name, asserts) {
     [/startsWith\("data:image\/"\)/.test(appjs), "tab icons must render data-URL icons as <img>, not base64 text"],
     [/"tray_enabled": True/.test(cfg) && /"browser_to_tray": True/.test(cfg), "tray options must default to on"],
     [/\.donate-btn/.test(css) && /\.social-btn/.test(css) && /\.tab-sub-path/.test(css) && /\.toast \{[^}]*120%/.test(css), "donate/social buttons, readable tab paths and +20% toasts must be styled"],
+    [/CTX_ICONS/.test(appjs) && /icon: "save"/.test(appjs) && /icon: "delete"/.test(appjs) && /icon: "swap"/.test(appjs), "dynamic context menus (tabs/tree/swt/map) must carry icons"],
+    [/cmpSrc: \{ left: null, right: null \}/.test(appjs), "compare sides must default to unselected"],
+    [/\.cmp-side \.src-seg-sm/.test(css) && /dz-actions-sub \{[^}]*flex-end/.test(css), "compare segs must be compact and recents right-aligned"],
+    [/id="cmp-fs-min"/.test(html) === false, "compare fullscreen modal must keep a single button"],
+    [/border-right-color: var\(--accent\)/.test(css) === false, "home button must not have the yellow right edge"],
     [/upr_map_settings/.test(read("locales/ru.json")) && /upr_sector_reward/.test(read("locales/en.json")) && /set_tab_updates/.test(read("locales/de.json")) && /donate/.test(read("locales/zh.json")) && /about_title/.test(read("locales/ru.json")), "batch strings must exist in all 4 locales"],
   ].map(([c, m]) => [c, m]));
   if (bad) process.exit(1);

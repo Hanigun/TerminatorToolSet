@@ -40,7 +40,7 @@ const state = {
   swtSources: null,         // словари для подсказок SWT (/api/swt_sources), null = нет
   uprising: uprFreshState(),
   treeView: "project",      // глобальный источник: project | game | mod (древо + карта)
-  cmpSrc: { left: "project", right: "game" }, // источники сторон сравнения (независимые)
+  cmpSrc: { left: null, right: null }, // источники сторон сравнения: по умолчанию ничего не выбрано
   treeExtFilter: null,      // null = show all; Set of lowercase exts to SHOW
   treeFolderFilter: null,   // null = show all; Set of lowercase folder names to SHOW
   fullTreeExpanded: new Set(),   // absolute dir paths the user forced open
@@ -181,6 +181,22 @@ let ctxMenuEl = null;
 function closeCtxMenu() {
   if (ctxMenuEl) { ctxMenuEl.remove(); ctxMenuEl = null; }
 }
+// иконки динамических контекстных меню (вкладки, дерево, SWT, карта):
+// статичное меню таблицы уже несёт .ctx-ico в шаблоне
+const _CTX_SVG = inner => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
+const CTX_ICONS = {
+  save: _CTX_SVG('<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>'),
+  revert: _CTX_SVG('<path d="M9 14 4 9l5-5"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>'),
+  "to-mod": _CTX_SVG('<path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/><path d="M12 10v6"/><path d="M9 13h6"/>'),
+  copy: _CTX_SVG('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
+  paste: _CTX_SVG('<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>'),
+  cut: _CTX_SVG('<circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/>'),
+  duplicate: _CTX_SVG('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/><path d="M15.5 12.5v6M12.5 15.5h6"/>'),
+  add: _CTX_SVG('<path d="M12 5v14M5 12h14"/>'),
+  edit: _CTX_SVG('<path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z"/>'),
+  delete: _CTX_SVG('<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'),
+  swap: _CTX_SVG('<path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="M16 21l4-4-4-4"/><path d="M20 17H4"/>'),
+};
 function openCtxMenu(e, items) {
   e.preventDefault();
   closeCtxMenu();
@@ -197,7 +213,9 @@ function openCtxMenu(e, items) {
     const b = document.createElement("div");
     b.className = "ctx-item" + (it.danger ? " danger" : "")
       + (it.disabled ? " disabled" : "");
-    b.textContent = it.label;
+    b.innerHTML = (it.icon && CTX_ICONS[it.icon]
+      ? '<span class="ctx-ico">' + CTX_ICONS[it.icon] + '</span>' : "")
+      + '<span>' + escapeHtml(it.label) + '</span>';
     menu.appendChild(b);
     if (!it.disabled && it.fn) {
       b.addEventListener("click", () => { closeCtxMenu(); it.fn(); });
@@ -264,13 +282,13 @@ function bindTabCtxMenu() {
     if (!tab) return;
     const items = [];
     if (tab.type === "file" || tab.type === "swt" || tab.type === "uprising") {
-      items.push({ label: t("save") || "Сохранить", fn: async () => {
+      items.push({ label: t("save") || "Сохранить", icon: "save", fn: async () => {
         activateTab(tab.id);
         await saveActive();
       } });
     }
     if (tab.type === "file" && tab.path) {
-      items.push({ label: t("ctx_revert") || "Отменить все изменения", fn: async () => {
+      items.push({ label: t("ctx_revert") || "Отменить все изменения", icon: "revert", fn: async () => {
         // сброс к файлу на диске: закрыть вкладку без сохранения и открыть
         // заново с reset - серверная сессия тоже отбрасывается
         tab.dirty = false;
@@ -279,7 +297,7 @@ function bindTabCtxMenu() {
       } });
     }
     if (tab.type === "swt" && state.swt.path) {
-      items.push({ label: t("ctx_revert") || "Отменить все изменения", fn: async () => {
+      items.push({ label: t("ctx_revert") || "Отменить все изменения", icon: "revert", fn: async () => {
         // doc=null обходит «уже открыт» - файл перечитывается с диска;
         // dirty=false убирает подтверждение (пользователь сам просил сброс)
         state.swt.doc = null;
@@ -288,7 +306,7 @@ function bindTabCtxMenu() {
       } });
     }
     if (tab.type === "uprising" && state.uprising.path) {
-      items.push({ label: t("ctx_revert") || "Отменить все изменения", fn: async () => {
+      items.push({ label: t("ctx_revert") || "Отменить все изменения", icon: "revert", fn: async () => {
         state.uprising.dirty = false;
         await uprLoad(true);
       } });
@@ -297,7 +315,7 @@ function bindTabCtxMenu() {
       : tab.type === "uprising" ? state.uprising.path : tab.path;
     if (modSrc) {
       if (items.length) items.push({ sep: true });
-      items.push({ label: t("ctx_to_mod") || "Скопировать в мод",
+      items.push({ label: t("ctx_to_mod") || "Скопировать в мод", icon: "to-mod",
         fn: () => copyToMod(modSrc) });
     }
     if (items.length) openCtxMenu(e, items);
@@ -315,14 +333,14 @@ function bindTreeCtxMenu() {
     if (!path) return;
     const isDir = row.classList.contains("tree-dir");
     openCtxMenu(e, [
-      { label: t("ctx_copy") || "Копировать",
+      { label: t("ctx_copy") || "Копировать", icon: "copy",
         fn: () => { state.treeClip = { path }; toast(t("ctx_copied") || "Скопировано"); } },
-      { label: t("ctx_paste") || "Вставить", disabled: !state.treeClip,
+      { label: t("ctx_paste") || "Вставить", icon: "paste", disabled: !state.treeClip,
         fn: () => fsCopyTo(state.treeClip.path, isDir ? path : treeParentDir(path)) },
       { sep: true },
-      { label: t("ctx_duplicate") || "Дублировать",
+      { label: t("ctx_duplicate") || "Дублировать", icon: "duplicate",
         fn: () => fsCopyTo(path, treeParentDir(path)) },
-      { label: t("ctx_to_mod") || "Скопировать в мод", fn: () => copyToMod(path) },
+      { label: t("ctx_to_mod") || "Скопировать в мод", icon: "to-mod", fn: () => copyToMod(path) },
     ]);
   });
 }
@@ -5270,12 +5288,12 @@ function swtItemCard(tr, it, idx, isCond) {
                params: spec.map(() => ""), param_tails: null, _open: open };
     };
     openCtxMenu(e, [
-      { label: t("swt_ctx_new") || "Создать новый", fn: () => {
+      { label: t("swt_ctx_new") || "Создать новый", icon: "add", fn: () => {
           tr.items.splice(tr.items.indexOf(it) + 1, 0, mkItem("", true));
           swtMarkDirty();
           renderSwtTrigger();
         } },
-      { label: t("swt_ctx_dup") || "Дублировать", fn: () => {
+      { label: t("swt_ctx_dup") || "Дублировать", icon: "duplicate", fn: () => {
           const cp = JSON.parse(JSON.stringify(it));
           cp._open = true;
           // дубликат — новый элемент: guid 1:1 дал бы повтор, который fix
@@ -5287,7 +5305,7 @@ function swtItemCard(tr, it, idx, isCond) {
           renderSwtTrigger();
         } },
       { sep: true },
-      { label: t("swt_del") || "Удалить", danger: true, fn: () => {
+      { label: t("swt_del") || "Удалить", icon: "delete", danger: true, fn: () => {
           tr.items.splice(tr.items.indexOf(it), 1);
           swtMarkDirty();
           renderSwtTrigger();
@@ -7724,7 +7742,7 @@ function uprSectorCtx(e, num) {
   e.stopPropagation();
   const hasClip = !!((state.uprising.sectorClip || []).length);
   openCtxMenu(e, [
-    { label: t("upr_sec_swap") || "Заменить на…", fn: async () => {
+    { label: t("upr_sec_swap") || "Заменить на…", icon: "swap", fn: async () => {
         const nums = (window.UPR_MAP_SECTORS || []).map(s => s.num);
         const v = await askPrompt({
           title: (t("upr_sec_swap_t") || "Заменить сектор {n}: наполнение сектора №").replace("{n}", num),
@@ -7750,16 +7768,16 @@ function uprSectorCtx(e, num) {
         toast((t("upr_sec_swapped") || "Секторы {a} и {b} поменялись наполнением")
           .replace("{a}", num).replace("{b}", other), "ok");
       } },
-    { label: t("upr_sec_copy") || "Скопировать всё", fn: () => {
+    { label: t("upr_sec_copy") || "Скопировать всё", icon: "copy", fn: () => {
         state.uprising.sectorClip = uprSectorSnap(num);
         toast(t("ctx_copied") || "Скопировано", "ok");
       } },
-    { label: t("upr_sec_paste_rep") || "Вставить и заменить", disabled: !hasClip, fn: () => {
+    { label: t("upr_sec_paste_rep") || "Вставить и заменить", icon: "paste", disabled: !hasClip, fn: () => {
         uprSectorWrite(num, state.uprising.sectorClip,
           (t("upr_h_paste") || "Вставка в сектор {n} (замена)").replace("{n}", num));
         toast(t("saved") || "Сохранено", "ok");
       } },
-    { label: t("upr_sec_paste_add") || "Вставить и добавить", disabled: !hasClip, fn: () => {
+    { label: t("upr_sec_paste_add") || "Вставить и добавить", icon: "paste", disabled: !hasClip, fn: () => {
         const cur = uprSectorCells(num);
         const edits = [];
         (state.uprising.sectorClip || []).forEach(s => {
@@ -7785,7 +7803,7 @@ function uprSectorCtx(e, num) {
         toast(t("saved") || "Сохранено", "ok");
       } },
     { sep: true },
-    { label: t("upr_sec_clear") || "Очистить сектор", danger: true, fn: async () => {
+    { label: t("upr_sec_clear") || "Очистить сектор", icon: "delete", danger: true, fn: async () => {
         const c = await askConfirm({
           title: (t("upr_sec_clear_t") || "Очистить сектор {n}?").replace("{n}", num),
           message: t("upr_sec_clear_m") || "Всё наполнение сектора будет удалено.",
@@ -7815,7 +7833,7 @@ function uprChipCtx(e, meta, items, idx) {
   const grab = () => multi ? uprCollectPicked()
     : [{ num: meta.num, vi: meta.vi, cat: meta.cat, name: it.name, n: it.n }];
   openCtxMenu(e, [
-    { label: t("upr_add") || "Добавить", fn: () => {
+    { label: t("upr_add") || "Добавить", icon: "add", fn: () => {
         const g = uprGroups().find(x => x.num === meta.num);
         const rw = g && g.list[Math.min(meta.vi, g.list.length - 1)];
         const ci = uprCatCol(meta.cat);
@@ -7824,23 +7842,23 @@ function uprChipCtx(e, meta, items, idx) {
           uprWriteCell(rw.ri, ci, items.filter(x => x.name));
         }, chipEl);
       } },
-    { label: t("upr_edit") || "Редактировать", disabled: !hasIt, fn: () => uprStartEdit(meta, it.name, chipEl) },
-    { label: t("ctx_copy") || "Копировать", disabled: !hasIt, fn: () => {
+    { label: t("upr_edit") || "Редактировать", icon: "edit", disabled: !hasIt, fn: () => uprStartEdit(meta, it.name, chipEl) },
+    { label: t("ctx_copy") || "Копировать", icon: "copy", disabled: !hasIt, fn: () => {
         state.uprising.clip = grab().map(x => ({ name: x.name, n: x.n }));
         toast(t("ctx_copied") || "Скопировано", "ok");
       } },
-    { label: t("ctx_cut") || "Вырезать", disabled: !hasIt, fn: () => {
+    { label: t("ctx_cut") || "Вырезать", icon: "cut", disabled: !hasIt, fn: () => {
         const grabbed = grab();
         state.uprising.clip = grabbed.map(x => ({ name: x.name, n: x.n }));
         uprRemoveItems(grabbed);
         renderUprising();
       } },
     { sep: true },
-    { label: t("delete") || "Удалить", disabled: !hasIt, fn: () => {
+    { label: t("delete") || "Удалить", icon: "delete", disabled: !hasIt, fn: () => {
         uprRemoveItems(grab());
         renderUprising();
       } },
-    { label: t("ctx_paste") || "Вставить", disabled: !(state.uprising.clip || []).length,
+    { label: t("ctx_paste") || "Вставить", icon: "paste", disabled: !(state.uprising.clip || []).length,
       fn: () => uprPasteItems(meta, items, idx) },
   ]);
 }
@@ -8049,7 +8067,7 @@ function uprFillSector(root, g, horizontal) {
   hnSys.className = "upr-sector-sys";
   hnSys.textContent = rw.sys;
   hnSys.title = rw.sys;
-  hname.append(hnMain, document.createTextNode(" "), hnSys);
+  hname.append(hnMain, hnSys);
   head.appendChild(hname);
   // сложность зоны — прямо на панели сектора
   const hsel = document.createElement("select");
@@ -8998,8 +9016,6 @@ function cmpFullscreen(side) {
   // настоящий полноэкранный режим окна (весь монитор) - общий механизм;
   // в браузере недоступно - модалка и так на всю страницу
   paneFsWinFs(true);
-  const minBtn = $("#cmp-fs-min");
-  if (minBtn) minBtn.hidden = !(window.pywebview && pywebview.api);
   modal.hidden = false;
 }
 
@@ -9014,19 +9030,10 @@ function cmpFsClose() {
   paneFsWinFs(false);
 }
 
-function cmpFsMinimize() {
-  // «свернуть» = свернуть окно программы (как кнопка в шапке приложения)
-  if (window.pywebview && pywebview.api && pywebview.api.minimize) {
-    try { pywebview.api.minimize(); } catch (e) { /* noop */ }
-  }
-}
-
 function setupCmpFs() {
   const modal = $("#cmp-fs");
   if (!modal) return;
   $("#cmp-fs-close").onclick = cmpFsClose;
-  const minBtn = $("#cmp-fs-min");
-  if (minBtn) minBtn.onclick = cmpFsMinimize;
   modal.addEventListener("mousedown", e => { if (e.target === modal) cmpFsClose(); });
   document.addEventListener("keydown", e => {
     if (e.key === "Escape" && !modal.hidden) cmpFsClose();
@@ -9055,16 +9062,12 @@ function setupCmpSyncScroll() {
 // что на карте. Пункт, выбранный на другой стороне, темнеет и не выбирается
 // (пока есть альтернатива); пункты без путей в настройках тоже темнеют.
 function paintCmpSrc() {
-  // сначала подтягиваем стороны на доступные источники, потом красим
+  // стороны НЕ подтягиваем автоматически: по умолчанию ни одна вкладка
+  // не выбрана, выбор — только кликом; недоступное из localStorage — в null
   for (const side of ["left", "right"]) {
-    let cur = state.cmpSrc[side];
-    if (!srcAvail(cur)) {
-      const other = side === "left" ? "right" : "left";
-      cur = srcFirst(state.cmpSrc[other]) || srcFirst(null);
-      if (cur) {
-        state.cmpSrc[side] = cur;
-        try { localStorage.setItem("tsh_cmp_" + side, cur); } catch (e) { /* noop */ }
-      }
+    if (state.cmpSrc[side] && !srcAvail(state.cmpSrc[side])) {
+      state.cmpSrc[side] = null;
+      try { localStorage.removeItem("tsh_cmp_" + side); } catch (e) { /* noop */ }
     }
   }
   for (const side of ["left", "right"]) {
@@ -11121,8 +11124,8 @@ async function init() {
   try { localStorage.setItem("tsh_src", state.treeView); } catch (e) { /* noop */ }
   try {
     const cl = localStorage.getItem("tsh_cmp_left"), cr = localStorage.getItem("tsh_cmp_right");
-    if (cl) state.cmpSrc.left = cl;
-    if (cr) state.cmpSrc.right = cr;
+    if (cl && srcAvail(cl)) state.cmpSrc.left = cl;
+    if (cr && srcAvail(cr)) state.cmpSrc.right = cr;
   } catch (e) { /* noop */ }
   state.treeCounts = null;
   const initRoot = treeRoot();
