@@ -5,10 +5,11 @@ with the running version -> download to a staging dir -> write a pending
 flag -> apply on the next boot (the running EXE is file-locked on Windows,
 so files are replaced before the server/window starts, see main.py).
 
-The release .zip must contain the release root: the EXE, ToolSetLibs/,
-assets/ (without icons/), locales/, UprisingPresets/, swt_commands.json
-and 7z/. configs/, Logs/, *.db, uprising_backups/ and UprisingCustomPresets/
-are user data and are never overwritten.
+The release .zip must contain the release root: the EXE, ToolSetLibs/
+(icons, UprisingPresets and pyproject.toml bundled inside), assets/
+(without icons/), locales/, swt_commands.json and 7z/. configs/, Logs/,
+*.db, uprising_backups/ and UprisingCustomPresets/ are user data and are
+never overwritten.
 """
 from __future__ import annotations
 
@@ -134,6 +135,15 @@ def apply_pending_update(program_dir, cfg_dir, log=None):
             except Exception:  # noqa: BLE001
                 pass
         return ""
+    # icons + built-in presets moved into the exe bundle: drop stale
+    # external copies so they never shadow the bundled ones (custom presets
+    # live in UprisingCustomPresets and are untouched).
+    for stale in ("UprisingPresets", os.path.join("assets", "icons")):
+        try:
+            shutil.rmtree(os.path.join(program_dir, stale),
+                          ignore_errors=True)
+        except Exception:  # noqa: BLE001
+            pass
     try:
         shutil.rmtree(staged, ignore_errors=True)
     except Exception:  # noqa: BLE001
