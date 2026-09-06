@@ -687,7 +687,7 @@
   "upd_check": "Nach Updates suchen",
   "upd_channel": "Update-Kanal",
   "upd_ch_release": "Releases",
-  "upd_ch_beta": "Releases + Beta",
+  "upd_ch_beta": "Vorabversion",
   "upd_hint": "Pr\u00fcfung t\u00e4glich und beim Start; Installation beim n\u00e4chsten Neustart.",
   "upd_title": "Update verf\u00fcgbar",
   "upd_download": "Herunterladen & installieren",
@@ -747,5 +747,15 @@
   "swt_triggers": "Trigger",
   "swt_variables": "Variablen",
   "upr_f_price": "Preis",
-  "origin_mod": "Datei aus Mod"
+  "origin_mod": "Datei aus Mod",
+  "upr_map_settings": "Karteneinstellungen",
+  "upr_sector_reward": "Belohnung für Sektor {n}",
+  "set_tab_updates": "Aktualisierungen",
+  "upd_checking": "Wird geprüft…",
+  "donate": "Projekt unterstützen",
+  "about_title": "Über",
+  "about_author": "Autor: Hanigun",
+  "about_version": "Version",
+  "about_goto_updates": "Updates öffnen",
+  "about_support": "Projekt unterstützen"
 }

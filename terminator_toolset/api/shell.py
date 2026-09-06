@@ -353,6 +353,26 @@ def register_shell(app, ctx):
             return jsonify({"ok": False, "error": str(e)})
         return jsonify({"ok": True})
 
+    # внешние ссылки интерфейса (донат, соцсети «О программе»): строгий
+    # allowlist — произвольные URL из фронта не открываем
+    _OPEN_LINK_ALLOW = (
+        "https://dalink.to/hanigun",
+        "https://github.com/Hanigun/TerminatorToolSet",
+    )
+
+    @app.route("/api/open_link", methods=["POST"])
+    def api_open_link():
+        """Open an allowlisted external URL in the system browser."""
+        data = request.get_json(silent=True) or {}
+        url = str(data.get("url") or "")
+        if url not in _OPEN_LINK_ALLOW:
+            return jsonify({"ok": False, "error": "url not allowed"})
+        try:
+            webbrowser.open(url)
+        except Exception as e:  # noqa: BLE001
+            return jsonify({"ok": False, "error": str(e)})
+        return jsonify({"ok": True})
+
     @app.route("/api/client_log", methods=["POST"])
     def api_client_log():
         """Ошибки/события фронтенда (window.onerror, unhandledrejection,

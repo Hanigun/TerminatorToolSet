@@ -2430,3 +2430,84 @@ body.light .btn { color: #1a1a1a; }
 .up-log { border: 1px solid var(--border); border-radius: 8px; background: var(--bg-elev);
   font-family: var(--mono, Consolas, monospace); font-size: 11px; padding: 8px 10px;
   max-height: 240px; overflow-y: auto; white-space: pre-wrap; color: var(--text-mute); }
+
+/* ---- Кнопка доната в шапке: серая темнее фона шапки, без аутлайна,
+      иконка + текст, эффект при наведении ---- */
+.donate-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 30px; padding: 0 12px;
+  background: var(--bg); color: var(--text);
+  border: 1px solid transparent; border-radius: var(--radius);
+  font-family: var(--font); font-size: 12px; font-weight: 600; white-space: nowrap;
+  cursor: pointer; outline: none;
+  transition: filter .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.donate-btn img { width: 16px; height: 16px; display: block; }
+.donate-btn:hover, .donate-btn:focus-visible {
+  outline: none; filter: brightness(1.25);
+  box-shadow: 0 0 12px rgba(255,255,255,.12), 0 0 22px rgba(255,255,255,.06);
+}
+.donate-btn:active { transform: translateY(1px); box-shadow: none; }
+/* кнопка обновления в шапке скрыта, пока нет доступного обновления
+   (.icon-btn задаёт display и перебивает hidden) */
+#btn-update[hidden] { display: none; }
+
+/* ---- Вкладка обновлений в настройках: канал + проверка в одну строку
+      (контролы справа, как у остальных настроек) ---- */
+.upd-chan-row { display: inline-flex; align-items: center; gap: 8px; }
+.upd-notes-inline {
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 8px 10px; font-size: 12px; color: var(--text);
+  white-space: pre-wrap; word-break: break-word;
+  max-height: 180px; overflow-y: auto;
+}
+.upd-notes-inline[hidden] { display: none; }
+
+/* ---- Модалка «О программе» ---- */
+.about-card { width: min(430px, 92vw); }
+.about-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.about-brand { display: flex; align-items: center; gap: 12px; }
+.about-logo { width: 44px; height: 44px; }
+.about-name { font-size: 15px; font-weight: 700; }
+.about-ver { font-size: 12px; color: var(--text-mute); }
+.about-author { font-size: 13px; }
+.about-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.about-social { display: flex; gap: 8px; flex-wrap: wrap; }
+.social-btn {
+  width: 38px; height: 38px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--bg); border: 1px solid transparent; border-radius: var(--radius);
+  cursor: pointer; outline: none;
+  transition: filter .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.social-btn img { width: 22px; height: 22px; display: block; }
+.social-btn:hover:not(:disabled) {
+  outline: none; filter: brightness(1.25);
+  box-shadow: 0 0 12px rgba(255,255,255,.12);
+}
+.social-btn:active:not(:disabled) { transform: translateY(1px); box-shadow: none; }
+.social-btn:disabled { opacity: .35; cursor: default; }
+.about-donate { align-self: flex-start; }
+.about-donate img { width: 16px; height: 16px; }
+
+/* ---- Модалка настроек карты: фиксированный размер, страницы со скроллом ---- */
+.modal-card.upr-set-card { width: min(720px, 94vw); height: min(600px, 86vh); }
+.modal-card.upr-set-card .settings-page { flex: 1; min-height: 0; overflow-y: auto; }
+.modal-card.upr-set-card .upr-sectors-grid { max-height: none; overflow: visible; }
+.modal-card.upr-set-card [data-stp="presets"] { padding: 10px 16px 16px; }
+/* номер зоны на капитальном щите сидит выше (щит taller) */
+.upr-shield-num.cap { top: 54%; }
+/* подпись сектора: локализованное имя + серый sysname */
+.upr-sec-name { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 4px; }
+.upr-sector-sys { color: var(--text-mute); font-size: 11px; font-weight: 400;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- Подпись вкладки файла: путь читаемым текстом (без капса) ---- */
+.tab-sub-path { text-transform: none; letter-spacing: 0; }
+
+/* ---- Страница сравнения: отступ сверху, чтобы подзаголовок не резался ---- */
+.cmp-page { padding-top: 10px; }
+.cmp-page > .cm-sub { margin-left: 10px; margin-right: 10px; }
+
+/* ---- Тосты (+20% к размеру) ---- */
+.toast { font-size: 120%; }

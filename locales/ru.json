@@ -687,7 +687,7 @@
   "upd_check": "Проверить обновления",
   "upd_channel": "Канал обновлений",
   "upd_ch_release": "Релизы",
-  "upd_ch_beta": "Релизы + бета",
+  "upd_ch_beta": "Пре-релиз",
   "upd_hint": "Проверка — раз в сутки и при запуске; установка — следующим перезапуском программы.",
   "upd_title": "Доступно обновление",
   "upd_download": "Скачать и установить",
@@ -747,5 +747,15 @@
   "swt_triggers": "Триггеры",
   "swt_variables": "Переменные",
   "upr_f_price": "Цена",
-  "origin_mod": "Файл из мода"
+  "origin_mod": "Файл из мода",
+  "upr_map_settings": "Настройки карты",
+  "upr_sector_reward": "Награда сектора {n}",
+  "set_tab_updates": "Обновления",
+  "upd_checking": "Проверка…",
+  "donate": "Поддержать проект",
+  "about_title": "О программе",
+  "about_author": "Автор: Hanigun",
+  "about_version": "Версия",
+  "about_goto_updates": "Открыть обновления",
+  "about_support": "Поддержать проект"
 }

@@ -97,7 +97,7 @@ window.uprRndOverlay = function (box) {
   const gear = document.createElement("button");
   gear.type = "button";
   gear.className = "icon-btn upr-map-btn icon";
-  gear.title = t("upr_colors") || "Цвета зон";
+  gear.title = t("upr_map_settings") || "Настройки карты";
   // центрирование инлайном: переживает любой каскад и залежавшийся css в кэше
   gear.style.display = "flex";
   gear.style.alignItems = "center";

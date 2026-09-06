@@ -443,7 +443,7 @@ function createTabElement(tab, flashSaved) {
         ${tab.saved ? `<span class="tab-saved" title="${escapeHtml(t("edited_hint") || "Файл сохранён в Terminator Sheet")}"></span>` : ""}
         ${dirtyBadge}
       </span>
-      <span class="tab-sub" title="${escapeHtml(tab.sub || "")}">${escapeHtml(tab.sub || "")}</span>
+      <span class="tab-sub${tab.type === "file" ? " tab-sub-path" : ""}" title="${escapeHtml(tab.sub || "")}">${escapeHtml(tab.sub || "")}</span>
     </span>
     ${closable ? `<button class="tab-close" title="${t("close")}">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -6774,7 +6774,12 @@ function uprOpenColors() {
     tile.className = "upr-sec-tile";
     const shield = document.createElement("span");
     shield.className = "upr-sec-shield";
-    shield.innerHTML = `<span class="upr-shield-wrap">${uprShieldSvg(s.num, uprZoneColor(s.num, s.faction).solid, 30)}<b class="upr-shield-num">${s.num}</b></span>`;
+    const cap = UPR_CAPITALS[s.num] && uprImgFaction(UPR_CAPITALS[s.num]) === uprImgFaction(uprZoneKey(s.num, s.faction));
+    shield.innerHTML = `<span class="upr-shield-wrap">${uprShieldSvg(s.num, uprZoneColor(s.num, s.faction).solid, 30)}<b class="upr-shield-num${cap ? " cap" : ""}">${s.num}</b></span>`;
+    // локализованное имя награды + серый sysname
+    const nameRow = document.createElement("div");
+    nameRow.className = "upr-sec-name";
+    nameRow.innerHTML = `<span>${t("upr_sector_reward").replace("{n}", s.num)}</span><span class="upr-sector-sys">sector_${s.num}_reward</span>`;
     const sel = document.createElement("select");
     [["", "upr_color_auto"], ...Object.keys(UPR_COLORS).map(k => [k, "upr_col_" + k])]
       .forEach(([v, lk]) => {
@@ -6787,8 +6792,7 @@ function uprOpenColors() {
     sel.onchange = () => {
       uprSaveColor(s.num, sel.value);
       uprApplyColors();
-      // мини-щит плитки меняется вместе с цветом
-      shield.innerHTML = `<span class="upr-shield-wrap">${uprShieldSvg(s.num, null, 30)}<b class="upr-shield-num">${s.num}</b></span>`;
+      shield.innerHTML = `<span class="upr-shield-wrap">${uprShieldSvg(s.num, null, 30)}<b class="upr-shield-num${cap ? " cap" : ""}">${s.num}</b></span>`;
     };
     // сложность зоны: выпадающий список 1–6
     const dsel = document.createElement("select");
@@ -6801,8 +6805,13 @@ function uprOpenColors() {
       if (uprZoneDiff(s.num) === d) o.selected = true;
       dsel.appendChild(o);
     });
-    dsel.onchange = () => { uprSetZdiff(s.num, dsel.value); renderUprising(); };
-    tile.append(shield, dsel, sel);
+    dsel.onchange = () => {
+      uprSetZdiff(s.num, dsel.value);
+      renderUprising();
+      // щит плитки перерисовать тоже: черепа = живая сложность зоны
+      shield.innerHTML = `<span class="upr-shield-wrap">${uprShieldSvg(s.num, null, 30)}<b class="upr-shield-num${cap ? " cap" : ""}">${s.num}</b></span>`;
+    };
+    tile.append(shield, nameRow, dsel, sel);
     list.appendChild(tile);
   });
   // блок баланс-конфига: путь к файлу + привязка/импорт/экспорт
@@ -7992,7 +8001,8 @@ function renderUprSector() {
       body.innerHTML = "";
       uprFillSector(body, g, true);
       $("#upr-modal-title").innerHTML =
-        `<span class="upr-title-shield">${uprShieldSvg(g.num, uprZoneColor(g.num, uprSectorFaction(g.num)).solid, 22)}</span>`;
+        `<span class="upr-title-shield">${uprShieldSvg(g.num, uprZoneColor(g.num, uprSectorFaction(g.num)).solid, 22)}</span> ` +
+        escapeHtml((t("upr_sector_reward") || "Награда сектора {n}").replace("{n}", String(g.num)));
       if (modal) modal.hidden = false;
       return;
     }
@@ -8024,7 +8034,16 @@ function uprFillSector(root, g, horizontal) {
   head.className = "upr-sector-head";
   const hname = document.createElement("span");
   hname.className = "upr-sector-name";
-  hname.textContent = rw.sys;
+  // «Награда сектора N» + серый sysname (вместо голого sector_N_reward)
+  hname.innerHTML = "";
+  const hnMain = document.createElement("span");
+  hnMain.textContent = (t("upr_sector_reward") || "Награда сектора {n}")
+    .replace("{n}", String(g.num));
+  const hnSys = document.createElement("span");
+  hnSys.className = "upr-sector-sys";
+  hnSys.textContent = rw.sys;
+  hnSys.title = rw.sys;
+  hname.append(hnMain, document.createTextNode(" "), hnSys);
   head.appendChild(hname);
   // сложность зоны — прямо на панели сектора
   const hsel = document.createElement("select");
@@ -8119,8 +8138,11 @@ function setupUprising() {
     if (b.classList.contains("is-off")) {
       // путь не задан: серая кнопка открывает настройки на вкладке путей
       // с пульсирующей подсветкой нужной строки
-      openSettingsPaths(b.dataset.src === "mod" ? "set-mod-path"
-        : b.dataset.src === "game" ? "set-unpacked" : undefined);
+      const src = b.dataset.src;
+      const id = src === "mod" ? "set-mod-path"
+        : src === "game" ? "set-unpacked"
+        : "set-project-path";
+      openSettingsPaths(id);
       return;
     }
     uprSwitchSrc(b.dataset.src);
@@ -8201,7 +8223,7 @@ const WINDOW_SIZES = {
   big:    [1536, 960],   // +20% width and height
 };
 
-function openSettings() {
+function openSettings(tab) {
   $("#set-auto-save").checked = !!state.config.auto_save;
   $("#set-fullscreen").checked = !!state.config.fullscreen;
   $("#set-theme").value = state.config.theme || "dark";
@@ -8231,6 +8253,54 @@ function openSettings() {
   $("#set-keycol").value = state.config.default_key_column || "sysname";
   renderHotkeyEditor();
   $("#settings-modal").hidden = false;
+  if (tab) {
+    const btn = document.querySelector('.settings-tabs .st-tab[data-st="' + tab + '"]');
+    if (btn) btn.click();
+  }
+}
+
+// о программе: версия, автор, соцсети, донат
+// ссылки соцсетей — в одном месте (заглушки с пустым url рисуются
+// приглушёнными и не кликаются); иконки: assets/icons/social
+const ABOUT_LINKS = [
+  { id: "youtube", url: "" },
+  { id: "twitch", url: "" },
+  { id: "telegram", url: "" },
+  { id: "github", url: "https://github.com/Hanigun/TerminatorToolSet" },
+  { id: "discord", url: "" },
+];
+const DONATE_URL = "https://dalink.to/hanigun";
+function openAbout() {
+  $("#about-ver").textContent = (updState && updState.current)
+    || state.version || "";
+  const box = $("#about-social");
+  box.innerHTML = "";
+  const light = document.body.classList.contains("light");
+  for (const { id, url } of ABOUT_LINKS) {
+    const b = document.createElement("button");
+    b.className = "social-btn";
+    // тёмная иконка github видна только на светлой теме
+    const icon = (id === "github" && !light) ? "github_light.png" : id + ".png";
+    b.innerHTML = '<img src="/assets/icons/social/' + icon + '" alt="' + id + '">';
+    b.title = id;
+    if (!url) {
+      b.disabled = true;
+    } else {
+      b.onclick = () => api("/api/open_link", { method: "POST",
+        body: JSON.stringify({ url }) });
+    }
+    box.appendChild(b);
+  }
+  const st = $("#about-upd-state");
+  if (st) st.textContent = "";
+  if (updState && updState.available) {
+    st.textContent = (t("upd_avail") || "Доступно: ") + updState.available.version;
+  } else if (updState && updState.pending && updState.pending.version) {
+    st.textContent = (t("upd_staged_short") || "Загружено: ") + updState.pending.version;
+  } else if (updState) {
+    st.textContent = (t("upd_uptodate") || "Установлена последняя версия") + " " + updState.current;
+  }
+  $("#about-modal").hidden = false;
 }
 
 // ---------- настройки: вкладки внутри модалки ----------
@@ -9003,7 +9073,12 @@ function paintCmpSrc() {
     $$(".src-seg-btn", seg).forEach(b => {
       const s = b.dataset.src;
       b.classList.toggle("active", s === state.cmpSrc[side]);
-      b.disabled = !srcAvail(s) || (s === other && canElse);
+      // как на карте: без пути — серая кликабельная кнопка в настройки
+      // (is-off вместо disabled); disabled — только конфликт сторон
+      const off = !srcAvail(s);
+      b.classList.toggle("is-off", off);
+      b.disabled = !off && (s === other && canElse);
+      b.setAttribute("aria-disabled", String(off || (s === other && canElse)));
       b.title = srcRoot(s) || "";
     });
   }
@@ -9038,7 +9113,16 @@ function setupCmpSrcSwitch() {
     seg.dataset.wired = "1";
     seg.addEventListener("click", e => {
       const b = e.target.closest(".src-seg-btn");
-      if (!b || b.disabled) return;
+      if (!b) return;
+      if (b.classList.contains("is-off")) {
+        const src = b.dataset.src;
+        const id = src === "mod" ? "set-mod-path"
+          : src === "game" ? "set-unpacked"
+          : "set-project-path";
+        openSettingsPaths(id);
+        return;
+      }
+      if (b.disabled) return;
       cmpSetSideSrc(side, b.dataset.src);
     });
   }
@@ -10490,6 +10574,10 @@ function updPaint() {
   const has = !!(updState && (updState.available
     || (pend && pend.version)));
   updDot(has);
+  // кнопка в шапке видна только когда обновление найдено (после старта
+  // или фоновой перепроверки); ручная проверка — во вкладке настроек
+  const b = $("#btn-update");
+  if (b) b.hidden = !has;
   const st = $("#set-upd-state");
   if (st) {
     if (updState && updState.available) {
@@ -10505,9 +10593,43 @@ function updPaint() {
   }
   const ch = $("#set-upd-channel");
   if (ch && updState) ch.value = updState.channel || "release";
+  updPaintInline();
+}
+
+// вкладка обновлений в настройках: changelog прямо в окне (со скроллом),
+// кнопки скачивания и подсказка про перезапуск
+function updPaintInline() {
+  const avail = updState && updState.available;
+  const pend = updState && updState.pending;
+  const notes = $("#upd-notes");
+  if (notes) {
+    notes.textContent = (avail && avail.notes) || "";
+    notes.hidden = !(avail && avail.notes);
+  }
+  const acts = $("#upd-actions"), dl = $("#upd-download");
+  const prog = $("#upd-progress"), hint = $("#upd-hint");
+  if (pend && pend.version && (!avail || avail.version === pend.version)) {
+    // уже скачано и ждёт перезапуска: только подсказка
+    if (hint) hint.textContent = (t("upd_restart_hint")
+      || "Обновление загружено. Перезапустите программу для установки.")
+      + " (" + pend.version + ")";
+    if (acts) acts.hidden = true;
+    if (prog) prog.hidden = true;
+  } else if (avail) {
+    if (hint) hint.textContent = (t("upd_avail") || "Доступно: ")
+      + avail.version;
+    if (acts) acts.hidden = false;
+    if (dl) dl.disabled = false;
+  } else {
+    if (hint) hint.textContent = "";
+    if (acts) acts.hidden = true;
+    if (prog) prog.hidden = true;
+  }
 }
 
 async function updCheck(force, silent) {
+  const st = $("#set-upd-state");
+  if (!silent && st) st.textContent = t("upd_checking") || "Проверка…";
   let j = null;
   try {
     const r = await api("/api/update_check", { method: "POST",
@@ -10516,45 +10638,19 @@ async function updCheck(force, silent) {
   } catch (e) { j = null; }
   if (!j || !j.ok) {
     if (!silent) toast((j && j.error) || "update check failed", "err");
+    else await updStateLoad();
     return null;
   }
   await updStateLoad();
-  if (updState && updState.available) updOpenModal();
+  if (updState && updState.available) {
+    // список изменений — прямо во вкладке обновлений
+    if (!silent) openSettings("updates");
+  }
   else if (!silent) {
     toast((t("upd_uptodate") || "Установлена последняя версия")
       + (updState ? " " + updState.current : ""), "ok");
   }
   return updState;
-}
-
-function updOpenModal() {
-  const avail = updState && updState.available;
-  const pend = updState && updState.pending;
-  const modal = $("#update-modal");
-  if (!modal) return;
-  const ver = (avail && avail.version)
-    || (pend && pend.version) || "";
-  $("#upd-title").textContent = (t("upd_title") || "Обновление")
-    + (ver ? " " + ver : "");
-  $("#upd-notes").textContent = (avail && avail.notes)
-    || (t("upd_no_notes") || "");
-  const hint = $("#upd-hint");
-  const dl = $("#upd-download");
-  const prog = $("#upd-progress");
-  if (pend && pend.version && (!avail || avail.version === pend.version)) {
-    // уже скачано и ждёт перезапуска: только подсказка
-    if (hint) hint.textContent = (t("upd_restart_hint")
-      || "Обновление загружено. Перезапустите программу для установки.")
-      + " (" + pend.version + ")";
-    if (dl) dl.hidden = true;
-    if (prog) prog.hidden = true;
-  } else {
-    if (hint) hint.textContent = "";
-    if (dl) { dl.hidden = false; dl.disabled = false; }
-    if (prog) prog.hidden = true;
-  }
-  modal.hidden = false;
-  updPollStart();
 }
 
 async function updDownload() {
@@ -10605,7 +10701,7 @@ async function updPollTick() {
     updPollStop();
     if (bar) bar.hidden = true;
     await updStateLoad();
-    updOpenModal();   // переключить модалку на подсказку про перезапуск
+    updPaintInline();
     toast(t("upd_staged") || "Обновление загружено", "ok");
   } else if (p.state === "error") {
     updPollStop();
@@ -10621,7 +10717,7 @@ function updSetup() {
   if (b) b.onclick = () => {
     const pend = updState && updState.pending;
     if (updState && (updState.available || (pend && pend.version))) {
-      updOpenModal();
+      openSettings("updates");
     } else updCheck(true, false);
   };
   const sc = $("#set-upd-check");
@@ -10634,7 +10730,7 @@ function updSetup() {
       const j = await r.json();
       if (!j || !j.ok) { toast((j && j.error) || "error", "err"); return; }
       await updStateLoad();
-      if (updState && updState.available) updOpenModal();
+      if (updState && updState.available) openSettings("updates");
       else {
         toast((t("upd_uptodate") || "Установлена последняя версия")
           + (updState ? " " + updState.current : ""), "ok");
@@ -10643,12 +10739,23 @@ function updSetup() {
   };
   const dl = $("#upd-download");
   if (dl) dl.onclick = updDownload;
-  const later = $("#upd-later");
-  if (later) later.onclick = () => {
-    $("#update-modal").hidden = true;
-    updPollStop();
+  const aboutC = $("#about-check");
+  if (aboutC) aboutC.onclick = () => {
+    $("#about-modal").hidden = true;
+    updCheck(true, false);
   };
-  // суточная автопроверка после старта (не тормозит boot)
+  const aboutU = $("#about-updates");
+  if (aboutU) aboutU.onclick = () => {
+    $("#about-modal").hidden = true;
+    openSettings("updates");
+  };
+  const aboutD = $("#about-donate");
+  if (aboutD) aboutD.onclick = () => api("/api/open_link", { method: "POST",
+    body: JSON.stringify({ url: DONATE_URL }) });
+  // фоновая перепроверка каждые 30 минут (forced: суточный троттлинг бэкенда
+  // её бы гасил — обновление, вышедшее после запуска, иначе не находится);
+  // суточная автопроверка после старта не тормозит boot
+  setInterval(() => updCheck(true, true), 30 * 60 * 1000);
   setTimeout(() => updCheck(false, true), 8000);
 }
 
@@ -10746,8 +10853,11 @@ async function init() {
     $("#up-run").onclick = upRun;
     $("#up-abort").onclick = upAbort;
   }
-  $("#btn-settings").onclick = openSettings;
+  $("#btn-settings").onclick = () => openSettings();
   $("#btn-history").onclick = openHistory;
+  $("#btn-about").onclick = openAbout;
+  $("#btn-donate").onclick = () => api("/api/open_link", { method: "POST",
+    body: JSON.stringify({ url: DONATE_URL }) });
   updSetup();
   updStateLoad();
   bindTabCtxMenu();

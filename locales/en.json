@@ -687,7 +687,7 @@
   "upd_check": "Check for updates",
   "upd_channel": "Update channel",
   "upd_ch_release": "Releases",
-  "upd_ch_beta": "Releases + beta",
+  "upd_ch_beta": "Pre-release",
   "upd_hint": "Check runs daily and at startup; install applies on the next restart.",
   "upd_title": "Update available",
   "upd_download": "Download & install",
@@ -747,5 +747,15 @@
   "swt_triggers": "Triggers",
   "swt_variables": "Variables",
   "upr_f_price": "Price",
-  "origin_mod": "File from mod"
+  "origin_mod": "File from mod",
+  "upr_map_settings": "Map settings",
+  "upr_sector_reward": "Sector {n} reward",
+  "set_tab_updates": "Updates",
+  "upd_checking": "Checking…",
+  "donate": "Support the project",
+  "about_title": "About",
+  "about_author": "Author: Hanigun",
+  "about_version": "Version",
+  "about_goto_updates": "Open updates",
+  "about_support": "Support the project"
 }

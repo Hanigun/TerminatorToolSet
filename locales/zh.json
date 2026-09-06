@@ -687,7 +687,7 @@
   "upd_check": "\u68c0\u67e5\u66f4\u65b0",
   "upd_channel": "\u66f4\u65b0\u6e20\u9053",
   "upd_ch_release": "\u53d1\u5e03\u7248",
-  "upd_ch_beta": "\u53d1\u5e03\u7248 + \u6d4b\u8bd5\u7248",
+  "upd_ch_beta": "\u9884\u53d1\u5e03",
   "upd_hint": "\u6bcf\u65e5\u548c\u542f\u52a8\u65f6\u68c0\u67e5\uff1b\u4e0b\u6b21\u91cd\u542f\u65f6\u5b89\u88c5\u3002",
   "upd_title": "\u6709\u53ef\u7528\u66f4\u65b0",
   "upd_download": "\u4e0b\u8f7d\u5e76\u5b89\u88c5",
@@ -747,5 +747,15 @@
   "swt_triggers": "触发器",
   "swt_variables": "变量",
   "upr_f_price": "价格",
-  "origin_mod": "来自模组的文件"
+  "origin_mod": "来自模组的文件",
+  "upr_map_settings": "地图设置",
+  "upr_sector_reward": "第{n}扇区奖励",
+  "set_tab_updates": "更新",
+  "upd_checking": "检查中…",
+  "donate": "支持项目",
+  "about_title": "关于",
+  "about_author": "作者：Hanigun",
+  "about_version": "版本",
+  "about_goto_updates": "打开更新",
+  "about_support": "支持项目"
 }

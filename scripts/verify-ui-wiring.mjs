@@ -218,12 +218,32 @@ function section(name, asserts) {
     [/register_updates\(app, ctx\)/.test(read("app.py")) && /upd=upd/.test(read("app.py")), "update service must be composed in app.py context"],
     [/contents_directory="ToolSetLibs"/.test(read("../compiler/TerminatorToolSet.spec")), "spec must rename _internal to ToolSetLibs"],
     [/\/release/.test(worker) && /\/prerelease/.test(worker) && /GH_TOKEN/.test(worker), "worker.js must serve /release + /prerelease with a token"],
-    [/id="btn-update"/.test(html) && /id="update-modal"/.test(html) && /id="set-upd-check"/.test(html) && /id="set-upd-channel"/.test(html), "page must have the header update button, modal, settings check and channel"],
-    [/function updCheck\(/.test(appjs) && /function updDownload\(/.test(appjs) && /function updPollTick\(/.test(appjs), "app.js must check, download and poll update progress"],
-    [/\.upd-dot/.test(css) && /\.upd-fill/.test(css) && /\.upd-notes/.test(css), "update button dot, progress bar and notes must be styled"],
+    [/id="btn-update"/.test(html) && /id="set-upd-check"/.test(html) && /id="set-upd-channel"/.test(html) && /id="upd-notes"/.test(html) && /id="upd-progress"/.test(html) && /id="upd-hint"/.test(html) && /id="upd-actions"/.test(html), "page must have header update button, settings tab with check/channel/changelog/progress/actions"],
+    [/function updCheck\(/.test(appjs) && /function updDownload\(/.test(appjs) && /function updPollTick\(/.test(appjs) && /function updPaintInline\(/.test(appjs), "app.js must check, download, poll, and paint inline changelog"],
+    [/\.upd-dot/.test(css) && /\.upd-fill/.test(css) && /\.upd-notes-inline/.test(css), "update button dot, progress bar and inline notes must be styled"],
     [/__version__ as VERSION/.test(read("app.py")), "app version must come from the single package source"],
     [/is_newer/.test(updsvc) && /apply_pending_update/.test(updsvc), "update service must compare versions and apply staged releases"],
     [/upd_check/.test(read("locales/ru.json")) && /upd_check/.test(read("locales/en.json")) && /upd_check/.test(read("locales/de.json")) && /upd_check/.test(read("locales/zh.json")), "update strings must exist in all 4 locales"],
+  ].map(([c, m]) => [c, m]));
+  if (bad) process.exit(1);
+}
+
+// ---------- G11: header extras + settings updates tab + map settings ----------
+{
+  const shell = read("terminator_toolset/api/shell.py");
+  const cfg = read("terminator_toolset/domain/config.py");
+  const bad = section("HDR GATE PASSED", [
+    [/id="btn-donate"/.test(html) && /id="btn-about"/.test(html) && /id="about-modal"/.test(html) && /id="about-social"/.test(html), "header must have donate + about buttons and the about modal with socials"],
+    [!/id="update-modal"/.test(html) && /data-st="updates"/.test(html) && /id="upd-notes"/.test(html) && /id="upd-actions"/.test(html), "updates must live in the settings tab (inline changelog), no separate modal"],
+    [/ABOUT_LINKS/.test(appjs) && /DONATE_URL/.test(appjs) && /function openAbout\(/.test(appjs), "about links/donate URL must be single-sourced in app.js"],
+    [/\/api\/open_link/.test(shell) && /_OPEN_LINK_ALLOW/.test(shell), "external links must go through an allowlisted backend endpoint"],
+    [/30 \* 60 \* 1000/.test(appjs) && /b\.hidden = !has/.test(appjs), "update button must stay hidden until found, with a 30-minute background recheck"],
+    [/upr_sector_reward/.test(appjs) && /\.replace\("\{n\}"/.test(appjs), "sector heads must render the localized reward name"],
+    [/data-i18n="upr_map_settings"/.test(html) && /\.modal-card\.upr-set-card/.test(css), "map settings modal must be renamed and fixed-size"],
+    [/paintCmpSrc[\s\S]*?is-off/.test(appjs), "compare source switch must use clickable is-off like the map"],
+    [/"tray_enabled": True/.test(cfg) && /"browser_to_tray": True/.test(cfg), "tray options must default to on"],
+    [/\.donate-btn/.test(css) && /\.social-btn/.test(css) && /\.tab-sub-path/.test(css) && /\.toast \{[^}]*120%/.test(css), "donate/social buttons, readable tab paths and +20% toasts must be styled"],
+    [/upr_map_settings/.test(read("locales/ru.json")) && /upr_sector_reward/.test(read("locales/en.json")) && /set_tab_updates/.test(read("locales/de.json")) && /donate/.test(read("locales/zh.json")) && /about_title/.test(read("locales/ru.json")), "batch strings must exist in all 4 locales"],
   ].map(([c, m]) => [c, m]));
   if (bad) process.exit(1);
 }
