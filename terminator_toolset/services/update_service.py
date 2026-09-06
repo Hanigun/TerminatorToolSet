@@ -103,35 +103,66 @@ def apply_pending_update(program_dir, cfg_dir, log=None):
             pass
         return ""
     keep_top = {"configs", "Logs", "uprising_backups", "UprisingCustomPresets"}
-    failures = 0
-    for root, dirs, files in os.walk(staged):
-        rel = os.path.relpath(root, staged)
-        top = rel.split(os.sep)[0] if rel != "." else ""
-        if top in keep_top:
-            dirs[:] = []
-            continue
-        # never touch user data, even nested
-        dirs[:] = [d for d in dirs if d not in keep_top
-                   and not (d.lower().endswith(".db"))]
-        dst_dir = program_dir if rel == "." else os.path.join(program_dir, rel)
-        try:
-            os.makedirs(dst_dir, exist_ok=True)
-        except OSError:
-            failures += 1
-            continue
-        for fn in files:
-            if fn.lower().endswith((".db", ".log")):
+
+    def _walk():
+        for root, dirs, files in os.walk(staged):
+            rel = os.path.relpath(root, staged)
+            top = rel.split(os.sep)[0] if rel != "." else ""
+            if top in keep_top:
+                dirs[:] = []
                 continue
+            # never touch user data, even nested
+            dirs[:] = [d for d in dirs if d not in keep_top
+                       and not (d.lower().endswith(".db"))]
+            dst_dir = (program_dir if rel == "."
+                       else os.path.join(program_dir, rel))
+            pairs = []
+            for fn in files:
+                if fn.lower().endswith((".db", ".log")):
+                    continue
+                pairs.append((os.path.join(root, fn),
+                              os.path.join(dst_dir, fn)))
+            yield dst_dir, pairs
+
+    def _try_copy():
+        """One pass, returns (src, dst) pairs that hit a locked file."""
+        todo = []
+        for dst_dir, pairs in _walk():
             try:
-                shutil.copy2(os.path.join(root, fn),
-                             os.path.join(dst_dir, fn))
+                os.makedirs(dst_dir, exist_ok=True)
             except OSError:
-                failures += 1
-    if failures:
+                todo.extend(pairs)
+                continue
+            for src, dst in pairs:
+                try:
+                    shutil.copy2(src, dst)
+                except OSError:
+                    todo.append((src, dst))
+        return todo
+
+    # the previous process may have exited seconds ago (locked DLLs):
+    # retry locked files before giving up, otherwise the install ends up
+    # half-new and the next boot crashes (e.g. unknown encoding: idna).
+    failed = _try_copy()
+    for _ in range(3):
+        if not failed:
+            break
+        time.sleep(2)
+        still = []
+        for src, dst in failed:
+            try:
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                shutil.copy2(src, dst)
+            except OSError:
+                still.append((src, dst))
+        failed = still
+    if failed:
         if log:
             try:
-                log("update apply: %d file(s) failed, keeping pending %s"
-                    % (failures, version))
+                names = ", ".join(os.path.basename(d)
+                                  for _, d in failed[:10])
+                log("update apply: %d file(s) failed, keeping pending %s: %s"
+                    % (len(failed), version, names))
             except Exception:  # noqa: BLE001
                 pass
         return ""
