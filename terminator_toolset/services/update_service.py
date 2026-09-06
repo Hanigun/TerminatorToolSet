@@ -251,9 +251,24 @@ class Updates:
         asset = zips[0] if zips else None
         available = None
         if version and is_newer(version, self._current) and asset:
+            # The repo is private, so the asset's browser_download_url 404s
+            # for anonymous downloads: fetch the binary through the worker
+            # (/asset streams it with GH_TOKEN, the token never leaves the
+            # server). ?pre=1 must match the channel the metadata came from,
+            # otherwise the worker's membership check rejects the id.
+            url = str(asset["url"])
+            try:
+                aid = int(asset.get("id") or 0)
+            except (TypeError, ValueError):
+                aid = 0
+            if aid and server:
+                q = "?repo=" + urllib.parse.quote(repo or "") + "&id=" + str(aid)
+                if channel == "beta":
+                    q += "&pre=1"
+                url = server + "/asset" + q
             available = {"version": version,
                          "notes": str(data.get("notes") or ""),
-                         "url": asset["url"], "name": asset.get("name") or "",
+                         "url": url, "name": asset.get("name") or "",
                          "size": asset.get("size") or 0,
                          "channel": channel}
         try:

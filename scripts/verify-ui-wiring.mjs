@@ -217,12 +217,14 @@ function section(name, asserts) {
     [/\/api\/update_state/.test(apiupd) && /\/api\/update_check/.test(apiupd) && /\/api\/update_download/.test(apiupd) && /\/api\/update_progress/.test(apiupd), "backend must serve the update state/check/download/progress routes"],
     [/register_updates\(app, ctx\)/.test(read("app.py")) && /upd=upd/.test(read("app.py")), "update service must be composed in app.py context"],
     [/contents_directory="ToolSetLibs"/.test(read("../compiler/TerminatorToolSet.spec")), "spec must rename _internal to ToolSetLibs"],
-    [/\/release/.test(worker) && /\/prerelease/.test(worker) && /GH_TOKEN/.test(worker), "worker.js must serve /release + /prerelease with a token"],
+    [/\/release/.test(worker) && /\/prerelease/.test(worker) && /\/asset/.test(worker) && /GH_TOKEN/.test(worker), "worker.js must serve /release + /prerelease + /asset with a token"],
+    [/application\/octet-stream/.test(worker) && /asset not in latest release/.test(worker) && /no-store/.test(worker), "worker /asset must stream the binary with membership check and no-store"],
     [/id="btn-update"/.test(html) && /id="set-upd-check"/.test(html) && /id="set-upd-channel"/.test(html) && /id="upd-notes"/.test(html) && /id="upd-progress"/.test(html) && /id="upd-hint"/.test(html) && /id="upd-actions"/.test(html), "page must have header update button, settings tab with check/channel/changelog/progress/actions"],
     [/function updCheck\(/.test(appjs) && /function updDownload\(/.test(appjs) && /function updPollTick\(/.test(appjs) && /function updPaintInline\(/.test(appjs), "app.js must check, download, poll, and paint inline changelog"],
     [/\.upd-dot/.test(css) && /\.upd-fill/.test(css) && /\.upd-notes-inline/.test(css), "update button dot, progress bar and inline notes must be styled"],
     [/__version__ as VERSION/.test(read("app.py")), "app version must come from the single package source"],
     [/is_newer/.test(updsvc) && /apply_pending_update/.test(updsvc), "update service must compare versions and apply staged releases"],
+    [/\/asset/.test(updsvc) && /browser_download_url 404/.test(updsvc), "downloads must go through the worker /asset proxy (direct links 404 on private repos)"],
     [/upd_check/.test(read("locales/ru.json")) && /upd_check/.test(read("locales/en.json")) && /upd_check/.test(read("locales/de.json")) && /upd_check/.test(read("locales/zh.json")), "update strings must exist in all 4 locales"],
   ].map(([c, m]) => [c, m]));
   if (bad) process.exit(1);
