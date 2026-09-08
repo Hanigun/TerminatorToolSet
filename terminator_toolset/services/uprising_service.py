@@ -16,12 +16,51 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 # -- module constants (game data layout) --------------------------------------
+# OUTER = папка с main.py (исходники) — рядом лежит GameScripts
+_OUTER_DIR = os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))))
 _SS_NS = "urn:schemas-microsoft-com:office:spreadsheet"
 _ICON_FILES = ["tanks.xml", "cars.xml", "helicopters.xml",
                "squads.xml", "inventory_items.xml"]
 _PRESET_FILES = ["squad_upgrade_presets.xml", "tank_upgrade_presets.xml",
                  "car_upgrade_presets.xml", "heli_upgrade_presets.xml"]
 _CFG_CATS = ["squads", "tanks", "cars", "helicopters", "inventory_items"]
+# -- рандомайзер v2 -----------------------------------------------------------
+# Папки режимов: встроенные (в exe/рядом) + пользовательские (перекрытия).
+_RND_DIR_BUILTIN = "UprisingRandomizer"
+_RND_DIR_CUSTOM = "UprisingCustomRandomizer"
+_RND_NAMES = ("easy", "balanced", "hard", "chaos")
+# Фракции v2 (конфиг) -> имя щита/меты. neutral из v1 тоже принимаем (=grey).
+_RND_FACTIONS = ("player", "legion", "integrators", "founders", "grey",
+                 "yellow", "neutral")
+_RND_FACTION_MAP = {"player": "player", "legion": "legion",
+                    "integrators": "integrators", "founders": "movement",
+                    "grey": "marauders", "neutral": "marauders",
+                    "yellow": "cartel"}
+# Стартовые сектора игрока и столицы (UPR_CAPITALS в uprising.js).
+_RND_STARTS = (1, 2, 22)
+_RND_CAPITALS = (1, 4, 12, 18, 22)
+_RND_MODES = ("own", "mix", "free")
+# Правила по умолчанию на режим: Легко/Баланс с ±1, Сложно/Хаос строго;
+# free только через Эксперт/свои пресеты (в 4 базовых не используется).
+_RND_DEFAULTS = {
+    "easy": {"faction_mode": "own", "chaos_k": 0.4, "count_heads": True,
+             "diff_soft_pm": True, "no_origin": False,
+             "no_neighbours": False, "cap_heads": 20, "seed_default": 12345},
+    "balanced": {"faction_mode": "own", "chaos_k": 1.0, "count_heads": True,
+                 "diff_soft_pm": True, "no_origin": False,
+                 "no_neighbours": False, "cap_heads": 0, "seed_default": 12345},
+    "hard": {"faction_mode": "own", "chaos_k": 1.2, "count_heads": True,
+             "diff_soft_pm": False, "no_origin": False,
+             "no_neighbours": False, "cap_heads": 20, "seed_default": 12345},
+    "chaos": {"faction_mode": "mix", "chaos_k": 2.0, "count_heads": True,
+              "diff_soft_pm": False, "no_origin": True,
+              "no_neighbours": False, "cap_heads": 0, "seed_default": 12345},
+}
+_RND_WEIGHTS_DFLT = {"squads": 1.0, "cars": 2.0, "tanks": 3.0,
+                     "helicopters": 3.0, "inventory_items": 0.2}
+_RND_LOOT_DFLT = {"rare_min_cost": 1500, "rare_only_diff": 4,
+                  "rare_in_capital": True, "common_free": True}
 _SWT_TEAMS = ["player", "founders", "legion", "marauders", "cartel",
               "integrators", "resistance", "mercenaries", "neutral",
               "player_ally", "founders_ally", "integrators_ally",
@@ -32,6 +71,13 @@ _SPECIES_NAME_RE = re.compile(r"<Data[^>]*>(.*?)</Data>", re.S)
 _SPECIES_ROW_RE = re.compile(r"<Row[^>]*>(.*?)</Row>", re.S)
 _UPRISING_REL = os.path.join("dlc", "Resistance", "basis", "scripts",
                              "species", "shop_presets.xml")
+# Маркер файла карты: sysname наград секторов (DLC Resistance). Тот же
+# паттерн, что группировка секторов на фронте (uprGroups в uprising.js):
+# детект срабатывает ровно тогда, когда карта покажет секторы.
+_UPR_SECTOR_RE = re.compile(r"^sector_\d+_reward")
+# Карта — если сектор-строк не меньше минимума И не меньше половины
+# именованных строк (DLC: 39/39; базовый файл: 0/27 -> таблица).
+_UPR_SECTOR_MIN = 2
 
 
 # -- uprising -----------------------------------------------------------------
@@ -44,9 +90,12 @@ class Uprising:
       inventory_items.xml -> icon (ui/pictures/inventory/name.dds)
     Upgrade presets (*_upgrade_presets.xml) point at a base unit
     (squad_sysname/unit_sysname) and inherit its icon.
-    Icon files resolve: app assets -> source root (basis\\textures\\...)
-    -> unpacked game -> DLC overlays. .dds converts to .png on the fly
-    (Pillow) with a disk cache.
+    Icon files resolve: готовые webp из CustomImages/<слой> ->
+    source root (basis\\textures\\...) -> unpacked game -> DLC overlays.
+    Встроенных иконок юнитов в программе нет. .dds конвертируется в
+    CustomImages/<слой>/{stem}.webp (слой: игра=BaseGame, проект/мод=
+    имя папки корня) через dds_converter (Pillow), существующий файл
+    просто перезаписывается.
     """
 
     def __init__(self, store, config, entities, log, base_dir, app_dir):
@@ -56,13 +105,13 @@ class Uprising:
         self._log = log
         self._base = base_dir   # assets root (frozen: _MEIPASS, else repo)
         self._app_dir = app_dir  # folder with app.py (dev fallback)
-        self.icon_dir = os.path.join(app_dir, "assets", "UprisingMap Editor")
+        self.icon_dir = os.path.join(app_dir, "assets", "UprisingMap")
         # release: full assets/ next to the EXE wins over the bundled one
         self.icon_dir_ext = os.path.join(config.dir, "assets",
-                                         "UprisingMap Editor")
+                                         "UprisingMap")
         if not os.path.isdir(self.icon_dir_ext):
             self.icon_dir_ext = os.path.join(os.path.dirname(config.dir),
-                                             "assets", "UprisingMap Editor")
+                                             "assets", "UprisingMap")
         self.png_cache = os.path.join(tempfile.gettempdir(), "tsh_upr_icons")
         self.webp_buckets = {
             "vehicles": os.path.join(self.icon_dir, "UnitIcons", "tech_pic",
@@ -70,7 +119,15 @@ class Uprising:
             "infantry": os.path.join(self.icon_dir, "UnitIcons", "tech_pic",
                                      "infantry_icons_small"),
             "inventory": os.path.join(self.icon_dir, "inventory"),
+            # готовые webp из .dds (плоско): второе место поиска иконок
+            "custom": os.path.join(app_dir, "assets", "CustomImages"),
         }
+        # релиз: внешние assets/ рядом с EXE выигрывают у встроенных
+        self.custom_dir_ext = os.path.join(config.dir, "assets",
+                                           "CustomImages")
+        if not os.path.isdir(self.custom_dir_ext):
+            self.custom_dir_ext = os.path.join(os.path.dirname(config.dir),
+                                               "assets", "CustomImages")
         self.webp_idx = {"mt": 0.0, "map": {}}  # stem.lower() -> (bucket, file)
         self.icon_cache = {}  # layers-key -> {"mt": float, "map": {...}}
         self.dlc_cache = {}   # root -> (dlc dir mtime, [dlc dirs])
@@ -79,6 +136,40 @@ class Uprising:
         self.data_mem = {"mt": 0.0, "map": {}}  # bucket/file -> data-URL
         self.shields_mem = {"mt": -1.0, "map": {}}  # key -> data-URL
         self.placeholder = os.path.join(self.png_cache, "_placeholder.png")
+        # кэш иконок в релиз не пакуется (как Logs): папка создаётся
+        # при первом старте, webp кладёт туда конвертер
+        self.ensure_custom_images()
+
+    def ensure_custom_images(self):
+        """Создать корни CustomImages (внешний рядом с EXE + встроенный),
+        если их нет: свежий релиз приезжает без этой папки вообще.
+        Важно: primary (config.dir) создаём первым и перепривязываем ext
+        на него — иначе isdir-фолбэк из __init__ увёл бы кэш в родителя
+        каталога программы. Подпапки слоёв дожарит сам конвертер
+        (_custom_target)."""
+        try:
+            primary = os.path.join(self._config.dir, "assets",
+                                   "CustomImages")
+        except Exception:  # noqa: BLE001
+            primary = ""
+        if primary:
+            try:
+                os.makedirs(primary, exist_ok=True)
+            except OSError:
+                pass
+            try:
+                if os.path.isdir(primary):
+                    self.custom_dir_ext = primary
+            except Exception:  # noqa: BLE001
+                pass
+        for d in dict.fromkeys((self.custom_dir_ext,
+                                self.webp_buckets.get("custom", ""))):
+            if not d:
+                continue
+            try:
+                os.makedirs(d, exist_ok=True)
+            except OSError:
+                pass
 
     # -- species parsing --------------------------------------------------------
     @staticmethod
@@ -125,10 +216,11 @@ class Uprising:
         return base, overlay
 
     def _layer_roots(self, root):
-        """Data lookup layers in order: unpacked game -> project -> mod.
-        The game is the source of truth; project and mod fill the gaps
-        (e.g. icons of a loaded mod). Ready-made app webp assets come
-        even earlier, see icon_webp."""
+        """Data lookup layers in order: the map's own source root first,
+        then unpacked game -> project -> mod. The source the map was
+        opened from wins (e.g. a map from the mod sees mod icons first),
+        the rest fill the gaps. Ready-made app webp assets come even
+        earlier, see icon_webp."""
         try:
             game = self.unpacked_root()
         except Exception:  # noqa: BLE001
@@ -143,7 +235,8 @@ class Uprising:
         except Exception:  # noqa: BLE001
             mod = ""
         layers = []
-        for cand in (game, proj, mod, os.path.normpath(root or "")):
+        for cand in (os.path.normpath(root or ""), game, proj, mod,
+                     self._gamescripts_dir()):
             if not cand or not os.path.isdir(cand):
                 continue
             p = os.path.normpath(cand)
@@ -152,11 +245,31 @@ class Uprising:
                 layers.append(p)
         return layers
 
+    def _gamescripts_dir(self):
+        """Bundled GameScripts (stock game scripts + helpers): last-resort
+        fallback when a file is missing in project/game/mod. Used for unit
+        icons and sysname autocomplete."""
+        cands = [os.path.join(_OUTER_DIR, "GameScripts")]
+        try:
+            cdir = (self._config.dir or "") if hasattr(self._config, "dir") else ""
+        except Exception:  # noqa: BLE001
+            cdir = ""
+        if cdir:
+            cands.append(os.path.join(cdir, "GameScripts"))
+            cands.append(os.path.join(os.path.dirname(cdir), "GameScripts"))
+        for c in cands:
+            try:
+                if c and os.path.isdir(c):
+                    return os.path.normpath(c)
+            except OSError:
+                pass
+        return ""
+
     def icon_map(self, root):
         """{sysname: (texture-relative icon path, kind: unit|item)} from
-        species + upgrade presets. Layers game -> project -> mod: first wins
-        (game is the source of truth, then additions). Cached over all
-        layers, invalidated by file mtimes."""
+        species + upgrade presets. Layers, map source first: first wins
+        (the source the map was opened from, then the rest). Cached over
+        all layers, invalidated by file mtimes."""
         layers = self._layer_roots(root)
         if not layers:
             return {}
@@ -254,10 +367,12 @@ class Uprising:
 
     @staticmethod
     def _icon_variants(p):
-        """File name variants: exact, then png/dds/tga extension swaps."""
+        """File name variants: exact, then png/dds/tga extension swaps,
+        ready-made webp last (bundled app assets are webp; the ready index
+        is checked first, this is only the file fallback)."""
         b, e = os.path.splitext(p)
         out = [p]
-        for x in (".png", ".dds", ".tga"):
+        for x in (".png", ".dds", ".tga", ".webp"):
             if x != e.lower():
                 out.append(b + x)
         return out
@@ -280,26 +395,46 @@ class Uprising:
         self.dlc_cache[root] = (mt, dirs)
         return dirs
 
-    def icon_file(self, root, rel, kind):
-        """First existing icon file: app assets -> layers game -> project
-        -> mod (each with its own DLC overlays). When the exact name is
-        found nowhere (mod points at a missing texture), take a sibling
-        icon of the same family from the same folder."""
+    def icon_file(self, root, rel, kind, custom_first=True):
+        """First existing icon file: готовые webp из CustomImages/<слой>
+        (плоско по имени + {stem}.webp в подпапках) -> the map's own
+        source root -> unpacked game -> project -> mod (each with its own
+        DLC overlays). Встроенных иконок юнитов/предметов в программе
+        больше нет (только плейсхолдеры/щиты/карта), их проверка убрана.
+        custom_first=False — только исходник из слоёв (для решений
+        о переконвертации: stale-webp не должен прятать свежий .dds).
+        When the exact name is found nowhere (mod points at
+        a missing texture), take a sibling icon of the same family from
+        the same folder."""
         rel = (rel or "").replace("\\", "/").strip("/\\")
         if not rel:
             return ""
         base = os.path.basename(rel)
         rp = rel.replace("/", os.sep)
         cands = []
-        for _idir in (self.icon_dir_ext, self.icon_dir):
-            if kind == "item":
-                # items live in assets as a flat file-name list
-                inv = os.path.join(_idir, "inventory")
-                cands += [os.path.join(inv, base), os.path.join(inv, rp)]
-            else:
-                unit = os.path.join(_idir, "UnitIcons")
-                cands += [os.path.join(unit, rp),
-                          os.path.join(unit, "tech_pic", rp)]
+        # готовые webp из CustomImages (плоский legacy + подпапки слоёв)
+        if custom_first:
+            for _cdir in (self.custom_dir_ext,
+                          self.webp_buckets.get("custom", "")):
+                if not _cdir:
+                    continue
+                cands.append(os.path.join(_cdir, base))
+                stem, _ = os.path.splitext(base)
+                if stem:
+                    cands.append(os.path.join(_cdir, stem + ".webp"))
+                    try:
+                        subs = sorted(os.listdir(_cdir))
+                    except OSError:
+                        continue
+                    for sub in subs:
+                        _p = os.path.join(_cdir, sub)
+                        try:
+                            isdir = os.path.isdir(_p)
+                        except OSError:
+                            continue
+                        if isdir:
+                            cands.append(os.path.join(_p, base))
+                            cands.append(os.path.join(_p, stem + ".webp"))
         roots = self._layer_roots(root)
         for rt in roots:
             if kind == "item":
@@ -325,6 +460,13 @@ class Uprising:
     # -- ready-made webp --------------------------------------------------------
     def webp_bucket_dir(self, bucket: str) -> str:
         """External (next to EXE) bucket wins over the bundled one."""
+        if bucket == "custom":
+            try:
+                if self.custom_dir_ext and os.path.isdir(self.custom_dir_ext):
+                    return self.custom_dir_ext
+            except Exception:  # noqa: BLE001
+                pass
+            return self.webp_buckets.get(bucket, "")
         ext = os.path.join(self.icon_dir_ext, "UnitIcons", "tech_pic",
                            "vehicles_icons_small" if bucket == "vehicles"
                            else "infantry_icons_small" if bucket == "infantry"
@@ -342,13 +484,31 @@ class Uprising:
         """Ready-made webp icon index: stem.lower() -> (bucket, file).
         Both the bundled dir and the external one (next to the EXE, which
         wins at serve time) are indexed; external files override bundled.
-        Rebuilt on folder mtimes; *_preselected/*_selected are fallback
-        only, when no base icon exists. No dds search or conversion."""
+        Rebuilt on folder mtimes (custom incl. layer subdirs: getmtime
+        самой папки не видит записи внутри подпапок); *_preselected/
+        *_selected are fallback only, when no base icon exists. Custom:
+        подпапка слоя бьёт плоский legacy, выбор между слоями — по
+        _custom_preference в icon_webp. No dds search or conversion."""
         try:
             mt = 0.0
             for bucket in list(self.webp_buckets.keys()):
-                for _d in dict.fromkeys((self.webp_buckets.get(bucket, ""),
-                                         self.webp_bucket_dir(bucket))):
+                dirs = [self.webp_buckets.get(bucket, ""),
+                        self.webp_bucket_dir(bucket)]
+                if bucket == "custom":
+                    for _d in list(dict.fromkeys(dirs)):
+                        if not _d:
+                            continue
+                        try:
+                            for _sub in os.listdir(_d):
+                                _p = os.path.join(_d, _sub)
+                                try:
+                                    if os.path.isdir(_p):
+                                        dirs.append(_p)
+                                except OSError:
+                                    pass
+                        except OSError:
+                            pass
+                for _d in dict.fromkeys(dirs):
                     if not _d:
                         continue
                     try:
@@ -360,12 +520,29 @@ class Uprising:
         if self.webp_idx["map"] and self.webp_idx["mt"] == mt:
             return self.webp_idx["map"]
         idx = {}
+        custom = {}
         for _pass in (0, 1):
             for bucket in list(self.webp_buckets.keys()):
                 # bundled first, external override (same order as serving)
                 for _d in dict.fromkeys((self.webp_buckets.get(bucket, ""),
                                          self.webp_bucket_dir(bucket))):
                     if not _d:
+                        continue
+                    if bucket == "custom":
+                        self._index_custom_dir(_d, "", idx, custom, _pass)
+                        try:
+                            subs = sorted(os.listdir(_d))
+                        except OSError:
+                            continue
+                        for sub in subs:
+                            _p = os.path.join(_d, sub)
+                            try:
+                                isdir = os.path.isdir(_p)
+                            except OSError:
+                                continue
+                            if isdir:
+                                self._index_custom_dir(_p, sub, idx, custom,
+                                                       _pass)
                         continue
                     try:
                         files = os.listdir(_d)
@@ -388,7 +565,44 @@ class Uprising:
                             idx.setdefault(base, (bucket, fn))
         self.webp_idx["mt"] = mt
         self.webp_idx["map"] = idx
+        self.webp_idx["custom"] = custom
         return idx
+
+    @staticmethod
+    def _index_custom_dir(_d, sub, idx, custom, _pass):
+        """Одна папка custom-слоя (sub='' — плоский legacy): relfn всегда
+        с прямыми слешами (для URL), base legacy — со strip _hash8."""
+        try:
+            files = os.listdir(_d)
+        except OSError:
+            return
+        for fn in files:
+            if not fn.lower().endswith(".webp"):
+                continue
+            stem = fn[:-5].lower()
+            if sub:
+                base = stem  # новый формат: строго {stem}.webp
+                relfn = sub + "/" + fn
+            else:
+                base = stem
+                # legacy плоский конвертер писал {stem}_{hash8}.webp
+                m = re.match(r"^(.*)_[0-9a-f]{8}$", base)
+                if m:
+                    base = m.group(1)
+                relfn = fn
+            ent = custom.setdefault(base, [])
+            if relfn not in ent:
+                ent.append(relfn)
+            if (base != stem) == (_pass == 0):
+                continue
+            if _pass == 0:
+                prev = idx.get(base)
+                if (prev is None or prev[0] != "custom"
+                        or ("/" in prev[1]) <= ("/" in relfn)):
+                    # external wins; подпапка бьёт плоский legacy
+                    idx[base] = ("custom", relfn)
+            else:
+                idx.setdefault(base, ("custom", relfn))
 
     @staticmethod
     def webp_asset_url(bucket, fn):
@@ -398,12 +612,15 @@ class Uprising:
     def icon_webp(self, root, name):
         """Ready-made webp icon for a sysname -> (bucket, file) | None.
         Direct name -> preset->base (via the species map) -> icon file
-        name from species. No dds search."""
+        name from species. Custom: из всех подпапок слоя выбирается та,
+        что выше в _custom_preference (тот же порядок, что icon_file).
+        No dds search."""
         idx = self.webp_index()
         key = (name or "").strip()
         if not key:
             return None
         hit = idx.get(key.lower())
+        base = key.lower()
         if not hit:
             try:
                 ent = self.icon_map(root).get(key)
@@ -413,7 +630,36 @@ class Uprising:
                 rel = (ent[0] or "").replace("\\", "/")
                 stem = os.path.splitext(os.path.basename(rel))[0].lower()
                 hit = idx.get(stem)
+                base = stem
+        if hit and hit[0] == "custom":
+            pick = self._custom_pick(root, base)
+            if pick:
+                return ("custom", pick)
         return hit
+
+    def _custom_pick(self, root, base):
+        """Лучший relfn custom-слоя для base: первая подпапка из
+        _custom_preference, где файл есть; иначе плоский legacy; иначе ''.
+        Зеркалит порядок слоёв icon_file."""
+        try:
+            cands = self.webp_idx.get("custom", {}).get(base, [])
+        except Exception:  # noqa: BLE001
+            cands = []
+        if not cands:
+            return ""
+        try:
+            pref = self._custom_preference(root)
+        except Exception:  # noqa: BLE001
+            pref = []
+        for nm in pref:
+            want = nm + "/"
+            for relfn in cands:
+                if relfn.startswith(want):
+                    return relfn
+        for relfn in cands:
+            if "/" in relfn:
+                return relfn
+        return cands[0]
 
     def placeholder_png(self):
         """Missing-icon stub: grey square with a '?'.
@@ -440,8 +686,17 @@ class Uprising:
             self._log.warning("uprising placeholder failed: %s", e)
             return ""
 
-    # category stubs for map chips (served as-is, no conversion)
+    # category stubs for map chips (served as-is, no conversion).
+    # Плоский assets/UprisingMap (ext рядом с EXE выигрывает); legacy-пары
+    # (подпапки UnitIcons/.../inventory) — запасной вариант ниже.
     _UPR_PLACEHOLDERS = {
+        "cars": "placeholder_vehicle.webp",
+        "tanks": "placeholder_vehicle.webp",
+        "helicopters": "placeholder_vehicle.webp",
+        "squads": "placeholder_Squads_items.webp",
+        "inventory_items": "placeholder_Squads_items.webp",
+    }
+    _UPR_PLACEHOLDERS_LEGACY = {
         "cars": ("vehicles", "placeholder_vehicle.webp"),
         "tanks": ("vehicles", "placeholder_vehicle.webp"),
         "helicopters": ("vehicles", "placeholder_vehicle.webp"),
@@ -449,18 +704,57 @@ class Uprising:
         "inventory_items": ("inventory", "upgrd_placeholder.webp"),
     }
 
-    def category_placeholder(self, cat):
+    def _flat_upr_dirs(self):
+        """Плоский assets/UprisingMap: сначала внешний (рядом с EXE)."""
+        try:
+            ext = (self.icon_dir_ext
+                   if self.icon_dir_ext and os.path.isdir(self.icon_dir_ext)
+                   else "")
+        except Exception:  # noqa: BLE001
+            ext = ""
+        return [d for d in dict.fromkeys((ext, self.icon_dir)) if d]
+
+    def category_placeholder(self, cat, name=""):
         """Ready-made webp stub for a map category (as the frontend sends
-        it), or ''. External assets next to the EXE win over bundled."""
-        ent = self._UPR_PLACEHOLDERS.get((cat or "").strip().lower())
+        it), or ''. External assets next to the EXE win over bundled.
+        Items with the wpn_ prefix get their own wpn_placeholder.webp."""
+        if (name or "").strip().lower().startswith("wpn_"):
+            for _d in self._flat_upr_dirs():
+                p = os.path.join(_d, "wpn_placeholder.webp")
+                try:
+                    if os.path.isfile(p):
+                        return p
+                except OSError:
+                    pass
+            for _d in dict.fromkeys((self.webp_bucket_dir("inventory"),
+                                     self.webp_buckets.get("inventory", ""))):
+                if not _d:
+                    continue
+                p = os.path.join(_d, "wpn_placeholder.webp")
+                try:
+                    if os.path.isfile(p):
+                        return p
+                except OSError:
+                    pass
+        fn = self._UPR_PLACEHOLDERS.get((cat or "").strip().lower())
+        if not fn:
+            return ""
+        for _d in self._flat_upr_dirs():
+            p = os.path.join(_d, fn)
+            try:
+                if os.path.isfile(p):
+                    return p
+            except OSError:
+                pass
+        ent = self._UPR_PLACEHOLDERS_LEGACY.get((cat or "").strip().lower())
         if not ent:
             return ""
-        bucket, fn = ent
+        bucket, legacy = ent
         for _d in dict.fromkeys((self.webp_bucket_dir(bucket),
                                  self.webp_buckets.get(bucket, ""))):
             if not _d:
                 continue
-            p = os.path.join(_d, fn)
+            p = os.path.join(_d, legacy)
             try:
                 if os.path.isfile(p):
                     return p
@@ -502,8 +796,282 @@ class Uprising:
             self._log.warning("uprising icon convert failed %s: %s", src, e)
             return None
 
+    def _custom_subdir_for(self, src, root):
+        """Имя подпапки CustomImages по слою, где лежит исходный .dds:
+        распакованная игра -> BaseGame, проект/мод -> имя папки их корня,
+        свой root карты -> имя его папки. Только один уровень, без
+        полного пути (CustomImages/<имя>/stem.webp). '' = не определился."""
+        try:
+            ap = os.path.normcase(os.path.abspath(src or ""))
+        except Exception:  # noqa: BLE001
+            return ""
+        if not ap:
+            return ""
+        try:
+            game = os.path.normcase(os.path.abspath(self.unpacked_root()
+                                                    or ""))
+        except Exception:  # noqa: BLE001
+            game = ""
+        try:
+            proj = os.path.normcase(os.path.abspath(
+                (self._entities.project.root
+                 if self._entities.project is not None else "") or ""))
+        except Exception:  # noqa: BLE001
+            proj = ""
+        try:
+            mod = os.path.normcase(os.path.abspath(
+                self._store.normal(self._config.get("mod_path") or "") or ""))
+        except Exception:  # noqa: BLE001
+            mod = ""
+        try:
+            own = os.path.normcase(os.path.abspath(root or ""))
+        except Exception:  # noqa: BLE001
+            own = ""
+
+        def inside(base):
+            return bool(base) and (ap == base
+                                   or ap.startswith(base + os.sep))
+
+        if mod and inside(mod):
+            return os.path.basename(os.path.normpath(mod)) or ""
+        if proj and inside(proj):
+            return os.path.basename(os.path.normpath(proj)) or ""
+        if game and inside(game):
+            return "BaseGame"
+        if own and inside(own):
+            return os.path.basename(os.path.normpath(own)) or ""
+        return ""
+
+    def _custom_preference(self, root):
+        """Имена подпапок CustomImages в порядке слоёв _layer_roots:
+        свой root -> игра (BaseGame) -> проект -> мод. Без дублей и пустот.
+        Выбор converted-иконки зеркалит icon_file: побеждает тот же слой."""
+        try:
+            layers = self._layer_roots(root)
+        except Exception:  # noqa: BLE001
+            layers = []
+        try:
+            game = os.path.normpath(self.unpacked_root() or "")
+        except Exception:  # noqa: BLE001
+            game = ""
+        try:
+            proj = os.path.normpath(
+                (self._entities.project.root
+                 if self._entities.project is not None else "") or "")
+        except Exception:  # noqa: BLE001
+            proj = ""
+        try:
+            mod = os.path.normpath(
+                self._store.normal(self._config.get("mod_path") or "") or "")
+        except Exception:  # noqa: BLE001
+            mod = ""
+        names = []
+        for layer in layers:
+            key = os.path.normcase(layer)
+            if game and key == os.path.normcase(game):
+                nm = "BaseGame"
+            elif proj and key == os.path.normcase(proj):
+                nm = os.path.basename(proj)
+            elif mod and key == os.path.normcase(mod):
+                nm = os.path.basename(mod)
+            else:
+                nm = os.path.basename(layer)
+            if nm and nm not in names:
+                names.append(nm)
+        return names
+
+    def _custom_target(self, subdir=""):
+        """Папка CustomImages для записи: внешняя рядом с EXE (релиз),
+        иначе встроенная. С подпапкой слоя (BaseGame/проект/мод).
+        Создаётся при необходимости."""
+        for d in (self.custom_dir_ext,
+                  self.webp_buckets.get("custom", "")):
+            if not d:
+                continue
+            try:
+                target = os.path.join(d, subdir) if subdir else d
+                os.makedirs(target, exist_ok=True)
+            except OSError:
+                continue
+            if os.path.isdir(target):
+                return target
+        return ""
+
+    @staticmethod
+    def _legacy_flat_re(stem):
+        return re.compile(r"^%s_[0-9a-f]{8}\.webp$" %
+                          re.escape(stem), re.IGNORECASE)
+
+    def _drop_legacy_flat(self, stem):
+        """Удалить старые плоские {stem}_{hash8}.webp после переезда
+        иконки в подпапку слоя: stale-дубликат больше не зашедоуит."""
+        if not stem:
+            return
+        rx = self._legacy_flat_re(stem)
+        for d in (self.custom_dir_ext,
+                  self.webp_buckets.get("custom", "")):
+            if not d:
+                continue
+            try:
+                names = os.listdir(d)
+            except OSError:
+                continue
+            for fn in names:
+                if rx.match(fn):
+                    try:
+                        os.remove(os.path.join(d, fn))
+                    except OSError:
+                        pass
+
+    def dds_webp(self, src, subdir=None, root=None):
+        """DDS -> WebP в assets/CustomImages/<слой>/ (качество 85).
+        Имя строго {stem}.webp от исходника (marder.dds -> marder.webp);
+        существующий файл просто перезаписывается. Свежий (не старше
+        исходника) — не переконвертируется. Путь к готовому файлу или ''."""
+        try:
+            if not src or not os.path.isfile(src):
+                return ""
+            if subdir is None and root:
+                subdir = self._custom_subdir_for(src, root) or ""
+            stem = os.path.splitext(os.path.basename(src))[0]
+            if not stem:
+                return ""
+            fn = stem + ".webp"
+            mt = os.path.getmtime(src)
+            for d in (self.custom_dir_ext,
+                      self.webp_buckets.get("custom", "")):
+                if not d:
+                    continue
+                dst = os.path.join(d, subdir, fn) if subdir else os.path.join(
+                    d, fn)
+                if os.path.isfile(dst):
+                    try:
+                        if os.path.getmtime(dst) >= mt:
+                            return dst
+                    except OSError:
+                        pass
+            dst_dir = self._custom_target(subdir or "")
+            if not dst_dir:
+                return ""
+            from . import dds_converter as _dc
+            if _dc.convert_file(src, os.path.join(dst_dir, fn)):
+                self._drop_legacy_flat(stem)
+                # индекс webp перестроится по mtime папки сам
+                return os.path.join(dst_dir, fn)
+            return ""
+        except Exception as e:  # noqa: BLE001
+            self._log.warning("uprising dds->webp failed %s: %s", src, e)
+            return ""
+
+    def convert_missing(self, root, names):
+        """Bulk DDS -> CustomImages/<слой>/ WebP одним запросом
+        (кнопка «Анализ»). Имя строго {stem}.webp, существующий
+        перезаписывается; свежий пропускается. Отдельный пул: процессы
+        в исходниках, потоки в frozen exe (spawn из сборки небезопасен).
+        Возвращает счётчики."""
+        from concurrent.futures import ThreadPoolExecutor
+        names = [str(n) for n in (names or []) if str(n).strip()][:600]
+        out = {"ok": True, "converted": 0, "ready": 0,
+               "missing": 0, "failed": 0}
+        if not names:
+            return out
+        amap = self.icon_map(root)
+        tasks = []
+        for n in names:
+            ent = amap.get(n)
+            if not ent:
+                # sysname нет в species, но прямой webp мог уже лежать
+                if self.icon_webp(root, n):
+                    out["ready"] += 1
+                else:
+                    out["missing"] += 1
+                continue
+            p = self.icon_file(root, ent[0], ent[1], custom_first=False)
+            if not p:
+                out["missing"] += 1
+                continue
+            if not p.lower().endswith(".dds"):
+                out["ready"] += 1
+                continue
+            stem = os.path.splitext(os.path.basename(p))[0]
+            if not stem:
+                out["missing"] += 1
+                continue
+            subdir = self._custom_subdir_for(p, root) or ""
+            fn = stem + ".webp"
+            tasks.append((n, p, subdir, fn))
+        if not tasks:
+            try:
+                self.webp_index()
+            except Exception:  # noqa: BLE001
+                pass
+            return out
+        targets = {}
+        jobs = []
+        for _n, src, subdir, fn in tasks:
+            if subdir not in targets:
+                targets[subdir] = self._custom_target(subdir)
+            dst_dir = targets[subdir]
+            if not dst_dir:
+                out["failed"] += 1
+                continue
+            dst = os.path.join(dst_dir, fn)
+            try:
+                fresh = (os.path.isfile(dst) and os.path.getmtime(dst)
+                         >= os.path.getmtime(src))
+            except OSError:
+                fresh = False
+            if fresh:
+                out["ready"] += 1
+            else:
+                jobs.append((src, dst, 85))
+        if jobs:
+            ex = None
+            try:
+                if not getattr(sys, "frozen", False):
+                    from concurrent.futures import ProcessPoolExecutor
+                    import multiprocessing as _mp
+                    ex = ProcessPoolExecutor(
+                        max_workers=max(1, min(4, (_mp.cpu_count() or 2))))
+                else:
+                    ex = ThreadPoolExecutor(max_workers=8)
+                from . import dds_converter as _dc
+                for _dst, ok in ex.map(_dc.convert_task, jobs):
+                    if ok:
+                        out["converted"] += 1
+                    else:
+                        out["failed"] += 1
+            except Exception as e:  # noqa: BLE001 - процессы не взлетели
+                self._log.warning("upr convert pool failed (%s), threads", e)
+                try:
+                    from . import dds_converter as _dc2
+                    with ThreadPoolExecutor(max_workers=8) as tex:
+                        for _dst, ok in tex.map(_dc2.convert_task, jobs):
+                            if ok:
+                                out["converted"] += 1
+                            else:
+                                out["failed"] += 1
+                except Exception:  # noqa: BLE001
+                    out["failed"] += len(jobs) - out["converted"]
+            finally:
+                try:
+                    if ex is not None:
+                        ex.shutdown(wait=True)
+                except Exception:  # noqa: BLE001
+                    pass
+        try:
+            for _src, dst, _q in jobs:
+                stem = os.path.splitext(os.path.basename(dst))[0]
+                if stem:
+                    self._drop_legacy_flat(stem)
+            self.webp_index()
+        except Exception:  # noqa: BLE001
+            pass
+        return out
+
     def data_url(self, bucket, fn):
-        """Ready-made webp as an in-memory data-URL (mtime-keyed cache)."""
+        """Ready-made webp as an in-memory data-URL (mtime-keyed cache).
+        fn custom может включать подпапку слоя (Sub/stem.webp)."""
         idx_mt = self.webp_idx["mt"]  # current after webp_index()
         ent = self.data_mem
         if ent["mt"] != idx_mt:
@@ -514,10 +1082,12 @@ class Uprising:
         if hit is None:
             # the hit may come from the external dir (next to the EXE);
             # bundled is the fallback, not the only source
-            path = os.path.join(self.webp_bucket_dir(bucket), fn)
+            path = os.path.join(self.webp_bucket_dir(bucket),
+                                *fn.split("/"))
             try:
                 if not os.path.isfile(path):
-                    path = os.path.join(self.webp_buckets[bucket], fn)
+                    path = os.path.join(self.webp_buckets[bucket],
+                                        *fn.split("/"))
                 with open(path, "rb") as f:
                     raw = f.read()
             except OSError:
@@ -538,8 +1108,8 @@ class Uprising:
         roots = []
         for r in (self._config.dir, os.path.dirname(self._config.dir), os.getcwd()):
             if r:
-                roots.append(os.path.join(r, "assets", "uprising", "shields"))
-        roots.append(os.path.join(self._base, "assets", "uprising", "shields"))
+                roots.append(os.path.join(r, "assets", "UprisingMap", "shields"))
+        roots.append(os.path.join(self._base, "assets", "UprisingMap", "shields"))
         seen, mts = {}, []
         for root in roots:
             try:
@@ -593,7 +1163,7 @@ class Uprising:
             try:
                 for cand in (os.path.join(self.icon_dir_ext, "global_map.webp"),
                              os.path.join(self._base, "assets",
-                                          "UprisingMap Editor",
+                                           "UprisingMap",
                                           "global_map.webp")):
                     try:
                         with open(cand, "rb") as f:
@@ -625,11 +1195,20 @@ class Uprising:
             if not ent:
                 return name
             icon_rel, kind = ent
-            p = self.icon_file(root, icon_rel, kind)
+            # исходник из слоёв: stale-webp не должен прятать свежий .dds
+            p = self.icon_file(root, icon_rel, kind, custom_first=False)
             if not p:
                 return name
             if p.lower().endswith(".dds"):
-                return name if not self.dds_png(p) else None
+                try:
+                    self.dds_webp(p, root=root)  # persistent webp,
+                    # best-effort: подпапка слоя, имя {stem}.webp
+                except Exception:  # noqa: BLE001
+                    pass
+                try:
+                    return None if self.icon_webp(root, name) else name
+                except Exception:  # noqa: BLE001
+                    return name
             return None
 
         missing = []
@@ -637,6 +1216,10 @@ class Uprising:
             for res in ex.map(warm, names):
                 if res:
                     missing.append(res)
+        try:
+            self.webp_index()  # сконвертированное точно видно дальше
+        except Exception:  # noqa: BLE001
+            pass
         return {"ok": True, "missing": missing}
 
     def icon_urls(self, root, names):
@@ -955,8 +1538,16 @@ class Uprising:
         return self._app_dir
 
     def preset_dirs(self):
-        """Built-in (next to exe + _MEIPASS + sources) and custom presets."""
+        """Built-in (embedded-кэш frozen exe + рядом с exe + _MEIPASS +
+        исходники) and custom presets."""
         builtin = []
+        try:
+            from . import embedded_cache as _emb
+            emb_presets = _emb.ensure()[1]
+        except Exception:  # noqa: BLE001
+            emb_presets = ""
+        if emb_presets and os.path.isdir(emb_presets):
+            builtin.append(emb_presets)
         for r in (os.path.join(self.program_dir(), "UprisingPresets"),
                   os.path.join(self._app_dir, "UprisingPresets")):
             if os.path.isdir(r) and r not in builtin:
@@ -1032,6 +1623,709 @@ class Uprising:
             return {"ok": False, "error": res}
         self._log.info("uprising preset saved: %s", p)
         return {"ok": True, "path": p, "units": res}
+
+    # -- режимы рандомайзера v2 -----------------------------------------------------
+    def rnd_dirs(self):
+        """Встроенные режимы (embedded-кэш frozen exe + рядом с exe +
+        _MEIPASS + исходники) и пользовательские перекрытия."""
+        builtin = []
+        try:
+            from . import embedded_cache as _emb
+            emb = _emb.ensure()
+            emb_rnd = emb[2] if len(emb) > 2 else ""
+        except Exception:  # noqa: BLE001
+            emb_rnd = ""
+        if emb_rnd and os.path.isdir(emb_rnd):
+            builtin.append(emb_rnd)
+        for r in (os.path.join(self.program_dir(), _RND_DIR_BUILTIN),
+                  os.path.join(self._app_dir, _RND_DIR_BUILTIN)):
+            if os.path.isdir(r) and r not in builtin:
+                builtin.append(r)
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            p = os.path.join(meipass, _RND_DIR_BUILTIN)
+            if os.path.isdir(p) and p not in builtin:
+                builtin.append(p)
+        custom = os.path.join(self.program_dir(), _RND_DIR_CUSTOM)
+        return builtin, custom
+
+    @staticmethod
+    def _rnd_name_ok(name: str):
+        """Санитизация имени режима: та же строгость, что preset_find."""
+        base = (name or "").strip()
+        if not base or "/" in base or "\\" in base or base.startswith("."):
+            return ""
+        if ".." in base or len(base) > 64:
+            return ""
+        base = base.strip()
+        if not base:
+            return ""
+        if not base.lower().endswith(".cfg"):
+            base += ".cfg"
+        stem = base[:-4]
+        if not re.fullmatch(r"[A-Za-z0-9_\- ]+", stem):
+            return ""
+        return base
+
+    def rnd_find(self, kind: str, name: str):
+        base = self._rnd_name_ok(name)
+        if not base:
+            return None
+        builtin, custom = self.rnd_dirs()
+        if kind == "custom":
+            dirs = [custom]
+        elif kind == "built-in":
+            dirs = builtin
+        else:  # any: сначала своё перекрытие, затем встроенные
+            dirs = [custom] + builtin
+        for d in dirs:
+            p = os.path.join(d, base)
+            if os.path.isfile(p):
+                return p
+        return None
+
+    def rnd_list(self):
+        """Режимы: встроенные + пользовательские (свой перекрывает)."""
+        builtin, custom = self.rnd_dirs()
+        out_b, seen = [], set()
+        for d in builtin:
+            try:
+                for fn in sorted(os.listdir(d)):
+                    if fn.lower().endswith(".cfg") and fn not in seen:
+                        seen.add(fn)
+                        out_b.append(fn)
+            except OSError:
+                pass
+        out_c = []
+        try:
+            if os.path.isdir(custom):
+                out_c = sorted(f for f in os.listdir(custom)
+                               if f.lower().endswith(".cfg"))
+        except OSError:
+            pass
+        return {"ok": True, "built_in": out_b, "custom": out_c}
+
+    @staticmethod
+    def rnd_detect(path: str):
+        """v2, если есть секция [MODE]; иначе v1 (ZONE-формат)."""
+        try:
+            with open(path, "r", encoding="utf-8-sig",
+                      errors="replace") as fh:
+                for raw in fh.read().splitlines():
+                    if raw.strip().upper() == "[MODE]":
+                        return "v2"
+        except OSError:
+            pass
+        return "v1"
+
+    @staticmethod
+    def _rnd_norm_diff(val: str):
+        """N или N-M -> (a, b) в 1..6 с нормализацией; None при мусоре."""
+        m = re.match(r"^\s*([0-9]+)(?:\s*-\s*([0-9]+))?\s*$",
+                     str(val or ""))
+        if not m:
+            return None
+        a = int(m.group(1))
+        b = int(m.group(2)) if m.group(2) is not None else a
+        if a > b:
+            a, b = b, a
+        clip = a != max(1, min(6, a)) or b != max(1, min(6, b))
+        a, b = max(1, min(6, a)), max(1, min(6, b))
+        return (a, b, clip)
+
+    def rnd_parse_v2(self, path: str):
+        """Парсинг конфига v2 с номерами строк: ошибки/предупреждения."""
+        try:
+            with open(path, "r", encoding="utf-8-sig",
+                      errors="replace") as fh:
+                lines = fh.read().splitlines()
+        except OSError as e:
+            return {"ok": False, "error": str(e)}
+        sect, data = "", {}
+        warns, errs = [], []
+        sect_lines = {}
+        # сырые строки для round-trip (неизвестное не теряем)
+        raw_tail = []
+        mode = {"name": ""}
+        rules = dict(_RND_DEFAULTS.get("balanced", {}))
+        weights = dict(_RND_WEIGHTS_DFLT)
+        loot = dict(_RND_LOOT_DFLT)
+        sectors, units = {}, []
+        seen_num = {}
+        cur = None
+        known_rule_keys = set(rules)
+        known_loot_keys = set(loot)
+        for i, raw in enumerate(lines, 1):
+            line = raw.strip()
+            if not line or line.startswith("#") or line.startswith(";"):
+                raw_tail.append((cur, raw))
+                continue
+            m = re.match(r"^\[(.+)\]$", line)
+            if m:
+                sect = m.group(1).strip().upper()
+                cur = sect
+                sect_lines.setdefault(sect, i)
+                if sect not in ("MODE", "RULES", "WEIGHTS", "SECTORS",
+                                "UNITS", "LOOT"):
+                    warns.append({"line": i,
+                                  "text": "неизвестная секция [%s]" % sect})
+                    cur = None
+                continue
+            if "=" not in line:
+                errs.append({"line": i, "text": "нет знака ="})
+                continue
+            k, v = line.split("=", 1)
+            k, v = k.strip(), v.strip()
+            if cur == "MODE":
+                if k.lower() == "name":
+                    mode["name"] = v
+                else:
+                    warns.append({"line": i,
+                                  "text": "неизвестный ключ MODE.%s" % k})
+            elif cur == "RULES":
+                kl = k.lower()
+                if kl not in known_rule_keys:
+                    warns.append({"line": i,
+                                  "text": "неизвестный ключ RULES.%s" % k})
+                    continue
+                if kl in ("count_heads", "diff_soft_pm", "no_origin",
+                          "no_neighbours"):
+                    lv = v.lower()
+                    if lv in ("1", "true", "yes", "да"):
+                        rules[kl] = True
+                    elif lv in ("0", "false", "no", "нет"):
+                        rules[kl] = False
+                    else:
+                        errs.append({"line": i,
+                                     "text": "RULES.%s: нужно true/false" % k})
+                elif kl == "faction_mode":
+                    if v.lower() in _RND_MODES:
+                        rules[kl] = v.lower()
+                    else:
+                        errs.append({"line": i,
+                                     "text": "faction_mode: own|mix|free"})
+                elif kl in ("chaos_k",):
+                    try:
+                        f = float(v.replace(",", "."))
+                    except ValueError:
+                        errs.append({"line": i,
+                                     "text": "chaos_k: число 0..2"})
+                        continue
+                    if not 0.0 <= f <= 2.0:
+                        errs.append({"line": i,
+                                     "text": "chaos_k: число 0..2"})
+                    else:
+                        rules[kl] = f
+                else:
+                    try:
+                        rules[kl] = int(v)
+                    except ValueError:
+                        errs.append({"line": i,
+                                     "text": "RULES.%s: целое число" % k})
+            elif cur == "WEIGHTS":
+                kl = k.lower()
+                if kl not in weights:
+                    warns.append({"line": i,
+                                  "text": "неизвестная категория %s" % k})
+                    continue
+                try:
+                    weights[kl] = float(v.replace(",", "."))
+                except ValueError:
+                    errs.append({"line": i,
+                                 "text": "WEIGHTS.%s: число" % k})
+            elif cur == "SECTORS":
+                try:
+                    num = int(k)
+                except ValueError:
+                    errs.append({"line": i,
+                                 "text": "сектор: номер 1..22"})
+                    continue
+                if not 1 <= num <= 22:
+                    errs.append({"line": i,
+                                 "text": "сектор вне 1..22"})
+                    continue
+                parts = v.split()
+                if len(parts) != 3:
+                    errs.append({"line": i,
+                                 "text": "формат: difficulty faction protect"})
+                    continue
+                nd = self._rnd_norm_diff(parts[0])
+                if nd is None:
+                    errs.append({"line": i,
+                                 "text": "сложность: N или N-M (1..6)"})
+                    continue
+                # в секторах диапазон схлопываем до одиночного: зона одна
+                diff = nd[0] if nd[0] == nd[1] else nd[0]
+                if nd[0] != nd[1]:
+                    warns.append({"line": i, "text":
+                                  "сектор %d: диапазон схлопнут до %d"
+                                  % (num, diff)})
+                if nd[2]:
+                    warns.append({"line": i, "text":
+                                  "сектор %d: обрезано до 1..6" % num})
+                fac = parts[1].lower()
+                if fac not in _RND_FACTIONS:
+                    errs.append({"line": i,
+                                 "text": "фракция: %s" % "/".join(
+                                     _RND_FACTIONS)})
+                    continue
+                prot = parts[2].lower()
+                if prot in ("-", "нет", "none"):
+                    prot = "-"
+                elif prot not in ("start", "capital"):
+                    errs.append({"line": i,
+                                 "text": "защита: -|start|capital"})
+                    continue
+                if prot == "start" and num not in _RND_STARTS:
+                    warns.append({"line": i, "text":
+                                  "сектор %d: start вне стартовой карты "
+                                  "(сохраняется как есть)" % num})
+                if num in seen_num:
+                    warns.append({"line": i, "text":
+                                  "сектор %d: дубликат строки %d, "
+                                  "берётся последняя"
+                                  % (num, seen_num[num])})
+                seen_num[num] = i
+                sectors[str(num)] = {"difficulty": diff, "faction": fac,
+                                     "protect": prot}
+            elif cur == "UNITS":
+                sysname = k.strip()
+                if not sysname or "=" in sysname or " " in sysname:
+                    errs.append({"line": i, "text": "пустой sysname"})
+                    continue
+                parts = v.split()
+                if len(parts) not in (2, 3, 4):
+                    errs.append({"line": i, "text":
+                                 "формат: difficulty category "
+                                 "[sector] [count]"})
+                    continue
+                nd = self._rnd_norm_diff(parts[0])
+                if nd is None:
+                    errs.append({"line": i,
+                                 "text": "сложность: N или N-M (1..6)"})
+                    continue
+                diff = str(nd[0]) if nd[0] == nd[1] else "%d-%d" % (nd[0],
+                                                                   nd[1])
+                if nd[2]:
+                    warns.append({"line": i, "text":
+                                  "%s: обрезано до 1..6" % sysname})
+                cat = parts[1].lower()
+                if cat not in _CFG_CATS:
+                    errs.append({"line": i, "text":
+                                 "категория: %s" % "/".join(_CFG_CATS)})
+                    continue
+                # сектор привязки: 0/пропуск = общий пул, 1..22 = свой сектор
+                sector = 0
+                if len(parts) >= 3:
+                    try:
+                        sector = int(parts[2].lstrip("sS"))
+                    except ValueError:
+                        errs.append({"line": i,
+                                     "text": "сектор: 1..22 (0 = общий пул)"})
+                        continue
+                    if not 0 <= sector <= 22:
+                        errs.append({"line": i, "text":
+                                     "сектор вне 0..22"})
+                        continue
+                # количество: N, xN или ×N (по умолчанию 1)
+                count = 1
+                if len(parts) >= 4:
+                    mc = re.match(r"^[x×]?([0-9]+)$",
+                                  parts[3].strip().lower())
+                    if not mc:
+                        errs.append({"line": i,
+                                     "text": "количество: 1..99"})
+                        continue
+                    count = int(mc.group(1))
+                    if not 1 <= count <= 99:
+                        errs.append({"line": i,
+                                     "text": "количество: 1..99"})
+                        continue
+                units.append({"sys": sysname, "diff": diff, "cat": cat,
+                              "sector": sector, "count": count})
+            elif cur == "LOOT":
+                kl = k.lower()
+                if kl not in known_loot_keys:
+                    warns.append({"line": i,
+                                  "text": "неизвестный ключ LOOT.%s" % k})
+                    continue
+                if kl in ("rare_in_capital", "common_free"):
+                    lv = v.lower()
+                    if lv in ("1", "true", "yes", "да"):
+                        loot[kl] = True
+                    elif lv in ("0", "false", "no", "нет"):
+                        loot[kl] = False
+                    else:
+                        errs.append({"line": i,
+                                     "text": "LOOT.%s: нужно true/false" % k})
+                else:
+                    try:
+                        loot[kl] = int(v)
+                    except ValueError:
+                        errs.append({"line": i,
+                                     "text": "LOOT.%s: целое число" % k})
+            else:
+                warns.append({"line": i, "text": "строка вне секций"})
+        if errs:
+            return {"ok": False, "errors": errs, "warnings": warns}
+        if "SECTORS" not in sect_lines:
+            return {"ok": False,
+                    "errors": [{"line": 0, "text": "нет секции [SECTORS]"}],
+                    "warnings": warns}
+        if "UNITS" not in sect_lines:
+            return {"ok": False,
+                    "errors": [{"line": 0, "text": "нет секции [UNITS]"}],
+                    "warnings": warns}
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            mtime = 0
+        return {"ok": True, "version": "v2", "mode": mode, "rules": rules,
+                "weights": weights, "sectors": sectors, "units": units,
+                "loot": loot, "warnings": warns, "mtime": mtime,
+                "path": path}
+
+    @staticmethod
+    def rnd_serialize_v2(data: dict):
+        """Сериализация v2 с русскими комментариями (для Блокнота)."""
+        mode = str((data.get("mode") or {}).get("name")
+                   or data.get("name") or "custom").strip() or "custom"
+        rules = data.get("rules") or {}
+        weights = data.get("weights") or {}
+        sectors = data.get("sectors") or {}
+        units = data.get("units") or []
+        loot = data.get("loot") or {}
+
+        def _b(v):
+            return "true" if v else "false"
+
+        L = ["# Terminator Overhaul - Uprising randomizer config v2",
+             "# Названия режимов — в locales (здесь не править)",
+             "# Числа и sysname правятся руками: # — комментарий",
+             "[MODE]", "name = " + mode, "",
+             "# --- Правила: как мешать ---",
+             "# faction_mode: own — свои по фракциям, mix — вперемешку,",
+             "#   free — без ограничений (только Эксперт/свои пресеты)",
+             "# chaos_k: 0..2 сила перемешивания;",
+             "#   в Хаосе сложность игнорируется, k мешает только позиции",
+             "# diff_soft_pm: галка «±1» — регион 4 берёт юниты 3-5",
+             "#   (края с половинным весом), выкл — строгое попадание",
+             "[RULES]",
+             "faction_mode = " + str(rules.get(
+                 "faction_mode",
+                 _RND_DEFAULTS["balanced"]["faction_mode"])),
+             "chaos_k = " + str(rules.get(
+                 "chaos_k", _RND_DEFAULTS["balanced"]["chaos_k"])),
+             "count_heads = " + _b(rules.get(
+                 "count_heads",
+                 _RND_DEFAULTS["balanced"]["count_heads"])),
+             "diff_soft_pm = " + _b(rules.get(
+                 "diff_soft_pm",
+                 _RND_DEFAULTS["balanced"]["diff_soft_pm"])),
+             "no_origin = " + _b(rules.get(
+                 "no_origin", _RND_DEFAULTS["balanced"]["no_origin"])),
+             "no_neighbours = " + _b(rules.get(
+                 "no_neighbours",
+                 _RND_DEFAULTS["balanced"]["no_neighbours"])),
+             "cap_heads = " + str(rules.get(
+                 "cap_heads", _RND_DEFAULTS["balanced"]["cap_heads"])),
+             "seed_default = " + str(rules.get(
+                 "seed_default",
+                 _RND_DEFAULTS["balanced"]["seed_default"])), "",
+             "# --- Веса категорий при подборе ---",
+             "[WEIGHTS]"]
+        for c in _CFG_CATS:
+            L.append("%s = %s" % (c, weights.get(c,
+                                                 _RND_WEIGHTS_DFLT[c])))
+        L += ["",
+              "# --- Секторы: num = difficulty faction protect ---",
+              "# difficulty 1..6 обязательна; protect: - | start | capital",
+              "# стартовые игрока: 1, 2, 22; столицы: 1, 4, 12, 18, 22",
+              "# пропущенная зона при сохранении дописывается явно",
+              "[SECTORS]"]
+        for n in range(1, 23):
+            s = sectors.get(str(n)) or sectors.get(n) or {}
+            L.append("%d = %s %s %s" % (
+                n, s.get("difficulty", 1), s.get("faction", "player"),
+                s.get("protect", "-")))
+        L += ["",
+              "# --- Юниты: sysname = difficulty category [sector] [count] ---",
+              "# difficulty: N или N-M (1..6); sector 1..22 = свой сектор,",
+              "#   пропуск = общий пул; count по умолчанию ×1",
+              "# юнита нет в списке — наследует сложность зоны-источника",
+              "[UNITS]"]
+        # общий пул — группировкой по категориям, как раньше;
+        # сектора — блоками «сектор N» с подгруппами категорий
+        try:
+            sec_of = lambda u: int(u.get("sector", 0) or 0)
+        except (TypeError, ValueError):
+            sec_of = lambda u: 0
+        try:
+            cnt_of = lambda u: max(1, min(99, int(u.get("count", 1) or 1)))
+        except (TypeError, ValueError):
+            cnt_of = lambda u: 1
+
+        def _tail(u):
+            s, c = sec_of(u), cnt_of(u)
+            t = ""
+            if s:
+                t += " %d" % s
+                if c != 1:
+                    t += " %d" % c
+            elif c != 1:
+                t += " 0 %d" % c
+            return t
+
+        pool = [u for u in units if not sec_of(u)]
+        by_cat = {}
+        for u in pool:
+            by_cat.setdefault(str(u.get("cat", "")), []).append(u)
+        if pool:
+            L.append("")
+            L.append("# ---- общий пул ----")
+        for c in _CFG_CATS:
+            rows = sorted(by_cat.get(c, []),
+                          key=lambda x: str(x.get("sys", "")).lower())
+            if not rows and c not in by_cat:
+                continue
+            L.append("")
+            L.append("# ---- %s ----" % c)
+            for u in rows:
+                L.append("%s = %s %s%s" % (u.get("sys", ""),
+                                           u.get("diff", "1"), c,
+                                           _tail(u)))
+        for n in range(1, 23):
+            su = sorted((u for u in units if sec_of(u) == n),
+                        key=lambda x: (str(x.get("cat", "")),
+                                       str(x.get("sys", "")).lower()))
+            if not su:
+                continue
+            L.append("")
+            L.append("# ---- сектор %d ----" % n)
+            last_c = None
+            for u in su:
+                c = str(u.get("cat", ""))
+                if c != last_c:
+                    L.append("# -- %s --" % c)
+                    last_c = c
+                L.append("%s = %s %s%s" % (u.get("sys", ""),
+                                           u.get("diff", "1"), c,
+                                           _tail(u)))
+        L += ["",
+              "# --- Лут: редкие предметы отдельно от юнитов ---",
+              "# редкие (cost >= rare_min_cost) только в сложных",
+              "# секторах (diff >= rare_only_diff) и столицах",
+              "[LOOT]",
+              "rare_min_cost = " + str(loot.get(
+                  "rare_min_cost", _RND_LOOT_DFLT["rare_min_cost"])),
+              "rare_only_diff = " + str(loot.get(
+                  "rare_only_diff", _RND_LOOT_DFLT["rare_only_diff"])),
+              "rare_in_capital = " + _b(loot.get(
+                  "rare_in_capital", _RND_LOOT_DFLT["rare_in_capital"])),
+              "common_free = " + _b(loot.get(
+                  "common_free", _RND_LOOT_DFLT["common_free"]))]
+        # неизвестные сырые строки дописываем хвостом (round-trip не теряет)
+        for extra in (data.get("extra_lines") or []):
+            L.append(str(extra))
+        return "\n".join(L) + "\n"
+
+    def rnd_mode_get(self, kind, name):
+        """Прочитать режим: v2 парсингом, v1 — как есть (только чтение)."""
+        p = self.rnd_find(kind, name)
+        if not p:
+            # встроенных может не быть в dev-окружении — смотрим пресеты v1?
+            # нет: режимы и пресеты — разные папки, пусто так пусто
+            return {"ok": False, "error": "not_found"}
+        ver = self.rnd_detect(p)
+        if ver == "v1":
+            r = self.cfg_read(p)
+            if not r.get("ok"):
+                return r
+            try:
+                mtime = os.path.getmtime(p)
+            except OSError:
+                mtime = 0
+            r.update({"version": "v1", "mtime": mtime, "path": p,
+                      "legacy": True})
+            return r
+        r = self.rnd_parse_v2(p)
+        if not r.get("ok"):
+            return r
+        _, custom = self.rnd_dirs()
+        r["is_custom"] = os.path.isfile(
+            os.path.join(custom, os.path.basename(p)))
+        return r
+
+    def rnd_mode_save(self, payload: dict):
+        """Сохранить режим: пишет ТОЛЬКО в Custom (встроенные не трогаем).
+
+        Проверяет mtime от клиента против диска (параллельная правка).
+        """
+        name = self._rnd_name_ok(payload.get("name", ""))
+        if not name:
+            return {"ok": False, "error": "bad_name"}
+        _, custom = self.rnd_dirs()
+        try:
+            os.makedirs(custom, exist_ok=True)
+        except OSError as e:
+            return {"ok": False, "error": str(e)}
+        p = self._store.normal(os.path.join(custom, name))
+        if os.path.isfile(p) and not payload.get("overwrite"):
+            return {"ok": False, "error": "exists"}
+        if os.path.isfile(p):
+            try:
+                cur_mt = os.path.getmtime(p)
+            except OSError:
+                cur_mt = 0
+            want = payload.get("mtime") or 0
+            try:
+                want = float(want)
+            except (TypeError, ValueError):
+                want = 0
+            if want and abs(cur_mt - want) > 1.5:
+                return {"ok": False, "error": "conflict", "mtime": cur_mt}
+        text = self.rnd_serialize_v2(payload.get("data") or payload)
+        try:
+            with open(p, "w", encoding="utf-8") as fh:
+                fh.write(text)
+        except OSError as e:
+            return {"ok": False, "error": str(e)}
+        # валидация записанного: что сохранили, то и читается
+        chk = self.rnd_parse_v2(p)
+        if not chk.get("ok"):
+            return {"ok": False, "error": "saved_invalid",
+                    "details": chk.get("errors")}
+        self._log.info("uprising rnd mode saved: %s", p)
+        try:
+            mtime = os.path.getmtime(p)
+        except OSError:
+            mtime = 0
+        return {"ok": True, "path": p, "mtime": mtime,
+                "warnings": chk.get("warnings", [])}
+
+    def rnd_mode_delete(self, name):
+        """Удалить только свой режим (встроенные удалять нельзя)."""
+        base = self._rnd_name_ok(name)
+        if not base:
+            return {"ok": False, "error": "bad_name"}
+        _, custom = self.rnd_dirs()
+        p = os.path.join(custom, base)
+        if not os.path.isfile(p):
+            return {"ok": False, "error": "not_found"}
+        try:
+            os.remove(p)
+        except OSError as e:
+            return {"ok": False, "error": str(e)}
+        return {"ok": True}
+
+    def rnd_mode_duplicate(self, src, name):
+        """Дублировать режим в Custom под новым именем."""
+        dest = self._rnd_name_ok(name)
+        if not dest:
+            return {"ok": False, "error": "bad_name"}
+        p = self.rnd_find("any", src)
+        if not p:
+            return {"ok": False, "error": "not_found"}
+        if self.rnd_detect(p) == "v1":
+            return {"ok": False, "error": "legacy_src"}
+        r = self.rnd_parse_v2(p)
+        if not r.get("ok"):
+            return r
+        _, custom = self.rnd_dirs()
+        dp = os.path.join(custom, dest)
+        if os.path.isfile(dp):
+            return {"ok": False, "error": "exists"}
+        data = {"mode": {"name": dest[:-4]}, "rules": r["rules"],
+                "weights": r["weights"], "sectors": r["sectors"],
+                "units": r["units"], "loot": r["loot"]}
+        return self.rnd_mode_save({"name": dest, "data": data})
+
+    def rnd_convert_v1(self, kind, name, new_name):
+        """Преобразовать v1-пресет (ZONE) в режим v2 (копия в Custom)."""
+        dest = self._rnd_name_ok(new_name)
+        if not dest:
+            return {"ok": False, "error": "bad_name"}
+        # v1 ищем среди режимов И среди пресетов (старые UprisingPresets)
+        p = self.rnd_find(kind, name)
+        if not p or self.rnd_detect(p) != "v1":
+            p = self.preset_find(kind if kind in ("custom",
+                                                  "built-in") else "built-in",
+                                 name)
+        if not p:
+            return {"ok": False, "error": "not_found"}
+        r = self.cfg_read(p)
+        if not r.get("ok"):
+            return r
+        zmap = {}
+        for z in (r.get("zones") or []):
+            try:
+                n = int(z.get("num", 0))
+            except (TypeError, ValueError):
+                continue
+            if 1 <= n <= 22:
+                zmap[n] = z
+        sectors = {}
+        for n in range(1, 23):
+            z = zmap.get(n) or {}
+            try:
+                d = int(z.get("diff", 1) or 1)
+            except (TypeError, ValueError):
+                d = 1
+            d = max(1, min(6, d))
+            fac = str(z.get("faction", "") or "player").strip().lower()
+            if fac not in _RND_FACTIONS:
+                fac = "player"
+            if n in _RND_CAPITALS:
+                prot = "capital"
+            elif n in _RND_STARTS:
+                prot = "start"
+            else:
+                prot = "-"
+            sectors[str(n)] = {"difficulty": d, "faction": fac,
+                               "protect": prot}
+        # v1 хранит сектор и количество в каждой строке — переносим как есть;
+        # один sysname в разных секторах = разные записи (не сливаем),
+        # в одном секторе — сливаем сложности в диапазон, количество — максимум
+        bucket = {}
+        for u in (r.get("units") or []):
+            sysname = str(u.get("sys", "")).strip()
+            if not sysname:
+                continue
+            diff = str(u.get("diff", "") or "").strip() or "1"
+            nd = self._rnd_norm_diff(diff)
+            if nd is None:
+                nd = (1, 1, False)
+            cat = str(u.get("cat", "") or "").strip().lower()
+            if cat not in _CFG_CATS:
+                cat = "squads"
+            try:
+                sec = int(u.get("sector", 0) or 0)
+            except (TypeError, ValueError):
+                sec = 0
+            sec = max(0, min(22, sec))
+            try:
+                cnt = int(u.get("count", 1) or 1)
+            except (TypeError, ValueError):
+                cnt = 1
+            cnt = max(1, min(99, cnt))
+            key = (sysname, cat, sec)
+            if key in bucket:
+                old = bucket[key]
+                bucket[key] = (min(old[0], nd[0]), max(old[1], nd[1]),
+                               max(old[2], cnt))
+            else:
+                bucket[key] = (nd[0], nd[1], cnt)
+        units = []
+        for (sysname, cat, sec), (a, b, cnt) in sorted(bucket.items()):
+            diff = str(a) if a == b else "%d-%d" % (a, b)
+            units.append({"sys": sysname, "diff": diff, "cat": cat,
+                          "sector": sec, "count": cnt})
+        data = {"mode": {"name": dest[:-4]},
+                "rules": dict(_RND_DEFAULTS["balanced"]),
+                "weights": dict(_RND_WEIGHTS_DFLT),
+                "sectors": sectors, "units": units,
+                "loot": dict(_RND_LOOT_DFLT)}
+        return self.rnd_mode_save({"name": dest, "data": data})
 
     # -- map backup / reset ---------------------------------------------------------
     _UPR_BACKUP_KEEP = 5    # generations per source root, newest wins
@@ -1209,26 +2503,111 @@ class Uprising:
                 return {"ok": False, "error": str(e)}
         return {"ok": True, "restored": restored, "cfg_removed": cfg_removed}
 
+    def is_uprising_shop(self, path):
+        """Контентный детект файла карты: sysname строк — награды секторов
+        (sector_N_reward[_variant]). Путь НЕ участвует: DLC-файл с рабочего
+        стола, лежащий в корне проекта, опознаётся так же, как из
+        dlc/Resistance. Базовый shop_presets (магазины кампании test_shop_*,
+        vega_*, tortuga_*...) сектор-строк не имеет -> False (таблица)."""
+        try:
+            with open(path, "r", encoding="utf-8",
+                       errors="replace") as fh:
+                text = fh.read(4 << 20)
+        except (OSError, ValueError):
+            return False
+        sector = named = 0
+        for i, m in enumerate(_SPECIES_ROW_RE.finditer(text)):
+            if i == 0:
+                continue  # header
+            mm = _SPECIES_NAME_RE.search(m.group(1))
+            if not mm:
+                continue
+            name = mm.group(1).strip()
+            if not name:
+                continue
+            named += 1
+            if _UPR_SECTOR_RE.match(name):
+                sector += 1
+        return sector >= _UPR_SECTOR_MIN and sector * 2 >= named
+
     def find_shop(self, root):
-        """Locate the Resistance DLC shop_presets.xml: mod project or the
-        unpacked game (whichever root the frontend passed)."""
+        """Найти файл карты по СОДЕРЖИМОМУ: первый shop_presets.xml
+        с наградами секторов. Фиксированный DLC-путь — лишь первый
+        кандидат (стабильность старого поведения); дальше — все точные
+        shop_presets.xml под root по сортированному пути. Путь сам по
+        себе ничего не решает: базовый файл из dlc-папки картой не
+        станет, а секторный из корня проекта — станет. '' вместо
+        базового файла: пустая карта с тостом больше не открывается."""
         if not root or not os.path.isdir(root):
             return {"ok": True, "path": ""}
-        p = os.path.join(root, *_UPRISING_REL.split(os.sep))
-        if os.path.isfile(p):
-            return {"ok": True, "path": p}
-        # tree fallback: unpacked-game layout may differ; prefer the
-        # dlc/resistance variant, else the first one found
-        best = ""
+        cands = []
+        fixed = os.path.join(root, *_UPRISING_REL.split(os.sep))
+        if os.path.isfile(fixed):
+            cands.append(fixed)
+        extra = []
         for dirpath, dirnames, filenames in os.walk(root):
-            if "shop_presets.xml" in (f.lower() for f in filenames):
-                cand = os.path.join(dirpath, "shop_presets.xml")
-                if "resistance" in dirpath.lower():
-                    best = cand
-                    break
-                if not best:
-                    best = cand
-        return {"ok": True, "path": best}
+            for f in filenames:
+                if f.lower() == "shop_presets.xml":
+                    p = os.path.join(dirpath, f)
+                    if p != fixed:
+                        extra.append(p)
+        cands.extend(sorted(extra))
+        for p in cands:
+            try:
+                if self.is_uprising_shop(p):
+                    return {"ok": True, "path": p}
+            except Exception:  # noqa: BLE001
+                continue
+        return {"ok": True, "path": ""}
+
+    # -- species file lookup («Открыть в таблице» с карты) ---------------------
+    _SPECIES_BY_CAT = {
+        "squads": "squads.xml",
+        "tanks": "tanks.xml",
+        "cars": "cars.xml",
+        "helicopters": "helicopters.xml",
+        "inventory_items": "inventory_items.xml",
+    }
+
+    def species_file(self, root, cat, name):
+        """Species XML holding a sysname: base file, then DLC overlays
+        (first containing the name wins); fallback — the existing base
+        file so the grid still opens. '' when nothing exists on disk."""
+        fname = self._SPECIES_BY_CAT.get((cat or "").strip().lower(), "")
+        want = (name or "").strip()
+        if not fname or not root or not os.path.isdir(root):
+            return {"ok": True, "path": ""}
+        cands = [os.path.join(root, "basis", "scripts", "species", fname)]
+        for d in self._dlc_dirs(root):
+            cands.append(os.path.join(d, "basis", "scripts", "species", fname))
+        gs = self._gamescripts_dir()
+        if gs:
+            cands.append(os.path.join(gs, "basis", "scripts", "species", fname))
+            for d in self._dlc_dirs(gs):
+                cands.append(os.path.join(d, "basis", "scripts", "species", fname))
+        existing = [p for p in cands
+                    if os.path.isfile(p)]
+        if not existing:
+            return {"ok": True, "path": ""}
+        if want:
+            for p in existing:
+                try:
+                    with open(p, "r", encoding="utf-8",
+                              errors="replace") as fh:
+                        text = fh.read()
+                except OSError:
+                    continue
+                hit = False
+                for i, m in enumerate(_SPECIES_ROW_RE.finditer(text)):
+                    if i == 0:
+                        continue  # header
+                    mm = _SPECIES_NAME_RE.search(m.group(1))
+                    if mm and mm.group(1).strip() == want:
+                        hit = True
+                        break
+                if hit:
+                    return {"ok": True, "path": p}
+        return {"ok": True, "path": existing[0]}
 
     # -- sysname dictionaries ---------------------------------------------------------
     def scan_names(self, root: str, subpatterns, cap: int = 5000) -> set:
@@ -1298,7 +2677,8 @@ class Uprising:
         """sysname reference of every unit/item in the project: first column
         of basis + DLC overlay species files (+ inventory). cats: split by
         category strictly from their own files - cars/squads/tanks/
-        helicopters/inventory_items (for autocomplete)."""
+        helicopters/inventory_items (for autocomplete). Bundled GameScripts
+        is unioned as a fallback for names missing in the source root."""
         out = set()
         cats = {"squads": set(), "tanks": set(), "cars": set(),
                 "helicopters": set(), "inventory_items": set()}
@@ -1306,14 +2686,19 @@ class Uprising:
                        "cars.xml": "cars", "helicopters.xml": "helicopters",
                        "inventory_items.xml": "inventory_items",
                        "invs.xml": "inventory_items"}
-        if root and os.path.isdir(root):
+        scan_roots = [root] if (root and os.path.isdir(root)) else []
+        gs = self._gamescripts_dir()
+        if gs and all(os.path.normcase(gs) != os.path.normcase(r)
+                      for r in scan_roots):
+            scan_roots.append(gs)
+        for r in scan_roots:
             paths = []
-            for pattern in (os.path.join(root, "basis", "scripts", "species", "*.xml"),
-                            os.path.join(root, "dlc", "*", "basis", "scripts",
+            for pattern in (os.path.join(r, "basis", "scripts", "species", "*.xml"),
+                            os.path.join(r, "dlc", "*", "basis", "scripts",
                                          "species", "*.xml")):
                 paths.extend(glob.glob(pattern))
-            for extra in (os.path.join(root, "basis", "scripts", "invs.xml"),
-                          os.path.join(root, "basis", "scripts", "inventory_items.xml")):
+            for extra in (os.path.join(r, "basis", "scripts", "invs.xml"),
+                          os.path.join(r, "basis", "scripts", "inventory_items.xml")):
                 if os.path.isfile(extra):
                     paths.append(extra)
             for p in paths:

@@ -1,0 +1,171 @@
+/* chrome.css — 02/20 · шапка topbar, кнопки окна, тулбар · порядок каскада: CSS_ORDER в scripts/verify-ui-wiring.mjs */
+/* ---- Top bar ---- */
+.topbar {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  padding: 0 0 0 10px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+  flex-shrink: 0;
+}
+.brand { display: flex; align-items: center; gap: 8px; min-width: 180px; }
+.brand-logo { width: 22px; height: 22px; display: block; object-fit: contain; }
+.brand-name { font-weight: 600; letter-spacing: .3px; }
+.topbar-center { flex: 1; display: flex; justify-content: center; min-width: 0; }
+.file-path { color: var(--text-mute); font-size: 12px; max-width: 100%; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; cursor: pointer; padding: 3px 8px;
+  border-radius: var(--radius); transition: color .12s, background .12s; }
+.file-path:hover { color: var(--accent); background: var(--bg-card); }
+.file-path:empty { cursor: default; pointer-events: none; }
+.topbar-right { display: flex; align-items: center; gap: 6px; min-width: 120px; justify-content: flex-end; }
+
+.btn.sm { padding: 3px 9px; font-size: 11.5px; height: 26px; }
+.tb-sep { width: 1px; height: 22px; background: var(--border); margin: 0 6px; flex-shrink: 0; }
+
+/* ---- Window controls (frameless) ---- */
+.window-controls { display: flex; align-self: stretch; margin-left: 4px; }
+.wc-btn {
+  width: 42px; border: none; background: transparent; color: var(--text-mute);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: background .12s, color .12s; padding: 0;
+}
+.wc-btn:hover { background: var(--bg-card); color: var(--text); }
+.wc-btn.wc-close:hover { background: var(--red); color: #fff; }
+.wc-btn svg { display: block; }
+
+.icon-btn {
+  background: transparent; border: 1px solid transparent; color: var(--text-mute);
+  height: 30px; min-width: 30px; border-radius: var(--radius); cursor: pointer;
+  font-size: 15px; line-height: 1; transition: all .12s;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.icon-btn svg { display: block; width: 18px; height: 18px; }
+/* hidden-атрибут слабее display из класса: без этого правила кнопки
+   вроде крестиков путей в настройках видны всегда, хотя hidden стоит */
+.icon-btn[hidden] { display: none; }
+
+.icon-btn:hover { color: var(--text); background: var(--bg-card); border-color: var(--border); }
+/* глобальные эффекты кнопок (один стиль на всё приложение):
+   .danger — красное закрытие: крестик и рамка позади светятся красным;
+   вешается на каждый крестик (модалки, вкладки, сравнение, поиск, стоп);
+   .gold — тот же эффект акцентным золотом (очистка пометок, сворачивание) */
+.icon-btn.danger { color: var(--red); opacity: .75; }
+.icon-btn.danger:hover,
+.tab-close:hover,
+.tab:hover .tab-close:hover,
+.tab.active .tab-close:hover {
+  color: var(--red); opacity: 1;
+  /* только свечение иконки из-под кнопки; рамка позади — обычный
+     .icon-btn:hover, без красной обводки и красной заливки */
+  filter: drop-shadow(0 0 4px rgba(226, 88, 74, .6));
+}
+.icon-btn.gold:hover { color: var(--accent); opacity: 1;
+  filter: drop-shadow(0 0 4px var(--accent-glow)); }
+/* шестерёнка настроек: та же анимация, что у шестерёнки карты Uprising
+   (.upr-map-btn.icon в uprising.css) — поворот на 60° за .35s */
+#btn-settings svg { transition: transform .35s ease; }
+#btn-settings:hover svg { transform: rotate(60deg); }
+
+.lang-toggle {
+  background: var(--bg-card); border: 1px solid var(--border); color: var(--text);
+  border-radius: var(--radius); cursor: pointer; height: 30px; padding: 0 8px;
+  display: flex; align-items: center; transition: all .15s;
+}
+.lang-toggle:hover { border-color: var(--accent); }
+.lang-flag { font-weight: 700; font-size: 12px; letter-spacing: .5px; }
+
+/* ---- Toolbar ---- */
+.toolbar {
+  display: flex; align-items: center; gap: 6px; padding: 8px 12px;
+  background: var(--bg-elev); border-bottom: 1px solid var(--border);
+  flex-wrap: nowrap; overflow-x: auto;
+  flex-shrink: 0;
+}
+.toolbar-sep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+.spacer { flex: 1; }
+
+/* Gold accent buttons: shared rounding + glow */
+.btn {
+  background: var(--accent); color: #1a1a1a; border: 1px solid var(--accent);
+  padding: 6px 12px; border-radius: var(--radius); font-family: var(--font);
+  font-size: 12.5px; font-weight: 600; cursor: pointer; transition: all .13s;
+  white-space: nowrap;
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+.btn:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 0 16px var(--accent-glow), 0 0 28px var(--accent-glow);
+}
+.btn:active { transform: translateY(1px); box-shadow: 0 0 6px var(--accent-glow); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn.ghost { background: transparent; color: var(--text); border-color: var(--border); box-shadow: none; }
+.btn.ghost:hover { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
+.btn.accent { background: var(--accent); border-color: var(--accent); color: #16130c; font-weight: 700; }
+.btn.accent:hover { filter: brightness(1.1); }
+.btn.big { padding: 10px 22px; font-size: 14px; }
+.btn:disabled { opacity: .4; cursor: not-allowed; filter: none; transform: none; box-shadow: none; }
+
+/* Icon-only accent buttons (save / undo / project): sidebar-fab style with
+   the glow reduced by ~20% (rest 8px instead of 10px, hover 14/26 vs 18/32) */
+.btn-fab {
+  width: 34px; height: 34px; padding: 0; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent); color: #1a1a1a; border: none; border-radius: var(--radius);
+  cursor: pointer;
+  box-shadow: 0 2px 9px rgba(0, 0, 0, .35), 0 0 8px var(--accent-glow);
+  transition: transform .14s ease, box-shadow .14s ease, filter .14s ease;
+}
+.btn-fab:hover {
+  transform: scale(1.08);
+  filter: brightness(1.1);
+  box-shadow: 0 0 14px var(--accent-glow), 0 0 26px var(--accent-glow);
+}
+.btn-fab:active { transform: scale(.97); box-shadow: 0 0 6px var(--accent-glow); }
+.btn-fab:disabled { opacity: .4; cursor: not-allowed; transform: none; filter: none; box-shadow: none; }
+.btn-fab svg { display: block; width: 17px; height: 17px; }
+.btn-fab img { display: block; width: 17px; height: 17px; }
+
+.filter {
+  background: var(--bg-card); border: 1px solid var(--border); color: var(--text);
+  border-radius: var(--radius); padding: 6px 10px; width: 220px; font-family: var(--font);
+  outline: none;
+}
+.filter:focus { border-color: var(--accent); }
+.filter:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.dirty-dot { width: 9px; height: 9px; border-radius: 50%; background: transparent; margin: 0 4px; }
+.dirty-dot.on { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+
+/* Sidebar toggle rotation */
+.sidebar-toggle svg {
+  transition: transform 0.15s ease;
+}
+.sidebar.collapsed .sidebar-toggle svg {
+  transform: rotate(180deg);
+}/* ---- Layout ----
+   body is a flex COLUMN: the topbar and toolbar keep their natural height,
+   and .app-body takes exactly the rest - the bottom of the window (table
+   scrollbar, "+ add row") can never be cut off again when the toolbar
+   height changes. The old calc(100% - 38px - 46px) assumed a 46px toolbar
+   while the fab buttons made it ~51px, hiding the bottom 5px of the UI. */
+body { display: flex; flex-direction: column; user-select: none; -webkit-user-select: none; }
+
+/* ядро масштаба: контейнерные zoom. Контент = страницы вкладок; интерфейс =
+   верхняя панель, тулбар, сайдбар, модалки, меню, тосты, подсказки.
+   position:fixed элементы внутри zoom-контейнера масштабируются вместе с ним */
+.tab-panels { zoom: var(--content-zoom); }
+header.topbar, .toolbar, #sidebar, .sidebar-fab, .sidebar-resizer,
+.modal, .upr-modal, .toast, .ctx-menu, .tabs-dropdown, .tip, .swt-ac-panel {
+  zoom: var(--ui-zoom);
+}
+/* editable fields stay selectable */
+input, textarea, select, [contenteditable="true"] { user-select: text; -webkit-user-select: text; }
+.app-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+}
+

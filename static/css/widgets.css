@@ -1,0 +1,49 @@
+/* widgets.css — 17/20 · панель найти/заменить, подсказки · порядок каскада: CSS_ORDER в scripts/verify-ui-wiring.mjs */
+/* ---- Find & Replace bar ---- */
+.find-bar {
+  position: absolute; top: 8px; right: 14px; z-index: 60; width: 320px;
+  background: var(--bg-elev); border: 1px solid var(--border); border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.45); padding: 6px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.find-bar[hidden] { display: none; }
+.find-row { display: flex; align-items: center; gap: 4px; }
+.find-row input[type=text] {
+  flex: 1; min-width: 0; background: var(--bg-card); border: 1px solid var(--border);
+  color: var(--text); border-radius: var(--radius); padding: 4px 8px; font-size: 12px;
+  font-family: var(--font); outline: none;
+}
+.find-row input[type=text]:focus { border-color: var(--accent); }
+.find-count { color: var(--text-mute); font-size: 11px; min-width: 42px; text-align: center; }
+.find-row .icon-btn { height: 26px; min-width: 26px; }
+.find-row .icon-btn svg { width: 14px; height: 14px; }
+
+/* find highlights in the grid */
+.grid td.find-hit { background: rgba(232, 184, 75, .28); }
+.grid td.find-cur { background: var(--accent) !important; color: #1a1a1a !important; }
+
+.toolbar-hint { color: var(--text-mute); font-size: 12px; }
+
+/* Hotkeys info (settings) */
+.hotkeys-info {
+  border-top: 1px solid var(--border); padding-top: 10px; margin-top: 2px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.hk-title {
+  font-weight: 700; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .6px; color: var(--accent);
+}
+.hk-row { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-mute); }
+.hk-row kbd {
+  background: var(--bg-card); border: 1px solid var(--border); border-bottom-width: 2px;
+  border-radius: 4px; padding: 1px 6px; font-family: var(--mono); font-size: 11px;
+  color: var(--text); white-space: nowrap;
+}
+
+/* tooltip for column comments */
+.tip {
+  position: fixed; z-index: 300; max-width: 320px; background: var(--bg-card);
+  border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px;
+  font-size: 12px; line-height: 1.45; white-space: pre-wrap; box-shadow: 0 8px 24px rgba(0,0,0,.4);
+}
+

@@ -139,3 +139,26 @@ class Files:
             return {"ok": False, "error": str(e)}
         self._store.dirty.discard(s.path)
         return {"ok": True, "reload": True, **self._hist.flags(path)}
+
+    # -- reset to beginning -------------------------------------------------------
+    def restore_to_beginning(self, path: str) -> dict:
+        """Undo every applied journal record: the file returns to the clean
+        state before the first recorded change. Unlike restore_record() on
+        the oldest entry - which keeps that first change applied - this
+        also undoes the oldest record itself."""
+        path = self._store.normal(path or "")
+        if not path or not os.path.isfile(path):
+            return {"ok": False, "error": "not a file"}
+        try:
+            entries, _applied, _undone = self._hist.state(path)
+            s = self._store.get(path)
+            n = 0
+            for e in entries:  # newest-first: undo in reverse application order
+                if not e["undone"]:
+                    self._hist.undo_once(s, save=False)
+                    n += 1
+            s.save()
+        except SpreadsheetError as e:
+            return {"ok": False, "error": str(e)}
+        self._store.dirty.discard(s.path)
+        return {"ok": True, "undone": n, **self._hist.flags(path)}

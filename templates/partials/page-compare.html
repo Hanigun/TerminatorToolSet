@@ -1,0 +1,95 @@
+<!-- partials/page-compare.html — страница сравнения -->
+        <!-- Compare page (permanent tab) -->
+        <section class="tab-panel compare-tab" id="compare-tab" data-tab-id="compare">
+          <div class="cmp-page">
+            <div class="cm-sub" data-i18n="cmp_sub">Сравнивайте файлы или папки мода с базовой игрой и переносите отличия</div>
+            <div class="cmp-top">
+              <div class="cmp-side">
+                <span class="cmp-tag base" data-i18n="cmp_base">Основа</span>
+                <div class="src-seg src-seg-sm" id="cmp-left-src" data-pos="0" role="tablist">
+                  <span class="src-seg-ind" aria-hidden="true"></span>
+                  <button type="button" class="src-seg-btn" data-src="project" role="tab"><span data-i18n="tree_tab_project">Проект</span></button>
+                  <button type="button" class="src-seg-btn" data-src="game" role="tab"><span data-i18n="tree_tab_game">Игра</span></button>
+                  <button type="button" class="src-seg-btn" data-src="mod" role="tab"><span data-i18n="tree_tab_mod">Мод</span></button>
+                </div>
+                <div class="cmp-path-row">
+                  <input type="text" id="cmp-left-path" class="cmp-path" data-i18n-ph="cmp_path_ph" placeholder="Файл или папка…" spellcheck="false">
+                  <button class="icon-btn" id="cmp-left-file" data-i18n-title="cmp_pick_file_t" title="Выбрать файл"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></button>
+                  <button class="icon-btn" id="cmp-left-dir" data-i18n-title="cmp_pick_folder_t" title="Выбрать папку"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg></button>
+                  <button class="icon-btn danger" id="cmp-left-clear" data-i18n-title="close" title="Закрыть"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+                  <button class="icon-btn cmp-fs-btn" id="cmp-left-fs" data-i18n-title="cmp_fullscreen" title="На весь экран"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+                </div>
+                <div class="cmp-dd" id="cmp-left-dd" hidden>
+                  <button type="button" class="cmp-dd-btn" id="cmp-left-dd-btn">
+                    <span class="cmp-dd-face" id="cmp-left-dd-face">Файл…</span>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                  </button>
+                  <div class="cmp-list cmp-dd-pop" id="cmp-left-list" hidden></div>
+                </div>
+                <div class="cmp-side-status" id="cmp-left-status" hidden></div>
+              </div>
+              <div class="cmp-mid">
+                <div class="cmp-keyrow">
+                  <label class="cmp-key-label"><span data-i18n="cmp_key">Ключ</span>
+                    <div class="key-dd" id="cmp-key-dd">
+                      <button type="button" class="cmp-dd-btn key-dd-btn" id="cmp-key-btn">
+                        <span class="cmp-dd-face" id="cmp-key-face">Все ключи</span>
+                        <span class="key-dd-arrow">▾</span>
+                      </button>
+                      <div class="key-dd-pop" id="cmp-key-pop" hidden>
+                        <input type="search" id="cmp-key-search" data-i18n-ph="cmp_key_search_ph" placeholder="Поиск ключа…" spellcheck="false">
+                        <div class="key-dd-list" id="cmp-key-list"></div>
+                      </div>
+                    </div>
+                  </label>
+                  <label class="cmp-sync" id="cmp-mirror-label"><input type="checkbox" id="cmp-mirror"><span data-i18n="cmp_mirror">Аналогичный файл</span></label>
+                  <label class="cmp-sync" id="cmp-sync-label"><input type="checkbox" id="cmp-sync-scroll" checked><span data-i18n="cmp_sync_scroll">Синхр. прокрутка</span></label>
+                </div>
+                <div class="cmp-btns">
+                  <button class="btn accent" id="cmp-run" data-i18n="compare">Сравнить</button>
+                  <button class="btn yellow" id="cmp-merge" data-i18n="cmp_merge_all" data-i18n-title="cmp_merge_t" title="Перенести всё новое справа налево">Слить всё</button>
+                </div>
+                <div class="cmp-filters" id="cmp-filters" hidden></div>
+              </div>
+              <div class="cmp-side">
+                <span class="cmp-tag src" data-i18n="cmp_source">Источник</span>
+                <div class="src-seg src-seg-sm" id="cmp-right-src" data-pos="1" role="tablist">
+                  <span class="src-seg-ind" aria-hidden="true"></span>
+                  <button type="button" class="src-seg-btn" data-src="project" role="tab"><span data-i18n="tree_tab_project">Проект</span></button>
+                  <button type="button" class="src-seg-btn" data-src="game" role="tab"><span data-i18n="tree_tab_game">Игра</span></button>
+                  <button type="button" class="src-seg-btn" data-src="mod" role="tab"><span data-i18n="tree_tab_mod">Мод</span></button>
+                </div>
+                <div class="cmp-path-row">
+                  <input type="text" id="cmp-right-path" class="cmp-path" data-i18n-ph="cmp_path_ph" placeholder="Файл или папка…" spellcheck="false">
+                  <button class="icon-btn" id="cmp-right-file" data-i18n-title="cmp_pick_file_t" title="Выбрать файл"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></button>
+                  <button class="icon-btn" id="cmp-right-dir" data-i18n-title="cmp_pick_folder_t" title="Выбрать папку"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg></button>
+                  <button class="icon-btn danger" id="cmp-right-clear" data-i18n-title="close" title="Закрыть"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+                  <button class="icon-btn cmp-fs-btn" id="cmp-right-fs" data-i18n-title="cmp_fullscreen" title="На весь экран"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+                </div>
+                <div class="cmp-dd" id="cmp-right-dd" hidden>
+                  <button type="button" class="cmp-dd-btn" id="cmp-right-dd-btn">
+                    <span class="cmp-dd-face" id="cmp-right-dd-face">Файл…</span>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                  </button>
+                  <div class="cmp-list cmp-dd-pop" id="cmp-right-list" hidden></div>
+                </div>
+                <div class="cmp-side-status" id="cmp-right-status" hidden></div>
+              </div>
+            </div>
+            <div class="cmp-grid-wrap" id="cmp-grid-wrap">
+              <div class="cmp-empty" id="cmp-empty" data-i18n="cmp_hint">Укажите файл или папку слева (основа) и справа (источник), затем нажмите «Сравнить»</div>
+              <div class="cmp-pane" id="cmp-pane-left">
+                <!-- попап поиска создаётся из общего ядра mkFindBar (app.js) -->
+                <table class="cmp-grid" id="cmp-table-left"><thead></thead><tbody></tbody></table>
+                <div class="cmp-loading hidden" id="cmp-loading-left"><div class="loading-spinner"></div></div>
+              </div>
+              <div class="cmp-divider" id="cmp-divider"></div>
+              <div class="cmp-pane" id="cmp-pane-right">
+                <!-- попап поиска создаётся из общего ядра mkFindBar (app.js) -->
+                <table class="cmp-grid" id="cmp-table-right"><thead></thead><tbody></tbody></table>
+                <div class="cmp-loading hidden" id="cmp-loading-right"><div class="loading-spinner"></div></div>
+              </div>
+            </div>
+            <div class="page-foot" data-i18n="cmp_foot">Сравнение и слияние в проект</div>
+          </div>
+        </section>

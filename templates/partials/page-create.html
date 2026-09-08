@@ -1,0 +1,60 @@
+<!-- partials/page-create.html — страница создания мода -->
+        <!-- Create mod page (permanent tab) -->
+        <section class="tab-panel create-mod-tab" id="create-mod-tab" data-tab-id="create-mod">
+          <div class="cm-page">
+            <h2 class="cm-title" data-i18n="cm_title">Создание модов</h2>
+            <div class="cm-form">
+              <div class="cm-duo-main">
+                <div class="cm-col">
+                  <label class="cm-row">
+                    <span class="cm-label" data-i18n="cm_name">Название мода</span>
+                    <input type="text" id="cm-name" class="cm-input" spellcheck="false" data-i18n-ph="cm_name_ph" placeholder="Мой мод">
+                    <span class="cm-path-hint" id="cm-path-hint"></span>
+                  </label>
+                  <label class="cm-row">
+                    <span class="cm-label" data-i18n="cm_desc">Описание мода</span>
+<textarea id="cm-desc" class="cm-input" rows="6" spellcheck="false"
+data-i18n-ph="cm_desc_ph" placeholder="Описание мода… (\n — перенос строки)"></textarea>
+                  </label>
+                </div>
+                <div class="cm-col cm-col-icon">
+                  <div class="cm-row">
+                    <span class="cm-label cm-ghost-label" aria-hidden="true">Превью</span>
+                    <div class="cm-icon-top">
+                      <button class="btn" id="cm-pick-icon" data-i18n="cm_pick_icon">Выбрать превью…</button>
+                      <div class="cm-hint" data-i18n="cm_icon_hint">Картинка 16:9 — будет сохранена как basis/THUMBNAIL.dds</div>
+                    </div>
+                  </div>
+                  <div class="cm-preview" id="cm-preview">
+                    <span class="cm-no-icon" data-i18n="cm_no_icon">Нет превью (16:9)</span>
+                  </div>
+                </div>
+              </div>
+              <div class="cm-row">
+                <span class="cm-label" data-i18n="cm_files">Файлы мода</span>
+                <div class="cm-drop" id="cm-dropzone">
+                  <div class="cm-drop-head">
+                    <span class="cm-drop-count" id="cm-drop-count"></span>
+                    <button class="icon-btn cm-clear-btn danger" id="cm-clear-files" data-i18n-title="cm_clear_all" title="Удалить все файлы" disabled>✕</button>
+                  </div>
+                  <div class="cm-drop-hint" id="cm-drop-hint" data-i18n="cm_drop_hint">Перетащите файлы из дерева слева (Ctrl — несколько файлов)</div>
+                  <div class="cm-file-list" id="cm-file-list"></div>
+                </div>
+              </div>
+              <label class="cm-row">
+                <span class="cm-label" data-i18n="cm_game_dir">Путь к установленной игре</span>
+                <div class="cm-dir-row">
+                  <input type="text" id="cm-game-dir" class="cm-input" spellcheck="false"
+                         placeholder="C:\Games\Terminator Dark Fate - Defiance">
+                  <button class="btn" id="cm-pick-dir" data-i18n="cm_pick_dir">Указать путь к игре</button>
+                </div>
+              </label>
+              <div class="cm-actions">
+                <select id="cm-target-mod" class="cm-input cm-select" title=""></select>
+                <button class="btn" id="cm-copy-files" data-i18n="cm_copy_files" disabled>Скопировать файлы</button>
+                <button class="btn accent big" id="cm-create" data-i18n="cm_create">Создать мод</button>
+              </div>
+              <div class="cm-result" id="cm-result" hidden></div>
+            </div>
+          </div>
+        </section>

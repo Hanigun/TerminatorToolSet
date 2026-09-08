@@ -167,6 +167,42 @@ with tempfile.TemporaryDirectory() as tmp:
             break
     check(cell(cl, work) == "H2", "redoing all reverted steps must return to the newest state")
 
+    # ---------------- G4b: reset to beginning = clean file ----------------
+    # (restore самой старой записи первую правку оставляет — здесь отдельный
+    # эндпоинт, обязан вернуть значение до всех правок и всё сделать redoable)
+    workR = os.path.join(tmp, "reset.xml")
+    shutil.copy(SRC, workR)
+    cl.post("/api/open_file", json={"path": workR})
+    orig = cell(cl, workR)
+    cl.post("/api/edit", json={"path": workR, "row": 0, "col": 1, "value": "RST1"})
+    cl.post("/api/edit", json={"path": workR, "row": 0, "col": 1, "value": "RST2"})
+    rj = cl.post("/api/reset_beginning", json={"path": workR}).get_json()
+    check(rj.get("ok"), "reset to beginning must succeed: %r" % (rj,))
+    check(cell(cl, workR) == orig,
+          "reset to beginning must restore the pre-edit value, got %r" % cell(cl, workR))
+    hj = cl.get("/api/history", query_string={"path": workR}).get_json()
+    check(hj.get("can_undo") is False and hj.get("can_redo") is True,
+          "after reset nothing to undo, everything redoable, got %r" % (hj,))
+    check(all(r.get("undone") for r in hj.get("records", [])),
+          "reset must park every record as undone")
+
+    # ---------------- G4c: row_set (transfer) undo keeps every cell ----------------
+    # (откат обновления жёлтой строки пересобирал её из payload по шаблону
+    # соседней строки и терял ячейки разреженных строк — проверка круговым
+    # переносом строки в тот же файл)
+    workT = os.path.join(tmp, "trow.xml")
+    shutil.copy(SRC, workT)
+    cl.post("/api/open_file", json={"path": workT})
+    before = cl.get("/api/file", query_string={"path": workT}).get_json()["rows"][0]["values"]
+    tj = cl.post("/api/transfer_row", json={"src": workT, "dst": workT, "row": 0, "key_col": 0}).get_json()
+    check(tj.get("ok"), "self transfer must succeed: %r" % (tj,))
+    check(cl.post("/api/undo", json={"path": workT}).get_json().get("ok"),
+          "row_set undo must succeed")
+    after = cl.get("/api/file", query_string={"path": workT}).get_json()["rows"][0]["values"]
+    check(after == before,
+          "row_set undo must restore every cell, lost at %r"
+          % ([i for i, (a, b) in enumerate(zip(after, before)) if a != b],))
+
     # ---------------- G5: edit_cells batch = one record, one undo ----------------
     # (карта Uprising: обмен секторов и другие команды — одна запись журнала)
     work2 = os.path.join(tmp, "batch.xml")

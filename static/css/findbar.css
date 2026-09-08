@@ -1,0 +1,38 @@
+/* findbar.css — 14/20 · попапы поиска mkFindBar · порядок каскада: CSS_ORDER в scripts/verify-ui-wiring.mjs */
+/* попап поиска вкладок файлов (общее ядро mkFindBar) — как старый find-bar */
+.cmp-find-pop.find-bar-pop { top: 8px; right: 14px; z-index: 60; width: 320px; }
+/* попап поиска SWT-редактора живёт в .swt-wrap */
+.swt-wrap { position: relative; }
+.find-flash {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  animation: findFlash 1.5s ease;
+}
+@keyframes findFlash {
+  0%, 55% { background: rgba(232, 184, 75, .45); }
+  100% { background: transparent; }
+}
+
+.cmp-grid td.cmp-search-none { color: var(--text-mute); text-align: center; padding: 16px; height: auto; }
+/* текущее совпадение поиска в панелях сравнения — как в главной таблице */
+.cmp-grid td.find-cur { background: var(--accent) !important; color: #1a1a1a !important; }
+/* sticky sysname column in the preview panes: same look as the main grid */
+.cmp-grid thead th.sticky-col { position: sticky; left: 0; z-index: 3; background: #31353f;
+  box-shadow: 1px 0 0 var(--border);
+  width: var(--cmp-sticky-w); min-width: var(--cmp-sticky-w); max-width: var(--cmp-sticky-w); }
+.cmp-grid tbody td.sticky-col { position: sticky; left: 0; z-index: 1; background: var(--bg-elev);
+  font-weight: 600; color: var(--accent); box-shadow: 1px 0 0 var(--border);
+  width: var(--cmp-sticky-w); min-width: var(--cmp-sticky-w); max-width: var(--cmp-sticky-w); }
+.cmp-grid tbody td.sticky-col.cell-focus { background: #3a4250;
+  box-shadow: 1px 0 0 var(--border);
+  outline: 2px solid rgba(123, 92, 240, .75); outline-offset: -2px; }
+.cmp-grid thead th.has-comment { cursor: help; }
+.cmp-grid thead th.has-comment::after { content: "⠿"; color: var(--accent); margin-left: 4px; font-size: 10px; }
+.cmp-grid tbody tr.sel td { background: #333a45; }
+.cmp-grid tbody tr.sel td.sticky-col { background: #333a45; }
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.dot.same { background: #4a5568; }
+.dot.changed { background: var(--yellow); }
+.dot.right-only { background: var(--green); }
+.dot.left-only { background: var(--red); }
+

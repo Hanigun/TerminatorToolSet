@@ -55,8 +55,9 @@ def register_project(app, ctx):
 
     @app.route("/api/project_tree")
     def api_project_tree():
-        """Full folder/file tree of the OPEN project: everything on disk,
-        any extension. The frontend filters what to display."""
+        """Pruned folder/file tree of the OPEN project: max TREE_MAX_DEPTH
+        levels, only TREE_KEEP_EXTS files (see infrastructure.filesystem).
+        The frontend filters what to display on top."""
         if entities.project is None or not getattr(entities.project, "root", None) \
                 or not os.path.isdir(entities.project.root):
             return jsonify({"ok": False, "error": "no project"})
@@ -65,7 +66,7 @@ def register_project(app, ctx):
 
     @app.route("/api/game_tree")
     def api_game_tree():
-        """Full tree of the unpacked game assets (config: unpacked_path).
+        """Pruned tree of the unpacked game assets (config: unpacked_path).
         Used by the «Игра» tab in the project sidebar."""
         root = config.get("unpacked_path") or ""
         if not root or not os.path.isdir(root):
@@ -75,7 +76,7 @@ def register_project(app, ctx):
 
     @app.route("/api/mod_tree")
     def api_mod_tree():
-        """Full tree of the main mod folder (config: mod_path).
+        """Pruned tree of the main mod folder (config: mod_path).
         Used by the «Мод» tab in the project sidebar."""
         root = config.get("mod_path") or ""
         if not root or not os.path.isdir(root):

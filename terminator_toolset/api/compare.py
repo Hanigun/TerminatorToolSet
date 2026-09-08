@@ -30,11 +30,13 @@ def register_compare(app, ctx):
 
     @app.route("/api/merge_all", methods=["POST"])
     def api_merge_all():
-        """Merge mode: copy everything new/updated from the right (source)
-        file into the left (base) file. Right wins on conflicts."""
+        """Merge mode (follows the compare filter): copy new/updated rows
+        from the right (source) file into the left (base) file.
+        Right wins on conflicts."""
         data = request.get_json(silent=True) or {}
         return jsonify(cmp.merge_all(data.get("left", ""), data.get("right", ""),
-                                     data.get("key_col", 0), data.get("default_key")))
+                                     data.get("key_col", 0), data.get("default_key"),
+                                     data.get("mode", "all")))
 
     @app.route("/api/list_xml", methods=["POST"])
     def api_list_xml():

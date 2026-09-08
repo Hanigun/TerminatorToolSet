@@ -1,0 +1,166 @@
+/* swt.css — 10/20 · SWT-редактор · порядок каскада: CSS_ORDER в scripts/verify-ui-wiring.mjs */
+/* SWT редактор: страница */
+.swt-page { padding: 16px 20px; display: flex; flex-direction: column; height: 100%; box-sizing: border-box; }
+.swt-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.swt-head-main { flex: 1; min-width: 0; }
+.swt-head-main .cm-sub { word-break: break-all; }
+.swt-wrap { flex: 1; display: flex; gap: 12px; min-height: 0; }
+.swt-side { width: 320px; min-width: 240px; display: flex; flex-direction: column; gap: 8px; }
+.swt-side-add { display: flex; gap: 6px; }
+.swt-side-add .btn { flex: 1 1 0; }
+.swt-vars { display: flex; flex-direction: column; gap: 4px; overflow: auto;
+  border: 1px solid var(--border); background: var(--bg-card);
+  padding: 6px; max-height: 220px; }
+.swt-vars:empty { display: none; }
+.swt-vars[hidden] { display: none; }
+.swt-var-row { display: flex; gap: 4px; align-items: center; }
+.swt-var-row .swt-var-name { flex: 1 1 auto; min-width: 0; }
+.swt-var-row .swt-var-type { flex: 0 0 64px; min-width: 0; }
+.swt-var-row .swt-var-def { flex: 0 0 64px; min-width: 0; }
+.swt-trig-list { flex: 1; overflow: auto; border: 1px solid var(--border); background: var(--bg-card); }
+.swt-trig {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px 10px; cursor: pointer; border-bottom: 1px solid var(--border);
+}
+.swt-trig:hover { background: var(--bg-hover, rgba(255,255,255,.05)); }
+.swt-trig.sel { background: var(--bg-active, rgba(255,255,255,.1)); }
+.swt-trig.off .swt-trig-name { opacity: .5; }
+.swt-trig-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.swt-trig-meta { font-size: 11px; color: var(--text-mute); white-space: nowrap; }
+.swt-none { padding: 12px; font-size: 12px; color: var(--text-mute); }
+.swt-main { flex: 1; overflow: auto; min-width: 0; }
+.swt-empty { padding: 40px; text-align: center; color: var(--text-mute); font-size: 13px; }
+.swt-hint {
+  margin-top: 10px; padding: 8px 12px; font-size: 12px;
+  border: none; color: #7ec46a; background: rgba(126, 196, 106, .08);
+}
+.swt-trig-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.swt-name { flex: 1; min-width: 140px; padding: 7px 10px; font-size: 14px; font-weight: 600;
+  border: 1px solid var(--border); background: var(--bg-card); color: var(--text); }
+.swt-guid { width: 90px; padding: 6px 8px; font-size: 12px;
+  border: 1px solid var(--border); background: var(--bg-card); color: var(--text-mute); }
+.swt-flags { display: flex; gap: 10px; }
+.swt-flag { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-mute); }
+/* секции «Условия»/«Действия»: карточка как у блоков (та же рамка, фон и
+   левая полоса), только полоса фиолетовая; клик по свободному месту и
+   шеврон сворачивают секцию */
+.swt-sec-head {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+  margin: 14px 0 8px; padding: 4px 8px;
+  border: 1px solid var(--border); background: var(--bg-card);
+  border-left: 3px solid #a06af5; border-radius: var(--radius);
+  cursor: pointer; user-select: none;
+}
+.swt-sec-head > span { font-size: 12px; font-weight: 700; color: var(--text-mute); text-transform: uppercase; letter-spacing: .04em; }
+/* сворачиваемые секции «Условия»/«Действия»: шеврон смотрит вправо в
+   свёрнутом состоянии и вниз в раскрытом */
+.swt-sec-chev { display: inline-flex; padding: 3px; transition: transform .16s ease; }
+.swt-sec-head:not(.swt-sec-closed) .swt-sec-chev { transform: rotate(90deg); }
+.swt-sec-body[hidden] { display: none; }
+/* поле добавления условия/действия: внешний вид как у прежнего селекта,
+   поиск по вводу + нейтральное пустое значение */
+/* поле добавления выглядит как поля параметров внутри блоков
+   (та же высота/рамка/фон), растягивается и даёт широкое меню */
+.swt-add-cmd { flex: 1 1 260px; max-width: 420px; cursor: default; }
+.swt-cmd-inp {
+  width: 100%; box-sizing: border-box;
+  padding: 4px 8px; font-size: 12px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+}
+.swt-sec-all { padding: 3px; opacity: .6; }
+.swt-sec-all:hover { opacity: 1; }
+/* кнопка-дропдаун (замена нативному select): стрелка справа, в открытом
+   состоянии подсвечена; в строке параметра растягивается как input */
+.swt-dd {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  padding: 4px 8px; font-size: 12px; line-height: 1.3;
+  cursor: pointer; text-align: left; min-width: 0; max-width: 100%;
+  font-family: var(--font);
+}
+.swt-dd:hover { border-color: var(--accent); }
+.swt-dd .swt-dd-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.swt-dd .swt-dd-chev { flex: 0 0 auto; display: inline-flex; opacity: .7; transition: transform .15s; }
+.swt-dd.open .swt-dd-chev { transform: rotate(180deg); }
+/* дропдаун в строке параметра ровно как текстовое поле (та же длина) */
+.swt-param .swt-dd { flex: 1; max-width: 420px; box-sizing: border-box; width: auto; }
+#swt-analyze.done { color: var(--green); }
+/* «Анализ»: круглая анимация выполнения (поле затемнено disabled - спиннер
+   поверх, чтобы прогресс было видно) */
+#swt-analyze.busy { opacity: .9; }
+#swt-analyze.busy::before {
+  content: ""; display: inline-block; width: 10px; height: 10px;
+  margin-right: 6px; vertical-align: -1px;
+  border: 2px solid var(--text-mute); border-top-color: var(--accent);
+  border-radius: 50%; animation: swt-spin .7s linear infinite;
+}
+@keyframes swt-spin { to { transform: rotate(360deg); } }
+/* кастомный дропдаун автозаполнения SWT: панель ровно по ширине поля,
+   тёмная карта с тенью, пункты с описаниями, hover/активная подсветка */
+.swt-ac-panel {
+  position: fixed; z-index: 1400; box-sizing: border-box;
+  background: var(--bg-card, #1b1e24);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 8px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .55);
+  padding: 4px;
+  max-height: 260px; overflow-y: auto;
+  display: none;
+}
+.swt-ac-panel.open { display: block; }
+.swt-ac-item {
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 5px 8px; border-radius: 5px; cursor: pointer;
+  font-size: 12px; color: var(--text); line-height: 1.25;
+}
+.swt-ac-item:hover { background: var(--bg-hover, rgba(255, 255, 255, .06)); }
+.swt-ac-item.active { background: var(--bg-active, rgba(255, 255, 255, .11)); }
+.swt-ac-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.swt-ac-desc {
+  font-size: 10.5px; color: var(--text-mute);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* сворачиваемые блоки условий/действий: display:none обязательен через
+   класс - атрибут hidden перебивается display:flex у .swt-item-body */
+.swt-item-closed .swt-item-body { display: none; }
+.swt-item-chev { display: inline-flex; padding: 2px; opacity: .7; transition: transform .16s ease; }
+.swt-item-closed .swt-item-chev { opacity: .45; }
+.swt-item:not(.swt-item-closed) .swt-item-chev { transform: rotate(90deg); }
+.swt-item-closed .swt-item-head { cursor: pointer; }
+/* подсказка по имени триггера (известные шаблоны: start, mov_1, ...) */
+.swt-name-hint { font-size: 11.5px; color: var(--text-mute); margin: -4px 0 10px 2px; }
+/* полноэкранный режим SWT-редактора (кнопка как у таблиц сравнения) */
+/* Универсальный полноэкранный режим (paneFsToggle): целевой элемент на весь
+   экран; кнопка «на весь экран»/Esc возвращает маленькое окно */
+body.pane-fs .pane-fs-target {
+  position: fixed; inset: 0; z-index: 120; background: var(--bg);
+}
+.swt-item {
+  border: 1px solid var(--border); background: var(--bg-card);
+  margin-bottom: 8px; border-left: 3px solid var(--accent);
+}
+.swt-item.disabled { opacity: .55; border-left-color: var(--text-mute); }
+.swt-item-head { display: flex; align-items: center; gap: 8px; padding: 6px 8px; }
+.swt-item-tag {
+  width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: #14161a;
+}
+.swt-item-tag.act { background: #7ec46a; }
+.swt-item-tag.cond { background: #6aa9ec; }
+.swt-cmd-sel { padding: 5px 8px; font-size: 12px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); max-width: 260px; }
+.swt-item-dis { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-mute); }
+.swt-item-tools { margin-left: auto; display: flex; gap: 2px; }
+.swt-item-body { padding: 2px 10px 8px 36px; display: flex; flex-direction: column; gap: 4px; }
+.swt-param { display: flex; align-items: center; gap: 8px; }
+.swt-param-label { width: 200px; min-width: 90px; font-size: 11px; color: var(--text-mute);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+.swt-param input, .swt-param select {
+  flex: 1; max-width: 420px; padding: 4px 8px; font-size: 12px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+}
+/* удаление параметра/переменной — глобальный .icon-btn.danger в chrome.css */
+/* «+ параметр» выровнен по полям ввода параметров (метка 200px + gap 8px) */
+.swt-add-param { align-self: flex-start; font-size: 11px; padding: 3px 10px; margin-top: 2px; margin-left: 208px; }
+.swt-cmd-hint { font-size: 11px; color: var(--text-mute); padding: 6px 0 2px; line-height: 1.5; }
+

@@ -1,0 +1,55 @@
+/* dnd.css — 12/20 · зона сброса create-mod, drag дерева · порядок каскада: CSS_ORDER в scripts/verify-ui-wiring.mjs */
+/* create-mod: drag & drop file zone */
+.cm-drop { border: 1.5px dashed var(--border); border-radius: 10px; min-height: 74px;
+  padding: 10px; transition: border-color .18s, background .18s, box-shadow .18s;
+  background: var(--bg-elev); }
+.cm-drop.drag { border-color: var(--accent); background: rgba(232, 184, 75, .08);
+  box-shadow: 0 0 0 2px var(--accent-glow), inset 0 0 18px rgba(232, 184, 75, .12); }
+.cm-drop-hint { font-size: 11px; color: var(--muted, #9aa3ad); text-align: center;
+  padding: 14px 6px; pointer-events: none; }
+.cm-drop-head { display: flex; align-items: center; justify-content: space-between;
+  min-height: 20px; }
+.cm-drop-count { font-size: 10.5px; font-weight: 700; color: var(--accent);
+  text-transform: uppercase; letter-spacing: .5px; }
+.cm-clear-btn { font-size: 11px; padding: 1px 6px; }
+.cm-clear-btn:disabled { opacity: .3; cursor: default; }
+.cm-folder { display: flex; flex-direction: column; gap: 4px; max-width: 100%;
+  background: rgba(232, 184, 75, .06); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 8px;
+  animation: cmPopIn .32s cubic-bezier(.2, .9, .3, 1.4) both; }
+.cm-folder-head { display: flex; align-items: center; gap: 6px; font-size: 11.5px;
+  font-weight: 700; color: var(--accent); }
+.cm-folder-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+.cm-folder-files { display: flex; flex-wrap: wrap; gap: 5px; padding-left: 18px;
+  border-left: 1px dashed var(--border); margin-left: 5px; }
+.cm-file-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.cm-file { display: flex; align-items: center; gap: 6px; max-width: 100%;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 7px;
+  padding: 4px 6px; font-size: 11px; animation: cmPopIn .32s cubic-bezier(.2, .9, .3, 1.4) both; }
+.cm-file-name { font-weight: 600; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; max-width: 180px; }
+.cm-file-rel { color: var(--muted, #9aa3ad); font-size: 10px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+.cm-file-x { background: none; border: none; color: var(--muted, #9aa3ad);
+  cursor: pointer; font-size: 11px; padding: 0 2px; line-height: 1; }
+.cm-file-x:hover { color: var(--red, #e05656);
+  /* бескаркасный крестик: только свечение, как у .danger (рамки позади нет) */
+  filter: drop-shadow(0 0 4px rgba(226, 88, 74, .6)); }
+@keyframes cmPopIn {
+  0% { opacity: 0; transform: translateY(10px) scale(.85); }
+  60% { opacity: 1; transform: translateY(-2px) scale(1.04); }
+  100% { opacity: 1; transform: none; }
+}
+
+/* tree: multi-select + drag */
+.tree-file { cursor: default; }
+.tree-file.selected { background: rgba(232, 184, 75, .16); box-shadow: inset 2px 0 0 var(--accent); }
+.tree-file.dragging { opacity: .45; }
+.tree-cat { cursor: default; }
+.tree-cat.dragging { opacity: .45; }
+.tree-group.dragging { opacity: .5; }
+.tree-drag-ghost { position: fixed; top: -200px; left: -200px; z-index: 999;
+  background: var(--bg-card); border: 1px solid var(--accent); border-radius: 6px;
+  color: var(--text); font-size: 11px; padding: 3px 9px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .5); }
+

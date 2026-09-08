@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import os
 import sys
+import ctypes
 import threading
 import time
 import webbrowser
+from ctypes import wintypes
 
 from ..application.bootstrap import boot_ping as _boot_ping
 from ..application.state import add_pending_files
@@ -183,44 +185,431 @@ def _install_drop_filter(form):
 
     WebView2 НЕ отдаёт в JS пути дропа (только имена) — поэтому drop файла
     или папки вне известных корней молча не открывался, а кнопки (нативный
-    диалог с полным путём) работали. Ловим дроп на уровне окна: срабатывает
-    поверх любых контролов, пути уходят в mailbox, фронт забирает их штатным
-    poll'ом (файл -> openFile, папка -> loadProject — ровно как кнопки).
-    Возвращает объект фильтра (держать ссылку!) или None."""
-    try:
-        from System.Windows.Forms import Application, IMessageFilter
-    except Exception as e:  # noqa: BLE001
-        _log("drop: winforms unavailable: %s" % e)
-        return None
-    WM_DROPFILES = 0x233
+    диалог с полным путём) работали.     Дроп реально приземляется на дочерний
+    HWND WebView2, а не на форму, причём WebView2 держит там свой OLE drop
+    target (дроп уходит в Chromium без путей, WM_DROPFILES не возникает) —
+    снять его нельзя (чужой COM-поток), поэтому ставим на потомков СВОЙ
+    IDropTarget первым (см. _register_drop_target), а приёмник формы и
+    подмену wndproc держим как запасные пути: пути уходят в mailbox,
+    фронт забирает их штатным poll'ом (файл -> openFile, папка -> loadProject
+    — ровно как кнопки). Возвращает True (держать нечего: ссылки на хуки
+    живут в _DROP_HOOKS).
+    IMessageFilter здесь НЕ используется: pythonnet не умеет реализовать
+    интерфейс с одним byref-аргументом («interface takes exactly one
+    argument»), поэтому этот путь всегда падал."""
+    _install_drop_child_hook(form)
+    return True
 
-    class _DropFilter(IMessageFilter):
-        def PreFilterMessage(self, m):
+
+# -- перехват дропа на дочерних окнах ------------------------------------------
+# Дроп реально приземляется НЕ на форму, а на дочерний HWND WebView2.
+# WebView2 регистрирует на нём СВОЙ OLE drop target (причём из чужого
+# COM-потока: RevokeDragDrop отдаёт RPC_E_WRONG_THREAD), поэтому дропы
+# Проводника уходят в Chromium (там видны только имена, без путей),
+# WM_DROPFILES вообще не возникает, а приёмник формы не вызывается
+# (глубокое окно с целью всегда выигрывает у предков). Вытеснить цель
+# Chromium нельзя — но можно ОБОГНАТЬ: окна рендера пересоздаются, цель
+# периодически отсутствует (DRAGDROP_E_NOTREGISTERED), и тогда мы ставим
+# СВОЙ IDropTarget первым (RegisterDragDrop, чистый ctypes без зависимостей);
+# поздняя регистрация Chromium после этого падает с ALREADYREGISTERED и
+# дропы идут к нам с полными путями. Сторож повторяет попытку каждый
+# проход. Пути уходят в mailbox, фронт забирает их штатным poll'ом
+# (файл -> openFile, папка -> loadProject — ровно как кнопки).
+_DROP_HOOKS = {}  # hwnd -> (new_proc, old_proc): держать, иначе GC убьёт
+_DROP_OLE_FORM = False  # DragEnter/DragDrop на форму уже подписаны
+_DROP_TARGET_HWNDS = set()  # HWND, где стоит НАШ IDropTarget
+_DRAGDROP_E_NOTREGISTERED = -2147221248  # 0x80040100
+_DRAGDROP_E_ALREADYREGISTERED = -2147221247  # 0x80040101
+
+
+class _DropFormatEtc(ctypes.Structure):
+    _fields_ = [("cfFormat", wintypes.WORD),
+                ("ptd", wintypes.LPVOID),
+                ("dwAspect", wintypes.DWORD),
+                ("lindex", wintypes.LONG),
+                ("tymed", wintypes.DWORD)]
+
+
+class _DropStgMedium(ctypes.Structure):
+    _fields_ = [("tymed", wintypes.DWORD),
+                ("hGlobal", wintypes.HGLOBAL),
+                ("pUnkForRelease", wintypes.LPVOID)]
+
+
+class _DropTargetObj(ctypes.Structure):
+    _fields_ = [("lpVtbl", ctypes.POINTER(ctypes.c_void_p))]
+
+
+def _hdrop_paths(pDataObj):
+    """Полные пути из IDataObject дропа (CF_HDROP)."""
+    ole32 = ctypes.windll.ole32
+    shell32 = ctypes.windll.shell32
+    CF_HDROP, DVASPECT_CONTENT, TYMED_HGLOBAL = 15, 1, 1
+    GETDATA_T = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p,
+                                   ctypes.POINTER(_DropFormatEtc),
+                                   ctypes.POINTER(_DropStgMedium))
+    vtable = ctypes.cast(
+        ctypes.cast(pDataObj, ctypes.POINTER(ctypes.c_void_p)).contents,
+        ctypes.POINTER(ctypes.c_void_p))
+    fmt = _DropFormatEtc(CF_HDROP, None, DVASPECT_CONTENT, -1, TYMED_HGLOBAL)
+    stg = _DropStgMedium()
+    hr = GETDATA_T(vtable[3])(pDataObj, ctypes.byref(fmt), ctypes.byref(stg))
+    _DROP_HOOKS.setdefault("getdata", (GETDATA_T,))  # тип держать живым
+    if int(hr) != 0 or not stg.hGlobal:
+        return []
+    try:
+        shell32.DragQueryFileW.argtypes = [wintypes.HGLOBAL, wintypes.UINT,
+                                            wintypes.LPWSTR, wintypes.UINT]
+        shell32.DragQueryFileW.restype = wintypes.UINT
+        n = int(shell32.DragQueryFileW(stg.hGlobal, 0xFFFFFFFF, None, 0))
+        out = []
+        for i in range(min(n, 128)):
+            buf = ctypes.create_unicode_buffer(32768 // 2)
+            if shell32.DragQueryFileW(stg.hGlobal, i, buf, len(buf)):
+                out.append(buf.value)
+        return out
+    finally:
+        try:
+            ole32.ReleaseStgMedium.argtypes = [
+                ctypes.POINTER(_DropStgMedium)]
+            ole32.ReleaseStgMedium.restype = None
+            ole32.ReleaseStgMedium(ctypes.byref(stg))
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _register_drop_target(hwnd, confirm=False, quiet=False):
+    """Поставить НАШ IDropTarget на hwnd. True = дропы теперь идут к нам.
+
+    confirm: hwnd уже в _DROP_TARGET_HWNDS — бесконтактная проверка жива ли
+    цель через повторный RegisterDragDrop (ALREADYREGISTERED = стоит наша,
+    S_OK = молча восстановили). Без revoke: зондировать отзывом нельзя —
+    он же и убивает нашу цель (именно так сторож гасил сам себя)."""
+    if hwnd in _DROP_TARGET_HWNDS and not confirm:
+        return True
+    try:
+        ole32 = ctypes.windll.ole32
+        ole32.RegisterDragDrop.argtypes = [wintypes.HWND, ctypes.c_void_p]
+        ole32.RegisterDragDrop.restype = ctypes.c_long
+    except Exception as e:  # noqa: BLE001
+        if not quiet:
+            _log("drop: target ole unavailable: %s" % e)
+        return False
+    if confirm:
+        # COM-объекты построены и держатся списком в _DROP_HOOKS["targets"]
+        try:
+            punk = _DROP_HOOKS["targets"][0][3]
+            hr = int(ole32.RegisterDragDrop(wintypes.HWND(hwnd),
+                                            ctypes.c_void_p(punk)))
+        except Exception:  # noqa: BLE001
+            _DROP_TARGET_HWNDS.discard(hwnd)
+            return False
+        if hr == 0 or hr == _DRAGDROP_E_ALREADYREGISTERED:
+            return True
+        # цель потеряна (окно пересоздано? хэндл чужой) — снять метку,
+        # следующий проход обработает как новое окно
+        if not quiet:
+            _log("drop: target confirm %d: hr=%d" % (hwnd, hr))
+        _DROP_TARGET_HWNDS.discard(hwnd)
+        return False
+    try:
+        QI_T = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p,
+                                  ctypes.c_void_p,
+                                  ctypes.POINTER(ctypes.c_void_p))
+        REF_T = ctypes.WINFUNCTYPE(wintypes.ULONG, ctypes.c_void_p)
+        ENTER_T = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p,
+                                     ctypes.c_void_p, wintypes.UINT,
+                                     wintypes.POINT,
+                                     ctypes.POINTER(wintypes.DWORD))
+        # DragOver БЕЗ pDataObj: (this, grfKeyState, pt, pdwEffect).
+        # Общий тип с DragEnter здесь = разбаланс стека и падение процесса
+        # при первом же наведении драга (именно так и крашилось).
+        OVER_T = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p,
+                                    wintypes.UINT, wintypes.POINT,
+                                    ctypes.POINTER(wintypes.DWORD))
+        LEAVE_T = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p)
+        DROP_T = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p,
+                                    ctypes.c_void_p, wintypes.UINT,
+                                    wintypes.POINT,
+                                    ctypes.POINTER(wintypes.DWORD))
+        refcount = [1]
+
+        def _qi(this, _riid, ppv):
             try:
-                if int(m.Msg) == WM_DROPFILES:
-                    try:
-                        _on_dropfiles(int(m.WParam.ToInt64()))
-                    except Exception as ex:  # noqa: BLE001
-                        _log("drop: %s" % ex)
+                ppv[0] = this  # принимаем любой IID (нужен только IDropTarget)
+                refcount[0] += 1
             except Exception:  # noqa: BLE001
                 pass
-            return False  # не съедаем: пусть и Chromium обработает drop
+            return 0
 
-    try:
-        filt = _DropFilter()
-        Application.AddMessageFilter(filt)
+        def _addref(_this):
+            refcount[0] += 1
+            return refcount[0]
+
+        def _release(_this):
+            refcount[0] = max(0, refcount[0] - 1)
+            return refcount[0]
+
+        def _enter(_this, _data, _keys, _pt, effect):
+            try:
+                effect.contents.value = 1  # DROPEFFECT_COPY
+            except Exception:  # noqa: BLE001
+                pass
+            return 0
+
+        def _over(_this, _keys, _pt, effect):
+            try:
+                effect.contents.value = 1  # DROPEFFECT_COPY
+            except Exception:  # noqa: BLE001
+                pass
+            return 0
+
+        def _leave(_this):
+            return 0
+
+        def _drop(_this, data, _keys, _pt, effect):
+            try:
+                effect.contents.value = 1  # DROPEFFECT_COPY
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                paths = _hdrop_paths(int(data))
+                if paths:
+                    add_pending_files(paths)
+                    _log("drop: target %d path(s) to mailbox" % len(paths))
+                else:
+                    _log("drop: target fired, no HDROP paths")
+            except Exception as ex:  # noqa: BLE001
+                _log("drop: target %s" % ex)
+            return 0
+
+        # vt: QI, AddRef, Release, DragEnter, DragOver, DragLeave, Drop
+        cbs = (QI_T(_qi), REF_T(_addref), REF_T(_release),
+               ENTER_T(_enter), OVER_T(_over), LEAVE_T(_leave),
+               DROP_T(_drop))
+        vtbl = (ctypes.c_void_p * 7)(*[ctypes.cast(cb, ctypes.c_void_p)
+                                       for cb in cbs])
+        obj = _DropTargetObj(ctypes.cast(vtbl, ctypes.POINTER(ctypes.c_void_p)))
+        punk = ctypes.addressof(obj)
+        hr = int(ole32.RegisterDragDrop(wintypes.HWND(hwnd),
+                                        ctypes.c_void_p(punk)))
+        if hr == 0:
+            # держать ВСЁ живым, иначе GC убьёт COM-объект на первом дропе.
+            # Целей НЕСКОЛЬКО (своя на каждое окно) — держим списком: прежний
+            # setdefault хранил только первую, остальные окна указывали
+            # в освобождённую память и дропы молча умирали.
+            _DROP_HOOKS.setdefault("targets", []).append((cbs, vtbl, obj, punk))
+            _DROP_TARGET_HWNDS.add(hwnd)
+            return True
+        if hr != _DRAGDROP_E_ALREADYREGISTERED and not quiet:
+            _log("drop: target register %d: hr=%d" % (hwnd, hr))
+        return False
     except Exception as e:  # noqa: BLE001
-        _log("drop: filter: %s" % e)
-        return None
+        _log("drop: target: %s" % e)
+        return False
+
+
+def _install_drop_ole_form(form):
+    """AllowDrop + DragEnter/DragDrop на форме (GUI-поток).
+
+    Вызывается КАЖДЫМ проходом: переподтверждает приёмник формы
+    (AllowDrop False->True перерегистрирует OLE-цель), потому что его мог
+    снять чужой RevokeDragDrop — включая наш собственный по корневому HWND
+    до введения защиты. Подписки на события — один раз."""
+    global _DROP_OLE_FORM
+    try:
+        from System.Windows.Forms import DataFormats, DragDropEffects
+    except Exception as e:  # noqa: BLE001
+        _log("drop: ole winforms unavailable: %s" % e)
+        return
+    try:
+        if not _DROP_OLE_FORM:
+            def _on_drag_enter(_sender, e):
+                try:
+                    if e.Data.GetDataPresent(DataFormats.FileDrop):
+                        e.Effect = DragDropEffects.Copy
+                    else:
+                        # DragDropEffects.None — ключевое слово в Python
+                        e.Effect = getattr(DragDropEffects, "None")
+                except Exception:  # noqa: BLE001
+                    pass
+
+            def _on_drag_drop(_sender, e):
+                try:
+                    data = e.Data.GetData(DataFormats.FileDrop)
+                    paths = [str(p) for p in data] if data else []
+                    if paths:
+                        add_pending_files(paths)
+                        _log("drop: ole %d path(s) to mailbox" % len(paths))
+                    else:
+                        try:
+                            fmts = [str(f) for f in e.Data.GetFormats()]
+                        except Exception:  # noqa: BLE001
+                            fmts = ["?"]
+                        _log("drop: ole no FileDrop, formats=%s" % fmts)
+                except Exception as ex:  # noqa: BLE001
+                    _log("drop: ole %s" % ex)
+
+            form.AllowDrop = True
+            form.DragEnter += _on_drag_enter
+            form.DragDrop += _on_drag_drop
+            # держать делегаты на модуле, иначе GC убьёт подписки
+            _DROP_HOOKS.setdefault("ole", (_on_drag_enter, _on_drag_drop))
+            _DROP_OLE_FORM = True
+            _log("drop: ole form drop installed")
+        else:
+            # переподтвердить цель (дешёво, чинит снятую регистрацию)
+            form.AllowDrop = False
+            form.AllowDrop = True
+    except Exception as e:  # noqa: BLE001
+        _log("drop: ole form: %s" % e)
+
+
+def _install_drop_child_hook(form):
+    """DragAcceptFiles + subclass на всех потомков формы (GUI-поток)."""
     try:
         import ctypes
-        ctypes.windll.shell32.DragAcceptFiles(
-            ctypes.c_void_p(int(form.Handle.ToInt64())), True)
+        from ctypes import wintypes
     except Exception as e:  # noqa: BLE001
-        _log("drop: DragAcceptFiles: %s" % e)
-        return None
-    _log("drop: native filter installed")
-    return filt
+        _log("drop: ctypes unavailable: %s" % e)
+        return
+    try:
+        root = int(form.Handle.ToInt64())
+    except Exception as e:  # noqa: BLE001
+        _log("drop: no form handle: %s" % e)
+        return
+    try:
+        user32 = ctypes.windll.user32
+        shell32 = ctypes.windll.shell32
+        ole32 = ctypes.windll.ole32
+        ole32.RevokeDragDrop.argtypes = [wintypes.HWND]
+        ole32.RevokeDragDrop.restype = ctypes.c_long  # HRESULT
+        WM_DROPFILES = 0x233
+        GWLP_WNDPROC = -4
+        # LRESULT = LONG_PTR: в ctypes.wintypes его нет, берём c_ssize_t
+        WNDPROC_T = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, wintypes.HWND,
+                                       wintypes.UINT, wintypes.WPARAM,
+                                       wintypes.LPARAM)
+        user32.SetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int,
+                                             wintypes.LPVOID]
+        user32.SetWindowLongPtrW.restype = wintypes.LPVOID
+        user32.CallWindowProcW.argtypes = [wintypes.LPVOID, wintypes.HWND,
+                                           wintypes.UINT, wintypes.WPARAM,
+                                           wintypes.LPARAM]
+        user32.CallWindowProcW.restype = ctypes.c_ssize_t
+
+        def _wndproc(hwnd, msg, wparam, lparam):
+            if int(msg) == WM_DROPFILES:
+                try:
+                    _on_dropfiles(int(wparam))
+                except Exception as ex:  # noqa: BLE001
+                    _log("drop: %s" % ex)
+                return 0  # съели: Chromium свой drop уже не обработает
+            old = _DROP_HOOKS.get(int(hwnd), (None, None))[1]
+            if old:
+                try:
+                    return user32.CallWindowProcW(old, hwnd, msg, wparam, lparam)
+                except Exception:  # noqa: BLE001
+                    pass
+            return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
+
+        user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR,
+                                         ctypes.c_int]
+        user32.GetClassNameW.restype = ctypes.c_int
+
+        def _cls(hwnd):
+            try:
+                buf = ctypes.create_unicode_buffer(256)
+                n = user32.GetClassNameW(wintypes.HWND(hwnd), buf, 256)
+                return buf.value if n else "?"
+            except Exception:  # noqa: BLE001
+                return "?"
+
+        hooked = [0]
+        revoked = [0]
+        owned = [0]
+        details = []
+
+        def _hook_one(hwnd):
+            hwnd = int(hwnd)
+            cls = _cls(hwnd)
+            # Наша цель стоит: НЕ зондировать отзывом (он её и убивает),
+            # только бесконтактно подтвердить повторным RegisterDragDrop.
+            if hwnd != root and hwnd in _DROP_TARGET_HWNDS:
+                if _register_drop_target(hwnd, confirm=True, quiet=True):
+                    owned[0] += 1
+                    cls += "+OK"
+                if len(details) < 16:
+                    details.append("%s/hr=ok" % cls)
+                return
+            # OLE-приёмник снимаем у потомков, но НИКОГДА у корня: на корне
+            # висит приёмник самой формы (AllowDrop) — его снятие убивает
+            # наш приём дропа. S_OK=0 — сняли, иначе пишем hr.
+            # Повторные проходы тоже снимают: WebView2 перерегистрирует свой
+            # target поздно (после навигации/старта рендера).
+            try:
+                hr = (int(ole32.RevokeDragDrop(wintypes.HWND(hwnd)))
+                      if hwnd != root else -999)
+            except Exception:  # noqa: BLE001
+                hr = -1
+            if hr == 0:
+                revoked[0] += 1
+            # окно свободно (сняли чужой или ничего не было) — ставим СВОЙ
+            # IDropTarget первым; поздняя регистрация Chromium упрётся в
+            # ALREADYREGISTERED и дропы с полными путями пойдут к нам.
+            # Корень пропускаем (там приёмник формы).
+            if (hwnd != root and hwnd not in _DROP_TARGET_HWNDS
+                    and hr in (0, _DRAGDROP_E_NOTREGISTERED)):
+                if _register_drop_target(hwnd):
+                    owned[0] += 1
+                    cls += "+OWN"
+            if len(details) < 16:
+                details.append("%s/hr=%d" % (cls, hr))
+            if hwnd in _DROP_HOOKS:
+                return
+            try:
+                shell32.DragAcceptFiles(ctypes.c_void_p(hwnd), True)
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                new_proc = WNDPROC_T(_wndproc)
+                old = user32.SetWindowLongPtrW(
+                    wintypes.HWND(hwnd), GWLP_WNDPROC,
+                    ctypes.cast(new_proc, wintypes.LPVOID))
+                if old:
+                    _DROP_HOOKS[hwnd] = (new_proc, old)
+                    hooked[0] += 1
+            except Exception as e:  # noqa: BLE001
+                _log("drop: subclass %d: %s" % (hwnd, e))
+
+        ENUMPROTO = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND,
+                                       wintypes.LPARAM)
+
+        def _enum_cb(hwnd, _lp):
+            _hook_one(int(hwnd) if not hasattr(hwnd, "value") else hwnd.value)
+            return True
+
+        enum_cb = ENUMPROTO(_enum_cb)
+        user32.EnumChildWindows.argtypes = [wintypes.HWND, ENUMPROTO,
+                                            wintypes.LPARAM]
+        user32.EnumChildWindows(wintypes.HWND(root), enum_cb, 0)
+        # и саму форму тоже (рамка, кастомный титлбар)
+        _hook_one(root)
+        # ссылки держать на модуле, иначе GC убьёт колбэки
+        _DROP_HOOKS.setdefault(0, (enum_cb, None))
+        _install_drop_ole_form(form)
+        try:
+            elevated = bool(ctypes.windll.shell32.IsUserAnAdmin())
+        except Exception:  # noqa: BLE001
+            elevated = False
+        _log("drop: child hooks installed: %d, ole revoked: %d, own target: %d, "
+             "admin=%s; %s"
+             % (hooked[0], revoked[0], owned[0], elevated, "; ".join(details)))
+        if elevated:
+            _log("drop: процесс с правами админа — UIPI режет дроп "
+                 "из Проводника, запускай без повышения")
+    except Exception as e:  # noqa: BLE001
+        _log("drop: child hook: %s" % e)
 
 
 def run_pywebview(config, url, app=None, app_dir=None):
@@ -320,7 +709,7 @@ def run_pywebview(config, url, app=None, app_dir=None):
         _main = None      # главное окно (создаётся после проверки обновлений)
         _splash = None    # окно-лаунчер
         _ready = False    # main_ready пришёл раньше, чем создано главное окно
-        _drop_filter = None  # нативный WM_DROPFILES фильтр (держать ссылку)
+        _drop_filter = None  # маркер установки нативного дропа (хуки в _DROP_HOOKS)
 
         def _win(self):
             if self._main is not None:
@@ -657,13 +1046,19 @@ def run_pywebview(config, url, app=None, app_dir=None):
             return self._tray
 
         def _app_icon(self):
-            """Иконка трея: assets/icons рядом с EXE, _MEIPASS, exe-иконка."""
+            """Иконка трея: assets/icons рядом с EXE, embedded-кэш
+            (icons внутри frozen .exe), _MEIPASS, exe-иконка."""
             try:
                 from System.Drawing import Icon
                 cands = []
                 base = _pick_app_dir()
                 meipass = getattr(sys, "_MEIPASS", None)
-                for root in filter(None, (base, meipass, app_dir)):
+                try:
+                    from terminator_toolset.services import embedded_cache as _emb
+                    emb_icons = _emb.ensure()[0]
+                except Exception:  # noqa: BLE001
+                    emb_icons = ""
+                for root in filter(None, (base, emb_icons, meipass, app_dir)):
                     for name in ("app_icon.ico",
                                  os.path.join("assets", "icons", "app_icon.ico"),
                                  os.path.join("assets", "icons", "app_icon.png")):
@@ -829,8 +1224,9 @@ def run_pywebview(config, url, app=None, app_dir=None):
         _boot_ping(app, 18)
         # нативный DnD в окно (точные пути дропа в mailbox): форма
         # появляется на GUI-потоке асинхронно — ждём её недолго, ставим
-        # строго в GUI-потоке (_form_invoke); ссылку на фильтр держим в
-        # api._drop_filter, иначе GC убьёт колбэки
+        # строго в GUI-потоке (_form_invoke); ссылки на хуки живут в
+        # модуле _DROP_HOOKS, иначе GC убьёт колбэки. Поздние дочерние
+        # HWND WebView2 довстановливаются фоновым _drop_rehook.
         _drop_form = None
         for _ in range(24):
             try:
@@ -850,6 +1246,25 @@ def run_pywebview(config, url, app=None, app_dir=None):
 
             api._form_invoke(_drop_job)
             api._drop_filter = _drop_box[0] if _drop_box else None
+            # дочерние HWND WebView2 появляются/пересоздаются поздно, а свой
+            # OLE-приёмник Chromium регистрирует после старта рендера —
+            # поэтому сторож периодически повторяет revoke-проход (дешёво:
+            # несколько RevokeDragDrop) и переподтверждает приёмник формы.
+            # _hook_one пропускает уже подменённые wndproc, дубли безопасны.
+            def _drop_rehook(delays=(6.0, 20.0, 45.0, 90.0, 180.0, 300.0,
+                                     600.0)):
+                try:
+                    for d in delays:
+                        time.sleep(d)
+                        try:
+                            api._form_invoke(
+                                lambda f: _install_drop_child_hook(f))
+                        except Exception as e:  # noqa: BLE001
+                            _log("drop: rehook: %s" % e)
+                except Exception:  # noqa: BLE001
+                    pass
+
+            threading.Thread(target=_drop_rehook, daemon=True).start()
         else:
             _log("drop: no form, native drop disabled")
         # «Полный экран» из настроек: ручной разворот на WorkingArea

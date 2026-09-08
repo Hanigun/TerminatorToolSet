@@ -67,9 +67,17 @@ class SessionStore:
     def minimal_grid(path: str) -> dict:
         """Streaming iterparse of the first worksheet -> logical row values.
 
-        Skips the header row (matches Session.grid() rows semantics); honours
-        sparse ss:Index cell positions without building the full lxml tree.
+        First yielded row is the header (matches Session.grid() column
+        semantics: links index col 0 + sysname-titled columns); the rest
+        are data rows. Honours sparse ss:Index cell positions without
+        building the full lxml tree.
         """
-        rows = [{"values": v} for v in spreadsheet_ml_mod.iter_rows_logical(
-            path, skip_header=True)]
-        return {"rows": rows, "sheet_index": 0}
+        stream = spreadsheet_ml_mod.iter_rows_logical(path, skip_header=False)
+        stream = iter(stream)
+        try:
+            header = next(stream)
+        except StopIteration:
+            header = []
+        rows = [{"values": v} for v in stream]
+        return {"rows": rows, "sheet_index": 0,
+                "columns": [str(c or "") for c in header]}

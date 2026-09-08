@@ -1,0 +1,530 @@
+/* uprising.css — 11/20 · карта Uprising, рандомайзер, чипы, select · порядок каскада: CSS_ORDER в scripts/verify-ui-wiring.mjs */
+/* Карта Uprising: текстура + SVG-секторы + панель наград */
+.upr-wrap { flex: 1; display: flex; gap: 10px; min-height: 0; position: relative; }
+/* оверлей загрузки карты: затемнение + спиннер по центру */
+.upr-loading { position: absolute; inset: 0; z-index: 50; display: flex;
+  align-items: center; justify-content: center; background: rgba(0,0,0,.45); }
+.upr-loading[hidden] { display: none; }
+.upr-loading-spin { width: 46px; height: 46px; border-radius: 50%;
+  border: 4px solid rgba(255,255,255,.25); border-top-color: #fff;
+  animation: spin .8s linear infinite; }
+/* плейсхолдер чипа, пока иконка грузится: затемнение + анимированный
+   спиннер по центру (без скачка геометрии — слот остаётся своего размера) */
+.upr-chip.upr-loading { background: transparent; }
+.upr-chip.upr-loading .upr-chip-icon { opacity: .35; }
+.upr-chip.upr-loading::before {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  width: 26px; height: 26px; margin: -13px 0 0 -13px;
+  border-radius: 50%; border: 3px solid rgba(255,255,255,.22);
+  border-top-color: #fff; animation: spin .8s linear infinite;
+  z-index: 3; pointer-events: none;
+}
+/* категорийный плейсхолдер вместо иконки: чистая картинка без рамки,
+   фона и hover-аутлайна */
+.upr-chip.upr-chip-ph { border-color: transparent; background: transparent; }
+.upr-chip.upr-chip-ph .upr-chip-icon { background: transparent; }
+.upr-chip.upr-chip-ph:hover { outline: none; }
+/* кнопка-добавление — иконка upgrd_base.webp последней в ряду */
+.upr-chip-add { border: none; background: transparent; padding: 3px; cursor: pointer;
+  display: inline-flex; align-items: center; }
+.upr-chip-add-icon { display: block; pointer-events: none; }
+.upr-chip-add:hover .upr-chip-add-icon { outline: 1px dashed var(--accent); }
+.upr-chip-icon { min-width: 32px; min-height: 32px; }
+.upr-map {
+  position: relative;
+  flex: 1; min-width: 0; min-height: 0; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); background: var(--bg-card); padding: 8px;
+}
+.upr-chip-ok { color: var(--accent); opacity: .85; padding: 2px; }
+.upr-chip-ok:hover { opacity: 1; }
+.upr-map-box { position: relative; display: block; width: 100%; aspect-ratio: 3840 / 1996; max-height: 100%; min-height: 120px; min-width: 200px; background: #101216; }
+.upr-map-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+.upr-map-box svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* оверлей-кнопки карты: правый нижний угол поверх текстуры; высота обеих — H;
+   шестерёнка квадрат H×H, рандомайзер почти без скругления */
+/* оверлей-кнопки карты: правый нижний угол поверх текстуры; дизайн — как
+   у основных кнопок программы (.btn золотой акцент / .icon-btn), здесь
+   только крупная геометрия оверлея */
+/* оверлей-кнопки карты: каждая стоит в углу области карты СВОИМ абсолютом
+   (без общего flex-контейнера — flex больше не участвует в их раскладке
+   вообще, наложение исключено геометрией); размер пропорционален окну */
+.upr-map-actions {
+  --upr-btn: clamp(40px, 7vmin, 68px);
+  position: absolute; inset: auto 0 0 0; z-index: 5; pointer-events: none;
+}
+.upr-map-actions > button { pointer-events: auto; }
+.upr-map-btn {
+  position: absolute; bottom: calc(14px + 5%); margin: 0; box-sizing: border-box; line-height: 1;
+  height: var(--upr-btn); padding: 0 calc(var(--upr-btn) * 0.3);
+  font-size: calc(var(--upr-btn) * 0.235);
+}
+button.upr-map-btn.rnd {
+  right: calc(14px + var(--upr-btn) * 0.68 + 12px);
+  bottom: calc(8px + 5.6% + 29px);
+  height: calc(var(--upr-btn) * 0.68);
+  font-size: calc(var(--upr-btn) * 0.2);
+}
+.upr-map-btn.icon {
+  right: 14px; bottom: calc(8px + 5.6% + 29px);
+  width: calc(var(--upr-btn) * 0.68); height: calc(var(--upr-btn) * 0.68);
+  padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border-color: transparent;
+}
+.upr-map-btn.icon:hover { background: transparent; border-color: transparent; }
+.upr-map-btn.icon svg { transition: transform .35s ease; }
+.upr-map-btn.icon:hover svg { transform: rotate(60deg); }
+.upr-map-btn.icon svg { width: 28px; height: 28px; }
+/* рандомайзер: страница (бывшая широкая модалка), две колонки
+   (сектора | настройки), отчёт снизу; модальный класс оставлен для редактора */
+.upr-rnd-card { max-height: 92vh; }
+.upr-rnd-page-body { min-height: 0; }
+.upr-rnd-body {
+  flex: 1; min-height: 0; overflow: auto; padding: 14px 16px;
+  display: grid; grid-template-columns: 300px 1fr; gap: 16px;
+}
+.upr-rnd-sectors { display: flex; flex-direction: column; gap: 2px; }
+.upr-rnd-sec-row {
+  display: flex; align-items: center; gap: 8px; padding: 3px 6px;
+  border: 1px solid transparent; border-radius: 4px; font-size: 13px;
+}
+.upr-rnd-sec-row:hover { background: rgba(255,255,255,.04); }
+.upr-rnd-sec-row.hl { border-color: var(--accent); }
+.upr-rnd-sec-row select { margin-left: auto; }
+.upr-rnd-sec-row.excluded { opacity: .55; }
+.upr-rnd-ex {
+  background: none; border: none; cursor: pointer;
+  font-size: 15px; font-weight: 700; line-height: 1; padding: 2px 4px;
+  color: #4a5058; opacity: .5;
+}
+.upr-rnd-ex.on { color: #e5484d; opacity: 1; }
+.upr-rnd-ex:disabled { cursor: default; }
+.upr-rnd-hint { font-size: 12px; color: var(--text-mute); margin: -2px 0 6px; line-height: 1.45; }
+.upr-rnd-opts { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.upr-rnd-group { border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; }
+.upr-rnd-group > legend, .upr-rnd-gtitle { font-size: 12px; font-weight: 700; color: var(--text-mute);
+  text-transform: uppercase; letter-spacing: .4px; margin-bottom: 8px; }
+.upr-rnd-row { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 2px 0; flex-wrap: wrap; }
+.upr-rnd-row input[type="range"] { flex: 1; min-width: 120px; }
+/* ползунки рандомайзера в стиле программы: почти без закруглений (2px),
+   одна фиксированная длина 200px, насечка на каждом тике */
+.upr-slider-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 6px 0; }
+.upr-slider-row > span:first-child { flex: 1; min-width: 0; }
+.upr-slider-mid { display: flex; flex-direction: column; width: 200px; flex: none; }
+.upr-slider-row .upr-rnd-val { min-width: 40px; }
+.upr-slider-in {
+  width: 200px; height: 18px; margin: 0;
+  -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer;
+}
+.upr-slider-in::-webkit-slider-runnable-track {
+  height: 6px; background: var(--bg-input, #22252b);
+  border: 1px solid var(--border); border-radius: 2px;
+}
+.upr-slider-in::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 12px; height: 16px; margin-top: -6px;
+  background: var(--accent); border: 1px solid #8a6d1f; border-radius: 2px;
+}
+.upr-slider-in::-moz-range-track {
+  height: 6px; background: var(--bg-input, #22252b);
+  border: 1px solid var(--border); border-radius: 2px;
+}
+.upr-slider-in::-moz-range-thumb {
+  width: 10px; height: 14px;
+  background: var(--accent); border: 1px solid #8a6d1f; border-radius: 2px;
+}
+.upr-ticks {
+  width: 200px; height: 5px; margin-top: 2px;
+  padding: 0 7px; box-sizing: border-box; background-clip: content-box;
+  opacity: .8;
+}
+/* попап прогресса долгой записи (Apply/Undo рандомайзера) */
+.upr-prog-ov {
+  position: fixed; inset: 0; z-index: 300;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(10,12,15,.55);
+}
+.upr-prog-card {
+  width: 320px; padding: 16px 18px;
+  background: var(--bg-panel, #1d1f24); border: 1px solid var(--border);
+  border-radius: 2px; box-shadow: 0 8px 24px rgba(0,0,0,.45);
+}
+.upr-prog-label { font-size: 13px; margin-bottom: 10px; }
+.upr-prog-bar {
+  height: 10px; border-radius: 5px; overflow: hidden;
+  background: rgba(255,255,255,.10); position: relative;
+}
+.upr-prog-fill {
+  height: 100%; width: 0; border-radius: 5px;
+  background: var(--accent); transition: width .15s ease;
+}
+.upr-prog-pct { margin-top: 8px; font-size: 12px; color: var(--text-mute); text-align: right; }
+.upr-rnd-val { min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; color: var(--accent); font-weight: 600; }
+.upr-rnd-report { font-size: 12.5px; max-height: 220px; overflow: auto; }
+.upr-rnd-report table { border-collapse: collapse; width: 100%; }
+.upr-rnd-report th, .upr-rnd-report td { border: 1px solid var(--border); padding: 3px 7px; text-align: right; }
+.upr-rnd-report th:first-child, .upr-rnd-report td:first-child { text-align: left; }
+.upr-rnd-foot {
+  display: flex; align-items: center; gap: 8px; justify-content: flex-end;
+  padding: 12px 16px; border-top: 1px solid var(--border);
+}
+.upr-rnd-foot .seed { width: 110px; }
+/* верхняя панель действий страницы: seed + кнопки, вправо */
+.upr-rnd-topbar {
+  grid-column: 1 / -1; display: flex; align-items: center; gap: 8px;
+  justify-content: flex-end; flex-wrap: wrap; margin-bottom: 4px;
+}
+.upr-rnd-topbar .seed { width: 110px; }
+.upr-zone { cursor: pointer; stroke-width: 7; transition: stroke-width .12s, filter .12s; }
+.upr-zone.f-player      { fill: rgba(84,144,42,.30);   stroke: rgba(111,165,59,.67); }
+.upr-zone.f-legion      { fill: rgba(158,32,32,.30);   stroke: rgba(179,59,50,.67); }
+.upr-zone.f-integrators { fill: rgba(120,48,165,.30);  stroke: rgba(146,77,179,.67); }
+.upr-zone.f-founders    { fill: rgba(39,84,158,.30);   stroke: rgba(67,118,179,.67); }
+.upr-zone.f-grey        { fill: rgba(104,112,120,.29); stroke: rgba(137,146,154,.61); }
+.upr-zone.empty { opacity: .28; }
+/* яркость фильтром нельзя: brightness пережимает зелёный/синий край в жёлтый */
+.upr-zone:hover { stroke-width: 11; }
+/* выделенный сектор ярче на 20%; после затемнения палитры запас по каналам
+   есть, поэтому brightness не сдвигает оттенок в жёлтый */
+.upr-zone.sel { stroke-width: 18; filter: brightness(1.2); }
+.upr-badge { pointer-events: none; }
+.upr-badge image { transition: filter .12s; }
+.upr-badge text { fill: #fff; font-size: 24px; font-weight: 700; }
+/* плитка сектора в настройках карты: щит в рамочке, под ним сложность
+   и цвет — всё в одной общей рамочке */
+.upr-sectors-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px; max-height: 62vh; overflow: auto; padding: 4px 12px 12px; }
+.upr-sec-tile { border: 1px solid var(--border); border-radius: 6px;
+  padding: 10px 8px 8px; display: flex; flex-direction: column;
+  align-items: center; gap: 6px; background: var(--bg-card); }
+.upr-sec-tile:hover { border-color: var(--text-mute); }
+.upr-sec-shield { display: inline-flex; }
+.upr-sec-tile select { width: 100%; font-size: 11.5px; padding: 2px 4px; }
+/* зелёная кнопка светится своим цветом, а не жёлтым accent-glow */
+.btn.green { box-shadow: 0 0 8px rgba(46,125,50,.55); }
+.btn.green:hover { box-shadow: 0 0 14px rgba(56,142,60,.7), 0 0 26px rgba(56,142,60,.4); filter: none; }
+.btn.green:active { box-shadow: 0 0 6px rgba(46,125,50,.55); }
+.upr-shield-wrap { position: relative; display: inline-flex; }
+.upr-shield-num { position: absolute; left: 50%; top: 59%; transform: translate(-50%, -50%);
+  font-size: 10px; font-weight: 700; line-height: 1; color: #fff; pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0,0,0,.85), 0 0 3px rgba(0,0,0,.6); }
+.upr-shield-img { filter: drop-shadow(0 2px 3px rgba(0,0,0,.45)); display: block; }
+/* сложности зон/юнитов + баланс-конфиг */
+.upr-diff-sel { padding: 2px 4px; font-size: 11.5px; }
+.upr-sector-head { display: flex; align-items: center; gap: 10px; }
+.upr-sector-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upr-chip-diff {
+  flex: none; border: 1px solid var(--border); background: transparent;
+  color: var(--text); font-size: 10px; font-weight: 700; line-height: 1;
+  padding: 2px 4px; cursor: pointer;
+}
+.upr-chip-diff:hover { border-color: var(--accent); color: var(--accent); }
+.upr-chip-diff.inherited { opacity: .5; font-weight: 400; }
+.upr-chip-diff-inp {
+  width: 46px; border: 1px solid var(--accent); background: var(--bg);
+  color: var(--text); font-size: 11px; padding: 1px 4px;
+}
+.upr-cfg-box {
+  border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.upr-cfg-title { font-size: 12px; font-weight: 700; color: var(--text-mute);
+  text-transform: uppercase; letter-spacing: .04em; }
+.upr-cfg-prow { display: flex; gap: 6px; }
+.upr-cfg-path {
+  flex: 1; min-width: 0; padding: 4px 8px; font-size: 12px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+}
+.upr-cfg-path:focus { border-color: var(--accent); outline: none; }
+.upr-cfg-brow { display: flex; gap: 6px; flex-wrap: wrap; }
+.upr-panel-toggle {
+  flex: 0 0 auto; align-self: center; width: 22px; height: 64px; padding: 0;
+  border: 1px solid var(--border); background: var(--bg-card); color: var(--text-mute);
+  font-size: 18px; line-height: 1; cursor: pointer;
+}
+/* общий сегмент-переключатель источника «Проект | Игра | Мод»:
+   скользящая «пилюля» под активным пунктом (как переключатель тем),
+   высота — как у обычной кнопки (.btn), недоступный пункт темнеет */
+/* сегменты карты + мини-прогресс конвертации иконок: бар висит абсолютом
+   под сегментом (в зазоре шапки) — страницу не раздвигает никогда */
+.upr-src-wrap { position: relative; flex-shrink: 0; }
+.upr-conv {
+  position: absolute; top: calc(100% + 2px); left: 2px; right: 2px;
+  pointer-events: none; z-index: 5;
+}
+.upr-conv-track {
+  height: 3px; border-radius: 2px; overflow: hidden;
+  background: rgba(255,255,255,.12);
+}
+.upr-conv-track i {
+  display: block; height: 100%; width: 0;
+  background: var(--accent); border-radius: 2px;
+  box-shadow: 0 0 6px var(--accent-glow);
+  transition: width .2s ease;
+}
+.upr-conv-txt {
+  display: block; margin-top: 2px;
+  font-size: 10px; line-height: 1.2; text-align: center;
+  color: var(--text-mute); white-space: nowrap;
+}
+.src-seg {
+  position: relative; display: inline-flex; align-items: stretch;
+  height: 30px; min-width: 240px;
+  border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  background: var(--bg-elev); flex-shrink: 0;
+}
+.src-seg-ind {
+  position: absolute; top: 2px; bottom: 2px; left: 2px;
+  width: calc((100% - 4px) / 3);
+  background: var(--accent); border-radius: 6px;
+  box-shadow: 0 0 10px var(--accent-glow);
+  transition: transform .18s ease;
+  pointer-events: none;
+}
+.src-seg[data-pos="1"] .src-seg-ind { transform: translateX(100%); }
+.src-seg[data-pos="2"] .src-seg-ind { transform: translateX(200%); }
+/* источник недоступен: жёлтой пилюли нет (не светим «активность» по умолчанию) */
+.src-seg[data-pos="-1"] .src-seg-ind { display: none; }
+.src-seg-btn {
+  position: relative; z-index: 1; flex: 1 1 0; min-width: 0;
+  border: none; background: transparent; cursor: pointer;
+  color: var(--text-mute); font-family: var(--font);
+  font-size: 12px; font-weight: 600; padding: 0 12px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: color .18s ease;
+}
+.src-seg-btn:hover:not(:disabled) { color: var(--text); }
+.src-seg-btn.active { color: #1a1a1a; }
+.src-seg-btn:disabled { opacity: .35; cursor: not-allowed; }
+/* серая кнопка сегмента карты без пути: выглядит недоступной, но кликабельна
+   (ведёт в настройки путей) */
+.src-seg-btn.is-off { opacity: .35; cursor: pointer; }
+.src-seg-sm { height: 27px; min-width: 210px; }
+.src-seg-sm .src-seg-btn { font-size: 11.5px; padding: 0 10px; }
+/* сегменты сторон сравнения: кнопки компактные без растягивания,
+   скругление минимальное; скользящей пилюли нет (ширина кнопок разная) —
+   активная красится сама */
+.cmp-side .src-seg-sm { min-width: 0; height: 26px; border-radius: 3px; align-self: flex-start; }
+.cmp-side .src-seg-sm .src-seg-ind { display: none; }
+.cmp-side .src-seg-sm .src-seg-btn { flex: none; font-size: 11px; padding: 0 9px; }
+.cmp-side .src-seg-sm .src-seg-btn.active { background: var(--accent); color: #1a1a1a; border-radius: 2px; }
+.upr-panel-toggle:hover { color: var(--accent); border-color: var(--accent); }
+.upr-main { flex: 0 0 360px; overflow: auto; min-width: 0; }
+.upr-wrap.panel-closed .upr-main { display: none; }
+/* пустое состояние карты: оверлей поверх области карты (место карты
+   занято, высокого блока нет); карточка по центру, закрыть нельзя */
+.upr-nofile {
+  position: absolute; inset: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(10, 12, 16, .72);
+  padding: 16px; pointer-events: auto;
+}
+.upr-nofile[hidden] { display: none; }
+.upr-nofile-card { max-width: 420px; text-align: center; }
+.upr-nofile .swt-empty { padding: 16px 20px 10px; }
+.upr-nofile-actions { display: flex; gap: 8px; justify-content: center; padding-bottom: 16px; }
+.upr-variants { display: flex; gap: 6px; margin-bottom: 10px; }
+.upr-variant {
+  padding: 4px 14px; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg-card); color: var(--text);
+}
+.upr-variant.sel { background: var(--accent); border-color: var(--accent); color: #14161a; font-weight: 600; }
+.upr-sector-head { font-size: 16px; font-weight: 700; margin-bottom: 10px; }
+.upr-cat { margin-bottom: 14px; }
+.upr-cat-title { font-size: 11px; font-weight: 700; color: var(--text-mute); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+.upr-cat-body {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  border: 1px solid var(--border); background: var(--bg-card); padding: 8px;
+}
+.upr-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  border: 1px solid var(--border); background: var(--bg); padding: 2px 4px 2px 6px;
+}
+.upr-chip.unknown { border-color: #f2c500; }
+.upr-chip.unknown::after { content: "?"; color: #f2c500; font-weight: 700; }
+.upr-chip-name { width: 170px; border: none; background: transparent; color: var(--text); font-size: 12px; }
+.upr-chip-n { width: 44px; border: 1px solid var(--border); background: transparent; color: var(--text-mute); font-size: 11px; text-align: center; }
+.upr-chip-n::-webkit-outer-spin-button, .upr-chip-n::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.upr-chip-del { opacity: .5; padding: 2px; }
+.upr-chip-del:hover { opacity: 1; color: #e57373; }
+.upr-chip-add:hover { color: var(--accent); }
+/* drag & drop элементов сектора на карту */
+.upr-chip { position: relative; cursor: grab; }
+.upr-chip:active { cursor: grabbing; }
+/* неизменяемый счётчик слева вверху чипа: череп + сложность × количество */
+.upr-chip-badge { position: absolute; top: 2px; left: 2px; display: flex;
+  align-items: center; gap: 3px; background: rgba(0,0,0,.34); border-radius: 0;
+  padding: 1px 5px 1px 2px; font-size: 10px; font-weight: 700; color: #fff;
+  pointer-events: none; z-index: 2; line-height: 1.4; }
+.upr-chip-skull { width: 13px; height: 13px; }
+/* чипы предметов: только смещение левее, остальное как у всех */
+.upr-chip-badge-items { top: 7%; left: 3%; }
+.upr-chip.picked { outline: 2px solid var(--accent); background: rgba(232, 184, 75, .12); }
+.upr-chip.upr-chip-dragging { opacity: .35; }
+.upr-chip-name-text {
+  font-size: 12px; max-width: 150px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; user-select: none;
+}
+/* карточка = чистая иконка реального размера (техника 136x72, пехота 60x60,
+   предметы свои); без подложки и рамок; весь чип — ручка переноса */
+.upr-card {
+  border-color: transparent; background: transparent;
+  padding: 3px; min-width: 40px; min-height: 40px;
+}
+/* ховер иконки юнита: пунктирный outline */
+.upr-card:hover { outline: 1px dashed var(--border); }
+.upr-card.picked { outline: 2px solid var(--accent); }
+.upr-chip-icon {
+  display: block; user-select: none; pointer-events: none;
+  background-repeat: no-repeat;
+}
+.upr-chip-icon.noicon { display: none; }
+.upr-card.unknown::after {
+  position: absolute; top: 0; right: 2px; content: "?";
+  color: #f2c500; font-weight: 700; font-size: 12px;
+}
+/* модалка правки элемента: поверх карточки, крупнее иконки */
+.upr-edit-pop {
+  position: fixed; z-index: 1250; width: 360px;
+  background: var(--bg-elev); border: 1px solid var(--accent);
+  border-radius: 8px; box-shadow: 0 14px 34px rgba(0, 0, 0, .55);
+  padding: 10px; display: flex; flex-direction: column; gap: 8px;
+}
+.upr-edit-pop .upr-chip-name {
+  width: 100%; border: 1px solid var(--border); background: var(--bg);
+  color: var(--text); padding: 5px 8px; font-size: 12.5px;
+}
+.upr-edit-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.upr-edit-row label {
+  flex: none; width: 22px; text-align: center;
+  color: var(--text-mute); font-weight: 700;
+}
+/* подпись пункта: название + серое описание, поле — мини справа */
+.upr-edit-lab { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.upr-edit-lab b { font-weight: 600; color: var(--text); font-size: 12px; }
+.upr-edit-lab span { color: var(--text-mute); font-size: 11px; }
+.upr-edit-row input.mini {
+  flex: none; width: 52px; text-align: right;
+  border: 1px solid var(--border); background: var(--bg);
+  color: var(--text); padding: 5px 6px; font-size: 12.5px;
+}
+.upr-edit-row .upr-chip-name { flex: 1; min-width: 0; text-align: right; }
+.upr-edit-row input[type=number]:not(.mini), .upr-edit-row .upr-chip-diff-inp:not(.mini) {
+  flex: 1; min-width: 0; border: 1px solid var(--border); background: var(--bg);
+  color: var(--text); padding: 5px 8px; font-size: 12.5px;
+}
+/* цена — текст справа, как мини-поля */
+.upr-price-val { flex: none; min-width: 52px; text-align: right;
+  color: var(--text); font-size: 12.5px; font-weight: 600; }
+.upr-edit-btns { display: flex; gap: 6px; justify-content: flex-end; }
+/* раздвижная боковая панель сектора */
+.upr-resizer {
+  flex: 0 0 6px; align-self: stretch; padding: 0;
+  border: none; background: transparent; cursor: col-resize;
+}
+.upr-resizer:hover { background: var(--accent); opacity: .35; }
+.upr-wrap.panel-closed .upr-resizer { display: none; }
+body.upr-resizing { user-select: none; cursor: col-resize; }
+.upr-chip.upr-chip-add-form { border-color: var(--accent); background: rgba(232, 184, 75, .06); }
+.upr-drag-ghost {
+  position: fixed; z-index: 1200; margin: 0; display: inline-flex; align-items: center; gap: 4px;
+  pointer-events: none; background: var(--bg-elev); box-shadow: 0 10px 28px rgba(0,0,0,.55);
+  border-color: var(--accent); opacity: .95;
+}
+.upr-drag-ghost.upr-card { flex-direction: column; align-items: stretch; }
+.upr-ghost-n { background: var(--accent); color: #1a1608; border-radius: 10px; padding: 1px 8px; font-size: 11px; font-weight: 700; }
+.upr-drop-label {
+  position: fixed; z-index: 1201; pointer-events: none;
+  background: var(--accent); color: #1a1608; padding: 6px 12px; border-radius: 6px;
+  font-size: 12px; font-weight: 700; box-shadow: 0 6px 18px rgba(0,0,0,.45);
+}
+.upr-zone.drop-hint { stroke-width: 16 !important; cursor: grabbing; }
+.upr-zone.flash { animation: upr-flash .7s ease-out; }
+@keyframes upr-flash { 0% { stroke-width: 26; } }
+body.upr-dragging { user-select: none; cursor: grabbing; }
+/* модалка-редактор зоны вместо скрытой панели: широкое окно по центру карты,
+   категории — горизонтальным рядом с прокруткой */
+.upr-modal { background: transparent; pointer-events: none; padding: 0; }
+.upr-modal .modal-card {
+  pointer-events: auto; width: min(1150px, 94vw); max-height: 86vh;
+  margin: auto;
+}
+.upr-modal-body { overflow: auto; padding: 12px 16px 16px; max-height: calc(86vh - 54px); }
+.upr-cats-row { display: flex; flex-direction: column; gap: 12px; }
+.upr-cats-row.horiz { flex-direction: row; align-items: flex-start; overflow-x: auto; gap: 14px; padding-bottom: 6px; }
+.upr-cats-row.horiz .upr-cat { flex: 1 0 215px; min-width: 215px; margin-bottom: 0; }
+.upr-title { display: inline-flex; align-items: center; gap: 8px; }
+.upr-title-shield { display: inline-flex; }
+
+/* красивые тёмные выпадающие списки */
+select {
+  appearance: none; -webkit-appearance: none;
+  background: var(--bg-card) url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239aa3ad' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 8px center;
+  border: 1px solid var(--border); color: var(--text);
+  border-radius: var(--radius); padding: 5px 26px 5px 9px;
+  font-family: var(--font); font-size: 12px; outline: none; cursor: pointer;
+  transition: border-color .15s, box-shadow .15s;
+}
+select:hover { border-color: var(--text-mute); }
+select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
+select option { background: #22262c; color: #e8e6e3; }
+select:disabled { opacity: .45; cursor: default; }
+
+/* рандомайзер v2: карточки режимов, вкладки, редактор */
+/* карточки режимов: в ряд, активная с золотым акцентом */
+.upr-rnd-modes { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px; }
+.upr-rnd-mode {
+  flex: 1 1 0; min-width: 110px; padding: 10px 6px;
+  background: var(--bg-input, #22252b); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+  font-family: var(--font); font-size: 13px; font-weight: 600;
+}
+.upr-rnd-mode:hover { border-color: var(--text-mute); }
+.upr-rnd-mode.active { border-color: var(--accent); color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-glow); }
+/* вкладки Простой/Эксперт внутри правой колонки */
+.upr-rnd-tabs { margin-bottom: 4px; }
+/* тело редактора: одна колонка вместо двух */
+.upr-cfg-ed-body { grid-template-columns: 1fr; }
+/* строка юнита редактора: поля в ряд */
+.upr-cfg-ed-urow { gap: 6px; }
+.upr-cfg-ed-urow input[type="text"] { min-width: 0; }
+/* неизвестный sysname: жёлтая рамка как у чипов unknown */
+input.upr-unknown { border-color: #c9a227; background: rgba(201,162,39,.08); }
+/* статусная строка фута редактора */
+#upr-cfg-ed-status { font-size: 12.5px; color: var(--text-mute); }
+/* редактор секторов: та же плитка, что «Сектора» настроек карты */
+.upr-cfg-ed-grid { max-height: none; }
+.upr-cfg-ed-tile-cnt { font-size: 11px; color: var(--text-mute); }
+/* редактор юнитов: аккордеон секторов */
+.upr-cfg-ed-acc { display: flex; flex-direction: column; gap: 6px; }
+.upr-cfg-ed-sec { border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg-card); overflow: hidden; }
+.upr-cfg-ed-sec-head { display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 8px 10px; background: transparent; border: none;
+  color: var(--text); cursor: pointer; font-family: var(--font);
+  font-size: 13px; text-align: left; }
+.upr-cfg-ed-sec-head:hover { background: rgba(255,255,255,.04); }
+.upr-cfg-ed-sec-head.open { border-bottom: 1px solid var(--border); }
+.upr-cfg-ed-sec-title { font-weight: 700; white-space: nowrap; }
+.upr-cfg-ed-sec-sum { flex: 1; min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text-mute); font-size: 12px; }
+.upr-cfg-ed-sec-badge { flex: none; font-size: 11.5px; color: var(--text-mute);
+  border: 1px solid var(--border); border-radius: 10px; padding: 1px 8px; }
+.upr-cfg-ed-chev { flex: none; color: var(--text-mute); font-size: 12px; }
+.upr-cfg-ed-cats { padding: 10px; }
+/* все поля ввода редактора — в цветах программы, белых нет */
+.upr-cfg-ed-body input[type="text"],
+.upr-cfg-ed-body input[type="number"] {
+  background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  border-radius: var(--radius); padding: 5px 8px;
+  font-family: var(--font); font-size: 12.5px; outline: none;
+}
+.upr-cfg-ed-body input[type="text"]:focus,
+.upr-cfg-ed-body input[type="number"]:focus { border-color: var(--accent); }
+.upr-cfg-ed-search { flex: 1; min-width: 120px; }
+.upr-cfg-ed-drop { min-height: 44px; border-radius: 4px; }
+.upr-cfg-ed-pop { z-index: 1200; }
+

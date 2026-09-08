@@ -16,13 +16,20 @@ function uprRndDefOpts() {
                inventory_items: 0.2 },
     countHeads: true,             // нагрузка в головах (Count) или записях
     softTol: false,               // мягкий допуск ±1 с половинным весом
-    factionMode: "own",           // own | mix
+    factionMode: "own",           // own | mix | free (free — только Эксперт)
     freePlace: true,              // юнитам без фракции — свободное размещение
     noOrigin: false,              // не класть в исходный сектор
     noNeighbours: false,          // не класть в соседние по номеру (±1)
     cap: 0,                       // лимит голов на сектор (0 = без лимита)
     seed: (Date.now() % 1000000),
     orphan: "nearest",            // nearest | stay | skip
+    // --- слой режимов v2 ---
+    mode: "balanced",             // активный режим: easy|balanced|hard|chaos
+    useModeSectors: true,         // сложности секторов брать из режима
+    protectStarts: true,          // стартовые 1,2,22 не пустеют
+    protectCapitals: true,        // столицы 1,4,12,18,22 не пустеют
+    loot: { rare_min_cost: 1500, rare_only_diff: 4,
+            rare_in_capital: true, common_free: true },
   };
 }
 
@@ -38,6 +45,7 @@ function uprRndOpts() {
   const d = uprRndDefOpts();
   o.cats = Object.assign({}, d.cats, o.cats);
   o.weights = Object.assign({}, d.weights, o.weights);
+  o.loot = Object.assign({}, d.loot, o.loot);
   return Object.assign(d, o);
 }
 // запись в localStorage сразу + в конфиг с дебаунсом (ползунки не спамят)
@@ -55,20 +63,141 @@ function uprRndSaveOpts(o) {
 }
 
 // мета юнитов с бэкенда: {factions: {sys: faction}, costs: {sys: cost}}
+// costs добираем из uprising_prices (там есть и предметы для [LOOT])
 let _uprRndMeta = null;
 async function uprRndMeta() {
   if (_uprRndMeta) return _uprRndMeta;
   _uprRndMeta = { factions: {}, costs: {} };
+  const payload = {
+    project_root: (state.project && state.project.root) || "",
+    unpacked_path: state.config.unpacked_path || "",
+  };
   try {
     const r = await api("/api/upr_unit_meta", { method: "POST",
-      body: JSON.stringify({
-        project_root: (state.project && state.project.root) || "",
-        unpacked_path: state.config.unpacked_path || "",
-      }) });
+      body: JSON.stringify(payload) });
     const j = await r.json();
     if (j && j.ok) _uprRndMeta = { factions: j.factions || {}, costs: j.costs || {} };
   } catch (e) { /* без меты — текстовый ввод и wildcard-фракции */ }
+  try {
+    const root = payload.project_root || payload.unpacked_path || "";
+    const r2 = await api("/api/uprising_prices", { method: "POST",
+      body: JSON.stringify({ root }) });
+    const j2 = await r2.json();
+    Object.values((j2 && j2.prices) || {}).forEach(byCat => {
+      Object.entries(byCat || {}).forEach(([sys, c]) => {
+        const n = parseInt(c, 10) || 0;
+        if (!_uprRndMeta.costs[sys] && n > 0) _uprRndMeta.costs[sys] = n;
+      });
+    });
+  } catch (e) { /* цены предметов опциональны */ }
   return _uprRndMeta;
+}
+// подгрузить распарсенный режим (только данные, опции не трогаем)
+async function uprRndModeLoad(name) {
+  try {
+    const r = await api("/api/uprising_rnd_mode_get", { method: "POST",
+      body: JSON.stringify({ kind: "any", name: name + ".cfg" }) });
+    const j = await r.json();
+    _uprRndModeData = (j && j.ok && j.version === "v2") ? j : null;
+  } catch (e) { _uprRndModeData = null; }
+  return _uprRndModeData;
+}
+
+// ---------- режимы v2 ----------
+// столицы карты (UPR_CAPITALS в uprising.js) + стартовые игрока
+const UPR_RND_CAPITALS = [1, 4, 12, 18, 22];
+const UPR_RND_STARTS = [1, 2, 22];
+const UPR_RND_MODES = ["easy", "balanced", "hard", "chaos"];
+
+let _uprRndModesCache = null;   // {built_in:[], custom:[]}
+let _uprRndModesPromise = null; // общий полёт: параллельные читатели делят один fetch
+let _uprRndModeData = null;     // распарсенный активный режим v2
+async function uprRndModesList() {
+  if (_uprRndModesCache) return _uprRndModesCache;
+  if (!_uprRndModesPromise) {
+    _uprRndModesPromise = (async () => {
+      const res = { built_in: [], custom: [] };
+      try {
+        const r = await api("/api/uprising_rnd_modes", { method: "POST" });
+        const j = await r.json();
+        if (j && j.ok) { res.built_in = j.built_in || []; res.custom = j.custom || []; }
+      } catch (e) { /* без бэкенда — только 4 встроенных по умолчанию */ }
+      _uprRndModesCache = res;
+      _uprRndModesPromise = null;
+      return res;
+    })();
+  }
+  return _uprRndModesPromise;
+}
+// применить правила режима к опциям (файл остаётся нетронутым)
+async function uprRndModeApply(name) {
+  const o = uprRndOpts();
+  o.mode = name;
+  _uprRndModeData = null;
+  try {
+    const r = await api("/api/uprising_rnd_mode_get", { method: "POST",
+      body: JSON.stringify({ kind: "any", name: name + ".cfg" }) });
+    const j = await r.json();
+    if (j && j.ok && j.version === "v2") {
+      _uprRndModeData = j;
+      const rl = j.rules || {};
+      if (rl.faction_mode) o.factionMode = rl.faction_mode;
+      if (typeof rl.chaos_k === "number") o.k = rl.chaos_k;
+      if (typeof rl.count_heads === "boolean") o.countHeads = rl.count_heads;
+      if (typeof rl.diff_soft_pm === "boolean") o.softTol = rl.diff_soft_pm;
+      if (typeof rl.no_origin === "boolean") o.noOrigin = rl.no_origin;
+      if (typeof rl.no_neighbours === "boolean") o.noNeighbours = rl.no_neighbours;
+      if (typeof rl.cap_heads === "number") o.cap = rl.cap_heads;
+      if (typeof rl.seed_default === "number" && !o._seedTouched) o.seed = rl.seed_default;
+      Object.assign(o.weights, j.weights || {});
+      Object.assign(o.loot, j.loot || {});
+    } else if (j && j.legacy) {
+      toast(t("upr_rnd_legacy") || "Режим v1 (устаревший): только чтение, преобразуйте в v2", "err");
+    }
+  } catch (e) { /* файл не прочитался — остаются текущие опции */ }
+  uprRndSaveOpts(o);
+  return o;
+}
+// карточка режима: название из локали, свой пресет — именем файла
+function uprRndModeTitle(name) {
+  const k = "upr_rnd_mode_" + name.replace(/\.cfg$/i, "");
+  const loc = t(k);
+  return (loc && loc !== k) ? loc : name.replace(/\.cfg$/i, "");
+}
+// панель карточек режимов в модалке (4 базовых + свои); rebuild — пересборка
+function uprRndPaintModes(bar, o, rebuild) {
+  bar.innerHTML = "";
+  const h = document.createElement("div");
+  h.className = "upr-rnd-gtitle";
+  h.textContent = t("upr_rnd_modes_t") || "Режим";
+  bar.appendChild(h);
+  const row = document.createElement("div");
+  row.className = "upr-rnd-modes";
+  const mk = (name, custom) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "upr-rnd-mode" + (o.mode === name ? " active" : "");
+    b.textContent = uprRndModeTitle(name) + (custom ? " ✎" : "");
+    b.title = custom ? name : ((t("upr_rnd_mode_" + name + "_d")) || name);
+    b.onclick = async () => {
+      await uprRndModeApply(name);
+      rebuild();
+    };
+    row.appendChild(b);
+  };
+  UPR_RND_MODES.forEach(n => mk(n, false));
+  bar.appendChild(row);
+  // список с бэкенда: свои пресеты + пометка v1
+  uprRndModesList().then(lst => {
+    (lst.custom || []).forEach(fn => mk(fn.replace(/\.cfg$/i, ""), true));
+    const hint = document.createElement("div");
+    hint.className = "upr-rnd-hint";
+    const cur = uprRndModeTitle(o.mode);
+    hint.textContent = (t("upr_rnd_mode_cur") || "Активный: ") + cur;
+    bar.appendChild(hint);
+    // карандаша «Редактировать» здесь больше нет: редактор — отдельная
+    // вкладка страницы (третья), дублирующая кнопка убрана
+  });
 }
 
 // парсинг сложности юнита: "4" -> [4,4], "3-5" -> [3,5], "" -> null (наследование)
@@ -80,20 +209,15 @@ function uprRndParseDiff(s) {
   return [a, b];
 }
 
-// оверлей-кнопки карты: [🎲 Рандомайзер][⚙] в правом нижнем углу;
-// высота обеих 34px (см. .upr-map-btn), скругление минимальное
+// оверлей карты: только [⚙] в правом нижнем углу (рандомайзер переехал
+// кнопкой в шапку карты и отдельной страницей, см. openUprisingRnd)
 window.uprRndOverlay = function (box) {
   // якорь — область карты (#upr-map, position: relative), а не бокс картинки:
-  // кнопки стоят в углу области при любом размере текстуры
+  // кнопка стоит в углу области при любом размере текстуры
   const anchor = (box && box.closest && box.closest("#upr-map")) || box;
   if (!anchor || anchor.querySelector(":scope > .upr-map-actions")) return;
   const bar = document.createElement("div");
   bar.className = "upr-map-actions";
-  const rnd = document.createElement("button");
-  rnd.type = "button";
-  rnd.className = "btn upr-map-btn rnd";
-  rnd.textContent = "🎲 " + (t("upr_rnd_title") || "Рандомайзер");
-  rnd.onclick = () => uprRndOpen();
   const gear = document.createElement("button");
   gear.type = "button";
   gear.className = "icon-btn upr-map-btn icon";
@@ -115,35 +239,15 @@ window.uprRndOverlay = function (box) {
     '1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 ' +
     '0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
   gear.onclick = () => uprOpenColors();
-  bar.append(rnd, gear);
+  bar.append(gear);
   anchor.appendChild(bar);
-  // ВРЕМЕННАЯ самодиагностика раскладки (убрать после починки): страница сама
-  // меряет кнопки и докладывает в лог — видно, что реально отрендерилось
-  try {
-    requestAnimationFrame(() => {
-      try {
-        const rb = rnd.getBoundingClientRect();
-        const gb = gear.getBoundingClientRect();
-        const overlap = !(rb.right <= gb.left || gb.right <= rb.left ||
-          rb.bottom <= gb.top || gb.bottom <= rb.top);
-        const bars = document.querySelectorAll(".upr-map-actions").length;
-        const info = "bars=" + bars +
-          " rnd=" + Math.round(rb.width) + "x" + Math.round(rb.height) +
-          "@" + Math.round(rb.left) + "," + Math.round(rb.top) +
-          " gear=" + Math.round(gb.width) + "x" + Math.round(gb.height) +
-          "@" + Math.round(gb.left) + "," + Math.round(gb.top) +
-          " overlap=" + overlap +
-          " rndCls=" + rnd.className + " gearCls=" + gear.className;
-        if (typeof reportClientError === "function")
-          reportClientError("rnd-diag", info, {});
-      } catch (e) {}
-    });
-  } catch (e) {}
 };
 
-// ---------- модалка ----------
+// ---------- страница (бывшая модалка) ----------
 let _uprRndPlan = null;    // последний расчёт: {moves, report, seed}
 let _uprRndSnap = null;    // снапшот для «Отмены»
+let _uprRndTab = "simple"; // активная вкладка страницы: simple | expert | editor
+let _uprRndEdMode = null;    // режим, запрошенный через uprCfgEditOpen для вкладки редактора
 
 function uprRndExcluded() {
   let m = {};
@@ -176,25 +280,32 @@ function uprRndShield(num) {
     `<b class="upr-shield-num">${num}</b></span>`;
 }
 window.uprRndRefreshShields = function () {
-  document.querySelectorAll("#upr-rnd-body .upr-rnd-sec-row").forEach(row => {
+  document.querySelectorAll("#upr-rnd-page-body .upr-rnd-sec-row").forEach(row => {
     const lab = row.querySelector("span");
     if (lab) lab.innerHTML = uprRndShield(+row.dataset.num);
   });
 };
 
+// страница рандомайзера (вкладка uprising-rnd, не модалка)
 function uprRndOpen() {
-  if (!state.uprising.path || !uprGroups().length) {
-    toast(t("upr_rnd_no_map") || "Сначала откройте карту", "err");
-    return;
-  }
   _uprRndPlan = null;
   _uprRndSnap = null;
-  const modal = $("#upr-rnd-modal");
-  const body = $("#upr-rnd-body");
-  const foot = $("#upr-rnd-foot");
+  const body = $("#upr-rnd-page-body");
+  const foot = $("#upr-rnd-page-foot");
+  if (!body || !foot) return;
   body.innerHTML = "";
   foot.innerHTML = "";
+  try {
+  if (!state.uprising.path || !uprGroups().length) {
+    const empty = document.createElement("div");
+    empty.className = "swt-empty";
+    empty.textContent = t("upr_rnd_no_map") || "Сначала откройте карту";
+    body.appendChild(empty);
+    return;
+  }
   const o = uprRndOpts();
+  // данные режима для сложностей секторов (тихо, расчёт дождётся)
+  uprRndModeLoad(o.mode);
 
   // --- левая колонка: таблица секторов ---
   const secBox = document.createElement("div");
@@ -252,6 +363,86 @@ function uprRndOpen() {
   // --- правая колонка: опции ---
   const opts = document.createElement("div");
   opts.className = "upr-rnd-opts";
+  // вкладки Простой/Эксперт/Редактор: простой — режимы + галки,
+  // эксперт — всё старое, редактор — режимы v2 (.cfg) вместо модалки
+  const tabBar = document.createElement("div");
+  tabBar.className = "settings-tabs upr-rnd-tabs";
+  const tabSimple = document.createElement("button");
+  tabSimple.type = "button";
+  tabSimple.className = "st-tab" + (_uprRndTab === "simple" ? " active" : "");
+  tabSimple.textContent = t("upr_rnd_tab_simple") || "Простой";
+  const tabExpert = document.createElement("button");
+  tabExpert.type = "button";
+  tabExpert.className = "st-tab" + (_uprRndTab === "expert" ? " active" : "");
+  tabExpert.textContent = t("upr_rnd_tab_expert") || "Эксперт";
+  const tabEditor = document.createElement("button");
+  tabEditor.type = "button";
+  tabEditor.className = "st-tab" + (_uprRndTab === "editor" ? " active" : "");
+  tabEditor.textContent = t("upr_rnd_tab_editor") || "Редактор";
+  tabBar.append(tabSimple, tabExpert, tabEditor);
+  opts.appendChild(tabBar);
+  // панель режимов — всегда видна (карточки + карандаш редактора)
+  const modeBar = document.createElement("div");
+  modeBar.className = "upr-rnd-group";
+  modeBar.id = "upr-rnd-modes";
+  opts.appendChild(modeBar);
+  // простая группа, контейнер эксперта и контейнер редактора режимов
+  const simpleBox = document.createElement("div");
+  simpleBox.id = "upr-rnd-simple";
+  const expertBox = document.createElement("div");
+  expertBox.id = "upr-rnd-expert";
+  const editorBox = document.createElement("div");
+  editorBox.id = "upr-rnd-editor";
+  // шапка редактора: название пресета + подвкладки Секторы/Юниты/Правила
+  const edTitle = document.createElement("div");
+  edTitle.className = "upr-rnd-gtitle";
+  edTitle.id = "upr-rnd-editor-title";
+  const edTabs = document.createElement("div");
+  edTabs.className = "settings-tabs upr-set-tabs";
+  edTabs.id = "upr-rnd-editor-tabs";
+  [["sectors", "upr_cfg_ed_sectors", "Секторы"],
+   ["units", "upr_cfg_ed_units", "Юниты и предметы"],
+   ["rules", "upr_cfg_ed_rules", "Правила"]].forEach(([st, lk, fb]) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "st-tab";
+    b.dataset.st = st;
+    b.textContent = t(lk) || fb;
+    edTabs.appendChild(b);
+  });
+  const edBody = document.createElement("div");
+  edBody.className = "upr-rnd-body upr-cfg-ed-body";
+  edBody.id = "upr-rnd-editor-body";
+  const edFoot = document.createElement("div");
+  edFoot.className = "upr-rnd-foot";
+  edFoot.id = "upr-rnd-editor-foot";
+  editorBox.append(edTitle, edTabs, edBody, edFoot);
+  opts.appendChild(simpleBox);
+  opts.appendChild(expertBox);
+  opts.appendChild(editorBox);
+  const paintTabs = () => {
+    tabSimple.classList.toggle("active", _uprRndTab === "simple");
+    tabExpert.classList.toggle("active", _uprRndTab === "expert");
+    tabEditor.classList.toggle("active", _uprRndTab === "editor");
+    simpleBox.hidden = _uprRndTab !== "simple";
+    expertBox.hidden = _uprRndTab !== "expert";
+    editorBox.hidden = _uprRndTab !== "editor";
+    // вход на вкладку редактора подгружает активный режим (или запрошенный
+    // через uprCfgEditOpen); повторный вход на тот же режим только
+    // перерисовывает. Во время пересборки контейнеры ещё не в DOM — загрузка произойдёт
+    // после append (ниже), здесь выходим не трогая запрошенный режим
+    if (_uprRndTab === "editor" && typeof uprCfgEdEnsure === "function") {
+      if (!edBody.isConnected) return;
+      const nm = _uprRndEdMode || o.mode;
+      _uprRndEdMode = null;
+      uprCfgEdEnsure(nm);
+    }
+  };
+  tabSimple.onclick = () => { _uprRndTab = "simple"; paintTabs(); };
+  tabExpert.onclick = () => { _uprRndTab = "expert"; paintTabs(); };
+  tabEditor.onclick = () => { _uprRndTab = "editor"; paintTabs(); };
+  paintTabs();
+  uprRndPaintModes(modeBar, o, () => uprRndOpen());
   const group = (title, hint) => {
     const g = document.createElement("div");
     g.className = "upr-rnd-group";
@@ -265,9 +456,34 @@ function uprRndOpen() {
       hh.textContent = hint;
       g.appendChild(hh);
     }
-    opts.appendChild(g);
+    expertBox.appendChild(g);
     return g;
   };
+  // простая группа: галка ±1 + редкие предметы (в стиле обычных строк)
+  const sg = document.createElement("div");
+  sg.className = "upr-rnd-group";
+  const sgT = document.createElement("div");
+  sgT.className = "upr-rnd-gtitle";
+  sgT.textContent = t("upr_rnd_simple_t") || "Настройки";
+  sg.appendChild(sgT);
+  const srow = (label, val, fn) => {
+    const r = document.createElement("label");
+    r.className = "upr-rnd-row";
+    const c = document.createElement("input");
+    c.type = "checkbox";
+    c.checked = !!val;
+    c.onchange = () => { fn(c.checked); uprRndSaveOpts(o); };
+    r.append(c, document.createTextNode(label));
+    sg.appendChild(r);
+    return c;
+  };
+  srow(t("upr_rnd_pm") || "Сложность юнитов ±1 от региона (регион 4 → 3-5)",
+    o.softTol, v => { o.softTol = v; });
+  srow(t("upr_rnd_rare") || "Редкие предметы только в сложных секторах",
+    o.loot.rare_only_diff > 0, v => { o.loot.rare_only_diff = v ? 4 : 0; });
+  srow(t("upr_rnd_sectors_from_mode") || "Сложности секторов брать из режима",
+    o.useModeSectors, v => { o.useModeSectors = v; });
+  simpleBox.appendChild(sg);
   const chk = (g, label, val, fn) => {
     const r = document.createElement("label");
     r.className = "upr-rnd-row";
@@ -354,7 +570,8 @@ function uprRndOpen() {
   const frRow = document.createElement("div");
   frRow.className = "upr-rnd-row";
   [["own", t("upr_rnd_fown") || "Только внутри своей"],
-   ["mix", t("upr_rnd_fmix") || "Микс разрешён"]].forEach(([val, label]) => {
+   ["mix", t("upr_rnd_fmix") || "Микс разрешён"],
+   ["free", t("upr_rnd_ffree") || "Свободно (free)"]].forEach(([val, label]) => {
     const lb = document.createElement("label");
     lb.className = "upr-rnd-row";
     const r = document.createElement("input");
@@ -376,25 +593,39 @@ function uprRndOpen() {
     v => { o.noNeighbours = v; });
   slider(g5, t("upr_rnd_cap") || "Лимит голов на сектор (0 — без лимита)",
     o.cap, 0, 100, 1, x => String(x | 0), v => { o.cap = v | 0; });
-  // блок 7: отчёт
+  // блок 7: отчёт — всегда виден (вне экспертного контейнера)
   const g7 = group(t("upr_rnd_report") || "Отчёт");
+  opts.appendChild(g7);
   const rep = document.createElement("div");
   rep.className = "upr-rnd-report";
   rep.id = "upr-rnd-report";
   rep.textContent = t("upr_rnd_noplan") || "Нажмите «Рассчитать»";
   g7.appendChild(rep);
 
-  body.append(secBox, opts);
+  // верхняя панель действий: seed + кнопки, выравнивание вправо
+  const topBar = document.createElement("div");
+  topBar.className = "upr-rnd-topbar";
+  topBar.id = "upr-rnd-topbar";
+  body.append(topBar, secBox, opts);
+  // вкладка редактора: контейнеры только что встали в DOM — грузить режим
+  // сюда (в paintTabs выше они были ещё detached, см. edUiReady)
+  if (_uprRndTab === "editor" && typeof uprCfgEdEnsure === "function") {
+    const nm = _uprRndEdMode || o.mode;
+    _uprRndEdMode = null;
+    uprCfgEdEnsure(nm);
+  }
 
-  // --- фут: сид + стратегия сирот + действия ---
+  // --- верх: сид + стратегия сирот + действия (низ пуст и скрыт) ---
   const seedLab = document.createElement("span");
   seedLab.textContent = "seed";
   const seedInp = document.createElement("input");
   seedInp.className = "seed";
+  seedInp.id = "upr-rnd-seed";
   seedInp.value = o.seed;
   seedInp.title = "seed";
   seedInp.onchange = () => {
     o.seed = parseInt(seedInp.value, 10) || 0;
+    o._seedTouched = true;   // свой сид не затирать правилами режима
     uprRndSaveOpts(o);
   };
   const dice = document.createElement("button");
@@ -421,10 +652,11 @@ function uprRndOpen() {
     b.className = "btn" + (kind ? " " + kind : "");
     b.textContent = label;
     b.onclick = fn;
-    foot.appendChild(b);
+    topBar.appendChild(b);
     return b;
   };
-  foot.append(seedLab, seedInp, dice, orphSel);
+  foot.style.display = "none"; // низ пуст: всё уехало в верхнюю панель
+  topBar.append(seedLab, seedInp, dice, orphSel);
   const safe = fn => () => {
     try {
       const r = fn();
@@ -443,8 +675,18 @@ function uprRndOpen() {
   mkBtn(t("upr_rnd_apply") || "Применить", "accent", safe(() => uprRndApply()));
   mkBtn(t("upr_rnd_undo") || "Отменить", "", safe(() => uprRndUndo()));
   // «Восстановить оригинальную карту» живёт в настройках карты (шестерёнка)
-  modal.hidden = false;
   uprRndRefreshReport();
+  } catch (e) {
+    const msg = String((e && e.message) || e);
+    try {
+      if (typeof reportClientError === "function")
+        reportClientError("rnd-page", msg, { stack: String((e && e.stack) || "").slice(0, 500) });
+    } catch (e2) {}
+    const err = document.createElement("div");
+    err.className = "swt-empty";
+    err.textContent = "rnd-page: " + msg;
+    body.appendChild(err);
+  }
 }
 
 // попап прогресса долгой записи: сколько ячеек уже сохранено
@@ -571,7 +813,7 @@ function uprRndCollect(o) {
 
 async function uprRndCalc(reroll) {
   const o = uprRndOpts();
-  const seedInp = document.querySelector("#upr-rnd-foot .seed");
+  const seedInp = document.getElementById("upr-rnd-seed");
   if (reroll) {
     o.seed = ((o.seed | 0) + 1) >>> 0;
     if (seedInp) seedInp.value = o.seed;
@@ -581,13 +823,41 @@ async function uprRndCalc(reroll) {
     uprRndSaveOpts(o);
   }
   const meta = await uprRndMeta();
+  if (o.useModeSectors && !_uprRndModeData) await uprRndModeLoad(o.mode);
   const sectors = (window.UPR_MAP_SECTORS || []).slice()
     .sort((a, b) => a.num - b.num)
     .filter(s => !uprRndIsExcluded(s.num));
+  // сложности: из режима (если включён) или живые с карты
+  const modeSec = (_uprRndModeData && _uprRndModeData.sectors) || {};
   const zdiff = {};
-  sectors.forEach(s => { zdiff[s.num] = uprZoneDiff(s.num); });
+  sectors.forEach(s => {
+    const ms = modeSec[s.num] || modeSec[String(s.num)];
+    zdiff[s.num] = (o.useModeSectors && ms && ms.difficulty) || uprZoneDiff(s.num);
+  });
 
   const units = uprRndCollect(o);
+  // логически пустой результат — явный отказ до «Применить»
+  if (!units.length) {
+    toast(t("upr_rnd_empty") || "Нечего перемешивать: нет юнитов в выбранных категориях", "err");
+    return;
+  }
+  // защита стартовых/столиц от опустошения: последний юнит остаётся
+  const protSrc = num =>
+    (o.protectStarts && UPR_RND_STARTS.includes(num)) ||
+    (o.protectCapitals && UPR_RND_CAPITALS.includes(num));
+  const rem = {};
+  units.forEach(u => { rem[u.num] = (rem[u.num] || 0) + 1; });
+  const loot = o.loot || {};
+  const capNums = (typeof UPR_CAPITALS !== "undefined")
+    ? Object.keys(UPR_CAPITALS).map(Number) : UPR_RND_CAPITALS;
+  const lootBlocked = (u, snum) => {
+    if (u.cat !== "inventory_items" || !(loot.rare_only_diff > 0)) return false;
+    const cost = (meta.costs || {})[u.name] || 0;
+    if (cost < (loot.rare_min_cost || 0)) return false;
+    if (zdiff[snum] >= loot.rare_only_diff) return false;
+    if (loot.rare_in_capital && capNums.includes(snum)) return false;
+    return true;
+  };
   // нагрузка от НЕучаствующих (категория выкл): они остаются на месте
   const load = {};
   sectors.forEach(s => { load[s.num] = 0; });
@@ -613,6 +883,14 @@ async function uprRndCalc(reroll) {
   const orphans = [];
   units.forEach(u => {
     const [mn, mx] = u.range;
+    // защита от опустошения: последний юнит стартового/столицы остаётся
+    if (protSrc(u.num) && (rem[u.num] || 0) <= 1) {
+      moves.push({ u, to: u.num });
+      rem[u.num] = (rem[u.num] || 0) - 1;
+      load[u.num] = (load[u.num] || 0) + wOf(u);
+      return;
+    }
+    rem[u.num] = (rem[u.num] || 0) - 1;
     const fac = (meta.factions || {})[u.name] || "";
     const zkey = UPR_RND_F2Z[fac] || "";
     let cands = sectors.filter(s => {
@@ -620,6 +898,7 @@ async function uprRndCalc(reroll) {
       const inR = d >= mn && d <= mx;
       const soft = o.softTol && !inR && d >= mn - 1 && d <= mx + 1;
       if (!inR && !soft) return false;
+      if (lootBlocked(u, s.num)) return false;
       if (o.factionMode === "own" && zkey && uprRndZoneKey(s.num) !== zkey) return false;
       if (!zkey && !o.freePlace && o.factionMode === "own") {
         // у юнита нет пары зона-фракция: без freePlace остаётся на месте
@@ -662,7 +941,8 @@ async function uprRndCalc(reroll) {
     load[to] += wOf(u);
   });
 
-  _uprRndPlan = { moves, orphans, seed: o.seed, units: units.length };
+  _uprRndPlan = { moves, orphans, seed: o.seed, units: units.length,
+    mode: o.mode, costs: meta.costs || {}, zdiff };
   // ВРЕМЕННАЯ диагностика (убрать после починки): что насчиталось
   try {
     if (typeof reportClientError === "function") {
@@ -731,6 +1011,31 @@ function uprRndPaintReport() {
     tbl.appendChild(tr);
   });
   rep.appendChild(tbl);
+  // итог: режим, сид, мошь Σ cost, секторы без изменений
+  {
+    const costs = _uprRndPlan.costs || {};
+    const costOf = name => parseInt(costs[name], 10) || 0;
+    let c0 = 0, c1 = 0;
+    const seen = {};
+    _uprRndPlan.moves.forEach(({ u, to }) => {
+      c0 += costOf(u.name) * (o.countHeads ? u.n : 1);
+      const dst = (to === null) ? u.num : to;
+      c1 += costOf(u.name) * (o.countHeads ? u.n : 1);
+      seen[u.num] = true; seen[dst] = true;
+    });
+    let same = 0;
+    Object.keys(after).map(Number).forEach(num => {
+      if ((after[num] || 0) === (before[num] || 0)) same++;
+    });
+    const sum = document.createElement("div");
+    sum.style.marginTop = "8px";
+    const dc = c1 - c0;
+    sum.textContent = (t("upr_rnd_sum_mode") || "Режим: ") + uprRndModeTitle(_uprRndPlan.mode || "?") +
+      " · seed " + _uprRndPlan.seed +
+      " · Σ cost " + c0 + "→" + c1 + " (" + (dc > 0 ? "+" : "") + dc + ")" +
+      " · " + (t("upr_rnd_sum_same") || "без изменений: ") + same;
+    rep.appendChild(sum);
+  }
   if (_uprRndPlan.orphans.length) {
     const p = document.createElement("div");
     p.style.marginTop = "8px";
@@ -863,6 +1168,39 @@ async function uprRndRestore() {
 // настройки карты зовут восстановление напрямую (кнопка переехала туда
 // из модалки рандомайзера)
 window.uprRndRestore = uprRndRestore;
+
+// открытие из шапки карты и настроек сразу на нужной вкладке страницы
+// (mode — пресет, запрошенный через uprCfgEditOpen для вкладки редактора)
+window.uprRndOpenTab = function (tab, mode) {
+  _uprRndTab = (tab === "expert") ? "expert"
+    : (tab === "editor") ? "editor" : "simple";
+  if (mode) _uprRndEdMode = String(mode).replace(/\.cfg$/i, "");
+  // уход на страницу закрывает настройки карты (иначе страница за модалкой)
+  try {
+    const cm = document.getElementById("upr-colors-modal");
+    if (cm) cm.hidden = true;
+  } catch (e) {}
+  if (typeof openUprisingRnd === "function") openUprisingRnd();
+  else uprRndOpen();
+};
+// перерисовка карточек режимов на месте (после сохранения/удаления пресета
+// в редакторе — полную пересборку страницы делать нельзя, она снесёт редактор)
+window.uprRndRefreshModes = function () {
+  const bar = document.getElementById("upr-rnd-modes");
+  if (!bar) return;
+  try { _uprRndModesCache = null; _uprRndModesPromise = null; } catch (e) {}
+  uprRndPaintModes(bar, uprRndOpts(), () => uprRndOpen());
+};
+// «Предложить по стоимости» зовёт вкладка Эксперт настроек карты
+window.uprRndByCost = uprRndByCost;
+// страница-вкладка uprising-rnd: openUprisingRnd (uprising.js) зовёт её как
+// глобал; без экспорта страница остаётся пустой (body/foot не рисуются),
+// а вместе с ней пропадает и кнопка-карандаш редактора конфигов
+window.uprRndOpen = uprRndOpen;
+// настройки карты и редактор режимов читают опции/режимы напрямую
+window.uprRndOpts = uprRndOpts;
+window.uprRndModeApply = uprRndModeApply;
+window.uprRndModeTitle = uprRndModeTitle;
 
 // отмена: вернуть снапшот
 async function uprRndUndo() {

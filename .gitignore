@@ -5,6 +5,9 @@ __pycache__/
 .venv/
 venv/
 
+# generated build artifact (compiler/embed_assets.py, п.6.1 ТЗ)
+terminator_toolset/_embedded_data.py
+
 # Инструменты проекта (индексация/состояние агентов)
 .codegraph/
 .unlazy/
@@ -27,12 +30,18 @@ _roundtrip_out.xml
 
 # Внешние утилиты и рабочие заметки (не входят в проект)
 7z/
-UprisingMap Editor/
-# исключение: текстура карты Uprising — единственный assets-файл,
-# который версионируется (остальное дерево UprisingMap Editor/ локально)
-!assets/UprisingMap Editor/
-assets/UprisingMap Editor/*
-!assets/UprisingMap Editor/global_map.webp
+# исключение: ассеты карты Uprising — версионируются shields, difficulty
+# и текстура карты (остальное дерево UprisingMap/ локально: CustomImages и т.п.)
+!assets/UprisingMap/
+assets/UprisingMap/*
+!assets/UprisingMap/shields/
+assets/UprisingMap/shields/*
+!assets/UprisingMap/difficulty.webp
+!assets/UprisingMap/global_map.webp
+
+# Кэш конвертера DDS->WebP: генерируется локально по слоям
+# (BaseGame/проект/мод), в репозиторий не входит
+assets/CustomImages/
 SWT Editor.exe
 list.txt
 
@@ -40,5 +49,6 @@ list.txt
 # сессии открытых файлов с абсолютными путями локальной машины)
 uprising_backups/
 UprisingCustomPresets/
+UprisingCustomRandomizer/
 TERMINATOR_OVERHAUL.json
 spawns.json

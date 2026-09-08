@@ -14,11 +14,21 @@ def register_uprising(app, ctx):
 
     @app.route("/api/uprising_find", methods=["POST"])
     def api_uprising_find():
-        """Найти shop_presets.xml DLC Resistance: проект мода или распакованная
-        игра (кто чей root передал фронт)."""
+        """Найти файл карты по содержимому (награды секторов): проект мода
+        или распакованная игра (кто чей root передал фронт). Путь файла
+        ничего не решает — только содержимое."""
         data = request.get_json(silent=True) or {}
         root = store.normal(data.get("root", ""))
         return jsonify(upr.find_shop(root))
+
+    @app.route("/api/uprising_sniff", methods=["POST"])
+    def api_uprising_sniff():
+        """Контентный детект для дабл-клика в древе: этот shop_presets.xml —
+        файл карты (секторы -> открыть картой) или обычная таблица?
+        Файл с рабочего стола, лежащий где угодно, опознаётся так же."""
+        data = request.get_json(silent=True) or {}
+        path = store.normal(data.get("path", ""))
+        return jsonify({"ok": True, "uprising": upr.is_uprising_shop(path)})
 
     @app.route("/api/uprising_sysnames", methods=["POST"])
     def api_uprising_sysnames():
@@ -54,7 +64,8 @@ def register_uprising(app, ctx):
             if hit:
                 try:
                     resp = send_file(
-                        os.path.join(upr.webp_bucket_dir(hit[0]), hit[1]),
+                        os.path.join(upr.webp_bucket_dir(hit[0]),
+                                     *hit[1].split("/")),
                         mimetype="image/webp")
                 except OSError:
                     # файл есть в индексе, но отдать не смог (блокировка
@@ -74,7 +85,7 @@ def register_uprising(app, ctx):
                 if p and p.lower().endswith(".dds"):
                     p = upr.dds_png(p) or ""
         if not p and cat:
-            ph = upr.category_placeholder(cat)
+            ph = upr.category_placeholder(cat, name)
             if ph:
                 try:
                     resp = send_file(ph, mimetype="image/webp")
@@ -88,11 +99,33 @@ def register_uprising(app, ctx):
         if not p:
             return ("", 404)
         try:
-            resp = send_file(p, mimetype="image/png")
+            # p — готовый файл: dds уже ушёл в png-кэш выше, но через
+            # webp-вариант icon_file может вернуть bundled .webp напрямую
+            mime = ("image/webp" if p.lower().endswith(".webp")
+                    else "image/png")
+            resp = send_file(p, mimetype=mime)
         except OSError:
             return ("", 404)
         resp.headers["Cache-Control"] = "public, max-age=3600"
         return resp
+
+    @app.route("/api/uprising_species_file", methods=["POST"])
+    def api_uprising_species_file():
+        """Species XML с нужным sysname для «Открыть в таблице» с карты:
+        базовый файл категории, затем DLC-оверлеи (первый содержащий имя)."""
+        data = request.get_json(silent=True) or {}
+        root = store.normal(data.get("root", ""))
+        return jsonify(upr.species_file(root, data.get("cat", ""),
+                                        data.get("name", "")))
+
+    @app.route("/api/uprising_convert", methods=["POST"])
+    def api_uprising_convert():
+        """Bulk DDS -> CustomImages WebP (кнопка «Анализ» на карте): один
+        запрос вместо сотен одиночных конвертаций. Возвращает счётчики
+        {converted, ready, missing, failed}."""
+        data = request.get_json(silent=True) or {}
+        root = store.normal(data.get("root", ""))
+        return jsonify(upr.convert_missing(root, data.get("names")))
 
     @app.route("/api/uprising_icon_preload", methods=["POST"])
     def api_uprising_icon_preload():
@@ -189,6 +222,48 @@ def register_uprising(app, ctx):
         data = request.get_json(silent=True) or {}
         path = store.normal(data.get("path", ""))
         return jsonify(upr.cfg_read(path))
+
+    # -- режимы рандомайзера v2 -------------------------------------------
+    # (owned by Uprising: rnd_dirs / rnd_mode_get / rnd_mode_save /
+    # rnd_mode_delete / rnd_mode_duplicate / rnd_convert_v1)
+    @app.route("/api/uprising_rnd_modes", methods=["POST"])
+    def api_uprising_rnd_modes():
+        """Список режимов рандомайзера v2: встроенные + пользовательские."""
+        return jsonify(upr.rnd_list())
+
+    @app.route("/api/uprising_rnd_mode_get", methods=["POST"])
+    def api_uprising_rnd_mode_get():
+        """Прочитать режим: v2 парсингом, v1 — как есть (только чтение)."""
+        data = request.get_json(silent=True) or {}
+        return jsonify(upr.rnd_mode_get(data.get("kind", "any"),
+                                        data.get("name", "")))
+
+    @app.route("/api/uprising_rnd_mode_save", methods=["POST"])
+    def api_uprising_rnd_mode_save():
+        """Сохранить режим: пишет только в Custom, встроенные не трогаем."""
+        data = request.get_json(silent=True) or {}
+        return jsonify(upr.rnd_mode_save(data))
+
+    @app.route("/api/uprising_rnd_mode_delete", methods=["POST"])
+    def api_uprising_rnd_mode_delete():
+        """Удалить только свой режим (встроенные удалять нельзя)."""
+        data = request.get_json(silent=True) or {}
+        return jsonify(upr.rnd_mode_delete(data.get("name", "")))
+
+    @app.route("/api/uprising_rnd_mode_duplicate", methods=["POST"])
+    def api_uprising_rnd_mode_duplicate():
+        """Дублировать режим в Custom под новым именем."""
+        data = request.get_json(silent=True) or {}
+        return jsonify(upr.rnd_mode_duplicate(data.get("src", ""),
+                                              data.get("name", "")))
+
+    @app.route("/api/uprising_rnd_convert_v1", methods=["POST"])
+    def api_uprising_rnd_convert_v1():
+        """Преобразовать v1-пресет (ZONE) в режим v2 (копия в Custom)."""
+        data = request.get_json(silent=True) or {}
+        return jsonify(upr.rnd_convert_v1(data.get("kind", "built-in"),
+                                          data.get("name", ""),
+                                          data.get("new_name", "")))
 
     # (owned by Uprising: program_dir / backup_dir / reset_map)
     @app.route("/api/uprising_reset", methods=["POST"])

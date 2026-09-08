@@ -23,4 +23,8 @@ def register_config(app, ctx):
                 config.set(k, v)
         if "language" in data:
             i18n.switch(config.get("language"))
+        # путь проекта стёрли в настройках — автооткрытие прошлого запуска
+        # тоже гаснет, иначе last_project воскресит удалённый путь при рестарте
+        if "project_path" in data and not config.get("project_path"):
+            config.set("last_project", "")
         return jsonify({"ok": True})

@@ -1,0 +1,38 @@
+<!-- partials/page-swt.html — SWT-редактор -->
+        <!-- SWT editor (mission trigger scripts) -->
+        <section class="tab-panel" id="swt-tab" data-tab-id="swt">
+          <div class="swt-page">
+            <div class="swt-head">
+              <div class="swt-head-main">
+                <h2 class="cm-title" data-i18n="swt_title">SWT редактор</h2>
+                <div class="cm-sub" id="swt-file" data-i18n="swt_sub">Сценарии миссий (.swt): триггеры, условия и действия</div>
+              </div>
+              <button class="icon-btn cmp-fs-btn" id="swt-fs" data-i18n-title="cmp_fullscreen" title="На весь экран"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+              <button class="btn" id="swt-analyze" data-i18n="swt_analyze" data-i18n-title="swt_analyze_tt" title="Повторный анализ: пересобрать значения файла и словари проекта" disabled>Анализ</button>
+              <button class="btn accent" id="swt-save" data-i18n="save" disabled>Сохранить</button>
+            </div>
+            <div class="swt-wrap" id="swt-wrap" hidden>
+              <div class="swt-side">
+                <input type="text" id="swt-search" class="cm-input" spellcheck="false" data-i18n-ph="find_ph" placeholder="Поиск триггера…">
+                <div class="swt-side-add">
+                  <button class="btn" id="swt-add-trigger" data-i18n="swt_add_trig">+ Триггер</button>
+                  <button class="btn" id="swt-add-var" data-i18n="swt_add_var">+ Переменная</button>
+                </div>
+                <div class="swt-sec-head swt-side-sec" id="swt-vars-head">
+                  <button class="icon-btn swt-sec-chev" tabindex="-1"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+                  <span data-i18n="swt_variables">Переменные</span>
+                </div>
+                <div class="swt-vars" id="swt-vars"></div>
+                <div class="swt-sec-head swt-side-sec" id="swt-trig-head">
+                  <button class="icon-btn swt-sec-chev" tabindex="-1"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+                  <span data-i18n="swt_triggers">Триггеры</span>
+                </div>
+                <div class="swt-trig-list" id="swt-trig-list"></div>
+              </div>
+              <div class="swt-main" id="swt-main">
+                <div class="swt-empty" id="swt-empty" data-i18n="swt_pick">Выберите триггер слева</div>
+              </div>
+            </div>
+            <div class="swt-hint" id="swt-hint" hidden></div>
+          </div>
+        </section>

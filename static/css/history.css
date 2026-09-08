@@ -1,0 +1,84 @@
+/* history.css — 15/20 · история, confirm, recents, тосты · порядок каскада: CSS_ORDER в scripts/verify-ui-wiring.mjs */
+.hist-hint { color: var(--text-mute); font-size: 11.5px; padding: 10px 16px 2px; }
+.history-body { padding: 8px 16px 16px; overflow: auto; max-height: 62vh; }
+#history-modal .modal-card { width: min(864px, 94vw); } /* +20% over .mid */
+/* полный откат к стоковой версии — внизу журнала истории */
+.hist-stock { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
+.hist-stock .btn { width: 100%; }
+.history-item { padding: 9px 10px; border-radius: var(--radius); cursor: pointer;  display: flex; align-items: center; gap: 10px; }
+.history-item:hover { background: var(--bg-card); }
+.history-item.current { cursor: default; }
+.history-item.current:hover { background: transparent; }
+.history-item.undone { opacity: .55; }
+.history-item.undone .h-badge { color: var(--text-mute); background: var(--bg-card); }
+.h-badge {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px;
+  color: var(--accent); background: rgba(232, 184, 75, .12);
+  border-radius: 4px; padding: 3px 8px; flex-shrink: 0; min-width: 86px; text-align: center;
+}
+.h-badge.h-redo { color: var(--text-mute); background: var(--bg-card); }
+.h-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.h-sum { font-size: 12px; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .h-meta { color: var(--text-mute); font-size: 10.5px; }
+    .h-key, .history-item .h-col {
+      font-size: 11px; font-weight: 700; font-family: var(--mono);
+      color: #16130c; background: var(--accent);
+      border-radius: 3px; padding: 1px 6px;
+    }
+    .history-item .h-col { cursor: pointer; border: none; text-decoration: underline; }
+    .history-item .h-col:hover { filter: brightness(1.15); }
+.h-current { color: var(--green); font-size: 10px; font-weight: 700; text-transform: uppercase; flex-shrink: 0; }
+.h-go { color: var(--accent); font-size: 11px; font-weight: 600; flex-shrink: 0; opacity: 0; transition: opacity .1s; }
+.history-item:hover .h-go { opacity: 1; }
+
+.modal-card.prompt-card { width: min(420px, 90vw); }
+.prompt-body { padding: 16px 16px 4px; }
+.prompt-input {
+  width: 100%; box-sizing: border-box;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px 10px; font-family: var(--mono); font-size: 12.5px;
+  outline: none;
+}
+.prompt-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
+
+/* Confirm dialog (replaces browser confirm) */
+.confirm-msg { padding: 16px; line-height: 1.55; color: var(--text); white-space: pre-line; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; padding: 0 16px 16px; }
+.btn.danger { background: var(--red); border-color: var(--red); color: #fff; box-shadow: 0 0 8px rgba(226, 88, 74, .3); }
+.btn.danger:hover { box-shadow: 0 0 14px rgba(226, 88, 74, .5); }
+.btn.green { background: #2e7d32; border-color: #2e7d32; color: #fff; }
+.btn.green:hover { background: #388e3c; border-color: #388e3c; color: #fff; }
+
+/* Recent files / projects popup */
+.recents-body { padding: 10px 12px; overflow: auto; max-height: 62vh; }
+.recent-row {
+  display: flex; align-items: center; gap: 12px; padding: 9px 10px;
+  border-radius: var(--radius); cursor: pointer; transition: background .1s;
+}
+.recent-row:hover { background: var(--bg-card); }
+.recent-row.missing { opacity: .45; }
+.rr-ico { width: 24px; height: 24px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: var(--accent); }
+.rr-ico img { width: 18px; height: 18px; object-fit: contain; display: block; }
+.rr-ico svg { width: 20px; height: 20px; }
+.rr-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.rr-name { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rr-path { color: var(--text-mute); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rr-meta { color: var(--text-mute); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rr-kind {
+  font-size: 9.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-mute);
+  background: var(--bg-card); border-radius: 8px; padding: 2px 8px; flex-shrink: 0;
+}
+.recents-empty { padding: 28px; text-align: center; color: var(--text-mute); }
+.tabs-dd-empty { padding: 12px 14px; color: var(--text-mute); font-size: 12px; }
+
+/* Toast (без рамки/аутлайна): выше модалки (1300), чтобы чипы «сохранено»
+   было видно и при открытом диалоге; без модалки поведение то же */
+.toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--bg-card); color: var(--text);
+  padding: 10px 18px; border-radius: var(--radius); z-index: 1500;
+}
+.toast.err { color: #ffb0a8; }
+.toast.ok { color: var(--green); }
+

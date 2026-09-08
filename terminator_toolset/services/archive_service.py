@@ -18,12 +18,18 @@ _NW = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
 
 
 # -- archive --------------------------------------------------------------------
+# Порядок шагов группы: СНАЧАЛА loose-папки из корня игры (basis, затем
+# localization — если найдены рядом с .pak), ПОТОМ распаковка всех .pak
+# поверх (basis.pak первым, дальше patch_* по номеру). Так перевыпущенные
+# файлы из паков всегда побеждают старые loose-файлы, а не наоборот.
+_LOOSE_COPY_ORDER = ("basis", "localization")
 class Archive:
     """Unpacks the game .pak queue in a background thread.
 
-    ALL paks of a group extract into ONE folder so later patches overwrite
-    earlier files: game base -> <dest>\\basis\\ (basis.pak first, then
-    patch_* by number), Legion -> <dest>\\dlc\\legion\\basis\\, Resistance
+    Per group: loose basis/ then localization/ copies first, then ALL paks
+    extract into ONE folder on top so later patches overwrite earlier files:
+    game base -> <dest>\\basis\\ (basis.pak first, then patch_* by number),
+    Legion -> <dest>\\dlc\\legion\\basis\\, Resistance
     -> <dest>\\dlc\\resistance\\basis\\, Evolution ->
     <dest>\\dlc\\evolution\\basis\\.
     """
@@ -32,8 +38,8 @@ class Archive:
         self._log = log
         self._base_dir = base_dir  # create_app param (bundled 7z lookup)
         self.job = {"running": False, "done": False, "lines": [], "error": "",
-                    "total": 0, "done_n": 0, "current": "", "pct": 0,
-                    "cancel": False, "proc": None}
+                    "total": 0, "done_n": 0, "done_files": [], "current": "",
+                    "pct": 0, "cancel": False, "proc": None}
         self._size_cache: "dict[tuple, int]" = {}
 
     # -- discovery ----------------------------------------------------------------
@@ -81,8 +87,22 @@ class Archive:
         return ""
 
     # -- operations ---------------------------------------------------------------
+    @staticmethod
+    def loose_copies(folder: str) -> "list[dict]":
+        """Loose game folders beside the .paks (basis, then localization):
+        copied BEFORE any .pak extraction, same order."""
+        out = []
+        if not folder or not os.path.isdir(folder):
+            return out
+        for name in _LOOSE_COPY_ORDER:
+            p = os.path.join(folder, name)
+            if os.path.isdir(p):
+                out.append({"name": name, "path": p})
+        return out
+
     def scan(self, root: str):
-        """Find every .pak of the game root and order the extraction queue."""
+        """Find every .pak of the game root and order the extraction queue.
+        Plus loose folders (basis/localization) copied before the paks."""
         if not root or not os.path.isdir(root):
             return {"ok": False, "error": "not a folder"}
 
@@ -90,43 +110,81 @@ class Archive:
             return [{"name": os.path.basename(x), "path": x}
                     for x in self.pak_plan(folder)]
 
+        legion = self.dlc_dir(root, "legion")
+        resistance = self.dlc_dir(root, "resistance")
+        evolution = self.dlc_dir(root, "evolution")
         return {"ok": True, "sevenz": self.find_7z(),
                 "base": grp(root),
-                "legion": grp(self.dlc_dir(root, "legion")),
-                "resistance": grp(self.dlc_dir(root, "resistance")),
-                "evolution": grp(self.dlc_dir(root, "evolution"))}
+                "legion": grp(legion),
+                "resistance": grp(resistance),
+                "evolution": grp(evolution),
+                "copy": {"base": self.loose_copies(root),
+                         "legion": self.loose_copies(legion),
+                         "resistance": self.loose_copies(resistance),
+                         "evolution": self.loose_copies(evolution)}}
 
-    def run(self, game_root: str, dest: str):
-        """Unpack the whole found queue in a background thread."""
+    def run(self, game_root: str, dest: str, skip=()):
+        """Unpack the whole found queue in a background thread.
+
+        Per group: loose basis/ -> localization/ copies first, then .pak
+        extraction on top. skip: full .pak AND loose-folder src paths
+        (case-insensitive) excluded by the GUI - the user clicked
+        their chips off."""
         root = (game_root or "").strip()
         dest = (dest or "").strip()
         if not root or not os.path.isdir(root):
             return {"ok": False, "error": "not a folder"}
         if not dest:
             return {"ok": False, "error": "no dest"}
-        sevenz = self.find_7z()
-        if not sevenz:
-            return {"ok": False, "error": "7z not found"}
         if self.job["running"]:
             return {"ok": False, "error": "already running"}
-        plan = [("base", "basis", self.pak_plan(root))]
+        skipped = {os.path.normcase(os.path.normpath(s))
+                   for s in (skip or []) if isinstance(s, str) and s}
+
+        def kept(folder):
+            return [p for p in self.pak_plan(folder)
+                    if os.path.normcase(p) not in skipped]
+
+        def copies(src, *rel):
+            """[(folder_name, src_path, dest_rel)] for found loose folders,
+            minus the ones the user clicked off (their src paths ride in
+            the same skip list as the .paks)."""
+            base = os.path.join(dest, *rel) if rel else dest
+            return [(c["name"], c["path"],
+                     os.path.join(base, c["name"]))
+                    for c in self.loose_copies(src)
+                    if os.path.normcase(c["path"]) not in skipped]
+
+        plan = [("base", root, "basis", copies(root), kept(root))]
         legion = self.dlc_dir(root, "legion")
         if legion:
-            plan.append(("legion", os.path.join("dlc", "legion", "basis"),
-                         self.pak_plan(legion)))
+            plan.append(("legion", legion,
+                         os.path.join("dlc", "legion", "basis"),
+                         copies(legion, "dlc", "legion"), kept(legion)))
         resistance = self.dlc_dir(root, "resistance")
         if resistance:
-            plan.append(("resistance", os.path.join("dlc", "resistance", "basis"),
-                         self.pak_plan(resistance)))
+            plan.append(("resistance", resistance,
+                         os.path.join("dlc", "resistance", "basis"),
+                         copies(resistance, "dlc", "resistance"),
+                         kept(resistance)))
         evolution = self.dlc_dir(root, "evolution")
         if evolution:
-            plan.append(("evolution", os.path.join("dlc", "evolution", "basis"),
-                         self.pak_plan(evolution)))
-        if not any(paks for _g, _r, paks in plan):
+            plan.append(("evolution", evolution,
+                         os.path.join("dlc", "evolution", "basis"),
+                         copies(evolution, "dlc", "evolution"), kept(evolution)))
+        if not any(paks for _g, _s, _r, _c, paks in plan) \
+                and not any(cp for _g, _s, _r, cp, _p in plan):
             return {"ok": False, "error": "no paks"}
+        # 7z нужен только под паки: копирование-only прогон идёт без него
+        sevenz = ""
+        if any(paks for _g, _s, _r, _c, paks in plan):
+            sevenz = self.find_7z()
+            if not sevenz:
+                return {"ok": False, "error": "7z not found"}
         self.job.update({"running": True, "done": False, "lines": [], "error": "",
-                         "total": sum(len(paks) for _g, _r, paks in plan),
-                         "done_n": 0, "current": "", "pct": 0,
+                         "total": sum(len(paks) + len(cp)
+                                      for _g, _s, _r, cp, paks in plan),
+                         "done_n": 0, "done_files": [], "current": "", "pct": 0,
                          "cancel": False, "proc": None})
         threading.Thread(target=self._worker,
                          args=(plan, os.path.normpath(dest), sevenz),
@@ -222,14 +280,70 @@ class Archive:
             self.job["pct"] = (min(99, int(got * 100 / total))
                                if total and got > 0 else 0)
 
+    def _copy_dir(self, src: str, dst: str) -> str:
+        """Merge-copy a loose game folder with byte progress + cancel checks.
+        Returns "ok" | "cancelled"; a disk error sets job["error"]."""
+        job = self.job
+        label = os.path.basename(src.rstrip("\\/")) + "\\"
+        job["current"] = label
+        job["pct"] = 0
+        job["lines"].append(">> copy " + src + "  ->  " + dst)
+        total = self._dir_size(src)
+        done = 0
+        try:
+            for root_d, _dirs, files in os.walk(src):
+                if job.get("cancel"):
+                    return "cancelled"
+                rel = os.path.relpath(root_d, src)
+                out_d = dst if rel == "." else os.path.join(dst, rel)
+                os.makedirs(out_d, exist_ok=True)
+                for fn in files:
+                    if job.get("cancel"):
+                        return "cancelled"
+                    s = os.path.join(root_d, fn)
+                    try:
+                        shutil.copy2(s, os.path.join(out_d, fn))
+                        try:
+                            done += os.path.getsize(s)
+                        except OSError:
+                            pass
+                    except OSError as e:
+                        job["lines"].append("!! copy %s: %s" % (s, e))
+                    if total:
+                        job["pct"] = min(99, int(done * 100 / total))
+        except Exception as e:  # noqa: BLE001
+            job["lines"].append("!! copy " + label + ": " + str(e))
+            job["error"] = "copy failed: " + label
+            return "ok"
+        job["pct"] = 100
+        job["done_n"] += 1
+        job["current"] = ""
+        return "ok"
+
     def _worker(self, plan, dest: str, sevenz: str):
         job = self.job
         try:
             os.makedirs(dest, exist_ok=True)
             cancelled = False
-            for _group, out_rel, paks in plan:
+            for _group, _src, out_rel, cpies, paks in plan:
                 if job.get("cancel"):
                     cancelled = True
+                    break
+                # сначала loose-папки (basis, затем localization), потом паки
+                # поверх: перевыпущенные файлы из паков побеждают старые
+                for _name, src, dst_rel in cpies:
+                    if job.get("cancel"):
+                        cancelled = True
+                        break
+                    if job.get("error"):
+                        return
+                    st = self._copy_dir(src, os.path.join(dest, dst_rel))
+                    if st == "cancelled":
+                        cancelled = True
+                        break
+                    if job.get("error"):
+                        return
+                if cancelled:
                     break
                 # ALL paks of a group extract into ONE folder: the game base
                 # paks go to <dest>\basis\ (basis.pak first, then patches
@@ -293,6 +407,8 @@ class Archive:
                         job["error"] = "7z failed on %s" % os.path.basename(pak)
                         return
                     job["done_n"] += 1
+                    # фронт красит чип пака зелёным сразу, не дожидаясь конца
+                    job["done_files"].append(os.path.basename(pak))
                     job["current"] = ""
             if cancelled:
                 job["lines"].append("!! Прервано пользователем")

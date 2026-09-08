@@ -884,27 +884,37 @@ def _set_row_values(seg: str, values: "list[str]") -> str:
 
 
 def _set_row_values_from_tuples(seg: str, cells: "list") -> str:
-    """Rebuild Data values+types from [(logical, value, type), ...] on a row fragment."""
-    maps = {}
-    for c in cells:
-        logical = int(c[0])
-        value = str(c[1])
-        ttype = (c[2] if len(c) > 2 and c[2] else None) or "String"
-        maps[logical] = (value, ttype)
-    spans = _row_data_spans(seg)
-    out = []
-    i = 0
-    for (dst, doe, dcs, dend, logical) in spans:
-        out.append(seg[i:dst])
-        if logical in maps:
-            value, ttype = maps[logical]
-            head = _with_type(seg[dst:doe], ttype)
-            if head.rstrip().endswith("/>"):
-                out.append(head.rstrip()[:-2] + ">" + _esc(value) + "</Data>")
-            else:
-                out.append(head + _esc(value) + "</Data>")
-        i = dend
-    out.append(seg[i:])
+    """Rebuild a <Row> fragment from [(logical, value, type, style), ...].
+
+    Cells are built purely from the payload (same geometry rule as
+    Worksheet.insert_row_at: ascending order, explicit ss:Index wherever
+    the position is not sequential). The template row contributes only its
+    <Row ...> open tag: matching payload positions against the template's
+    own (possibly different) sparsity silently dropped cells of sparse
+    rows on history undo/redo - e.g. an update rollback lost values."""
+    items = sorted(((int(c[0]), str(c[1]),
+                     (c[2] if len(c) > 2 and c[2] else None) or "String",
+                     c[3] if len(c) > 3 and c[3] else None) for c in cells),
+                   key=lambda x: x[0])
+    if not items:
+        return _blank_row(seg)
+    oe = _open_tag_end(seg)
+    head = seg[:oe]
+    tail = seg[oe:]
+    cut = tail.rfind("</Row")
+    close = tail[cut:] if cut != -1 else "</Row>"
+    out = [head]
+    seq = 1
+    for pos, value, ttype, style in items:
+        stag = ""
+        if pos != seq:
+            stag += ' ss:Index="%d"' % pos
+        if style:
+            stag += ' ss:StyleID="%s"' % _esc_attr(style)
+        out.append('<Cell%s><Data ss:Type="%s">%s</Data></Cell>'
+                   % (stag, _safe_type(ttype), _esc(value)))
+        seq = pos + 1
+    out.append(close)
     return "".join(out)
 
 

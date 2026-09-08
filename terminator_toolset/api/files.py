@@ -29,6 +29,14 @@ def register_files(app, ctx):
         d = request.get_json(silent=True) or {}
         return jsonify(mods.copy_to_mod(d.get("src"), d.get("project_root")))
 
+    @app.route("/api/copy_to_project", methods=["POST"])
+    def api_copy_to_project():
+        """Скопировать файл/папку в открытый проект (путь в настройках,
+        «Путь к проекту»). Относительный путь внутри игры сохраняется -
+        структура проекта повторяет структуру игры (зеркало copy_to_mod)."""
+        d = request.get_json(silent=True) or {}
+        return jsonify(mods.copy_to_project(d.get("src"), d.get("game_root")))
+
     # (owned by Files: save_as)
     @app.route("/api/save_as", methods=["POST"])
     def api_save_as():
@@ -64,6 +72,16 @@ def register_files(app, ctx):
         data = request.get_json(silent=True) or {}
         return jsonify(files.restore_record(data.get("path", ""),
                                             int(data.get("backup_id", -1))))
+
+    # (owned by Files: restore_to_beginning)
+    @app.route("/api/reset_beginning", methods=["POST"])
+    def api_reset_beginning():
+        """Откат файла к чистому состоянию до первой записи журнала.
+
+        В отличие от restore самой старой записи (оставляет первую правку
+        применённой), отменяет вообще все применённые записи."""
+        data = request.get_json(silent=True) or {}
+        return jsonify(files.restore_to_beginning(data.get("path", "")))
 
     # (owned by Mods: reveal)
     @app.route("/api/reveal", methods=["POST"])
@@ -101,3 +119,17 @@ def register_files(app, ctx):
             return jsonify(entities.links(path))
         except Exception:  # noqa: BLE001
             return jsonify({"ok": False, "error": "open file first"})
+
+    # (owned by EntityIndex: analyze)
+    @app.route("/api/analyze_links", methods=["POST"])
+    def api_analyze_links():
+        """Кнопка «Анализ» открытого xml: пересчитать зависимости сейчас.
+
+        Возвращает ссылки ячеек (фронт подставляет сразу) + исходящие
+        («ссылается на») и входящие («ссылаются») группы файлов.
+        Синхронный проход по проекту — фронт держит кнопку занятой."""
+        data = request.get_json(silent=True) or {}
+        try:
+            return jsonify(entities.analyze(data.get("path", "") or ""))
+        except Exception as e:  # noqa: BLE001
+            return jsonify({"ok": False, "error": str(e)})

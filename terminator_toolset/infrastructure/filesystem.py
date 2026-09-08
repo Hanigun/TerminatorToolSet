@@ -36,10 +36,29 @@ def resolve_external(dirs: "list[str]", *rel: str) -> str:
 _TREE_SKIP_DIRS = {".git", "__pycache__", ".codebase-memory", ".codegraph",
                    "node_modules", "$recycle.bin", "system volume information"}
 
+# Древо проекта: 5 уровней папок от выбранного корня — хватает и на
+# basis/scripts/species (3), и на DLC-оверлеи dlc/<Имя>/basis/scripts/species
+# (5). Файлы — только редактируемые расширения. Глубже/шире не лезем: scandir
+# по текстурам/аудио распакованной игры и гигантский JSON тормозили открытие
+# папки. Правило ADR-001 §14: поддержка нового расширения = добавить его в
+# TREE_KEEP_EXTS И в дефолты фильтров фронта (static/js/tree.js
+# TREE_FILTER_DEFAULTS).
+TREE_MAX_DEPTH = 5
+TREE_KEEP_EXTS = ("xml", "swt")
 
-def walk_tree(d: str) -> dict:
-    """Recursive os.scandir walk -> compact nested tree
-    {"n": name, "d": [subdirs], "f": [filenames]} (dirs first, both sorted)."""
+
+def _tree_keep_file(name: str) -> bool:
+    i = name.rfind(".")
+    ext = name[i + 1:].lower() if i > 0 else ""
+    return ext in TREE_KEEP_EXTS
+
+
+def walk_tree(d: str, _depth: int = 0) -> "dict | None":
+    """Pruned os.scandir walk -> compact nested tree
+    {"n": name, "d": [subdirs], "f": [filenames]} (dirs first, both sorted).
+    Pruning (perf после выбора папки): подпапки глубже TREE_MAX_DEPTH не
+    проходятся вовсе, файлы не из TREE_KEEP_EXTS отбрасываются, пустые узлы
+    (без файлов и подпапок) возвращают None и выкидываются родителем."""
     name = os.path.basename(d.rstrip("\\/")) or d
     dirs, files = [], []
     try:
@@ -51,13 +70,19 @@ def walk_tree(d: str) -> dict:
                     if e.is_dir(follow_symlinks=False):
                         if e.name.lower() in _TREE_SKIP_DIRS:
                             continue
-                        dirs.append(walk_tree(e.path))
-                    else:
+                        if _depth + 1 > TREE_MAX_DEPTH:
+                            continue
+                        sub = walk_tree(e.path, _depth + 1)
+                        if sub is not None:
+                            dirs.append(sub)
+                    elif _tree_keep_file(e.name):
                         files.append(e.name)
                 except OSError:
                     continue
     except OSError:
         pass
+    if not dirs and not files and _depth > 0:
+        return None
     dirs.sort(key=lambda x: x["n"].lower())
     files.sort(key=str.lower)
     return {"n": name, "d": dirs, "f": files}

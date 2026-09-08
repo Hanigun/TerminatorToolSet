@@ -1,0 +1,124 @@
+/* grid.css — 07/20 · таблица данных · порядок каскада: CSS_ORDER в scripts/verify-ui-wiring.mjs */
+/* ---- Grid ---- */
+#grid-view { height: 100%; }
+.grid-wrap { height: 100%; display: flex; }
+/* min-width: 0 is REQUIRED for horizontal scrolling: as a flex item the
+   scroll container would otherwise grow with the table instead of
+   overflowing, and the horizontal scrollbar would never appear */
+.grid-scroll { flex: 1; min-width: 0; overflow: auto; padding-bottom: 34px; }
+/* fixed layout + fixed column widths: the table never reflows while
+   virtualized rows are appended, and both scroll axes work */
+.grid {
+  border-collapse: separate; border-spacing: 0;
+  font-size: var(--grid-font); font-family: var(--mono);
+  table-layout: fixed; width: max-content; min-width: 100%;
+}
+.grid thead th {
+  position: sticky; top: 0; z-index: 5; background: var(--bg-card); color: var(--text);
+  border-right: 1px solid var(--border-soft); border-bottom: 1px solid var(--border);
+  padding: 3px 8px; text-align: left; font-family: var(--font);
+  font-size: var(--grid-font); font-weight: 600; white-space: nowrap;
+  width: var(--grid-col-w); min-width: var(--grid-col-w); max-width: var(--grid-col-w);
+  overflow: hidden; text-overflow: ellipsis;
+}
+.grid thead th.col-head.has-comment { cursor: help; }
+.grid thead th.col-head.has-comment::after { content: "⠿"; color: var(--accent); margin-left: 4px; font-size: 10px; }
+/* drag handle to resize the sticky sysname column */
+.th-resizer {
+  position: absolute; top: 0; right: -3px; width: 7px; height: 100%;
+  cursor: ew-resize; z-index: 8;
+}
+.th-resizer:hover { background: var(--accent-glow); }
+.grid thead th.sticky-col {
+  position: sticky; left: 0; z-index: 6; background: #31353f; box-shadow: 1px 0 0 var(--border);
+  width: var(--sticky-w); min-width: var(--sticky-w); max-width: var(--sticky-w);
+}
+/* built-in RU glossary line under the header name */
+.grid thead th .th-sub, .cmp-grid thead th .th-sub {
+  font-size: 8.5px; font-weight: 500; color: var(--text-mute);
+  text-transform: none; letter-spacing: 0; margin-top: 0; line-height: 1.15;
+  overflow: hidden; text-overflow: ellipsis; max-width: 150px;
+}
+/* uniform row height: every data row is exactly the same size regardless of
+   cell content (friendly-name subs, link marks etc. fit inside) */
+.grid tbody td {
+  border-right: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft);
+  padding: 3px 8px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; cursor: default;
+  height: calc(var(--grid-font) + 16px);
+}
+.grid tbody tr.tr-add td { height: auto; }
+.grid tbody tr:hover td { background: var(--bg-elev); }
+.grid tbody tr.sel td { background: #333a45; }
+/* виртуализация прокрутки, как в сравнении: внеэкранные строки пропускаются */
+.grid tbody tr { content-visibility: auto; contain-intrinsic-size: auto none; }
+
+/* focused cell: a weak, inset outline clearly weaker than the row selection */
+/* focused cell: a weak, inset outline clearly weaker than the row selection.
+   NOTE: rendered with `outline` (not inset box-shadow) — on QtWebEngine/D3D11 an
+   inset box-shadow floods the focused cell into a solid block. */
+.grid td.cell-focus {
+  background: #3a4250;
+  outline: 1.5px solid rgba(123, 92, 240, .55);
+  outline-offset: -1.5px;
+}
+
+/* flash animation for a row reached through a followed link */
+@keyframes rowFlash {
+  0% { background: rgba(232, 184, 75, .55); }
+  70% { background: rgba(232, 184, 75, .25); }
+  100% { background: transparent; }
+}
+.grid tbody tr.row-flash td { animation: rowFlash 1.6s ease-out; }
+.grid tbody td.sticky-col {
+  position: sticky; left: 0; z-index: 2; background: var(--bg-elev); font-weight: 600;
+  color: var(--accent); box-shadow: 1px 0 0 var(--border);
+}
+/* cell-focus outline must survive on the sticky sysname cell (its own
+   box-shadow would otherwise override the inset outline) */
+.grid tbody td.sticky-col.cell-focus {
+  background: #3a4250;
+  box-shadow: 1px 0 0 var(--border);
+  outline: 2px solid rgba(123, 92, 240, .75);
+  outline-offset: -2px;
+}
+/* whole-column selection (double-click on the header) */
+.grid thead th.col-sel, .grid tbody td.col-sel {
+  background: rgba(123, 92, 240, .22) !important;
+}
+.grid thead th.col-sel { color: #c9b8ff; }
+.grid td .cell-sub {
+  font-size: 9px; font-weight: 400; color: var(--text-mute);
+  font-family: var(--font); margin-top: 1px; overflow: hidden;
+  text-overflow: ellipsis; max-width: 200px;
+}
+.grid tbody tr.sel td.sticky-col { background: #333a45; }
+/* small accent button that opens the linked file (in cells with a link) */
+/* иконка ссылки ABSOLUTE в правом верхнем углу ячейки: inline-вариант
+   переносился на новую строку (после block-ового .cell-sub) и раздувал
+   строку/колонку таблицы */
+.grid td.has-link { position: relative; }
+.grid td.has-link .link-btn {
+  position: absolute; top: 4px; right: 3px;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; margin-left: 0; padding: 0;
+  background: var(--accent); color: #1a1a1a; border: none; border-radius: 3px;
+  cursor: pointer;
+  box-shadow: 0 0 6px var(--accent-glow);
+  transition: filter .12s, box-shadow .12s;
+}
+.grid td .link-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; margin-left: 6px; padding: 0;
+  background: var(--accent); color: #1a1a1a; border: none; border-radius: 3px;
+  cursor: pointer; vertical-align: middle;
+  box-shadow: 0 0 6px var(--accent-glow);
+  transition: filter .12s, box-shadow .12s;
+}
+.grid td .link-btn:hover { filter: brightness(1.15); box-shadow: 0 0 12px var(--accent-glow); }
+.grid td .link-btn svg { width: 10px; height: 10px; display: block; }
+.grid td .cell-input {
+  width: 100%; background: var(--bg-card); color: var(--text); border: 1px solid var(--accent);
+  font-family: var(--mono); font-size: var(--grid-font); padding: 1px 4px; border-radius: 2px; outline: none;
+}
+

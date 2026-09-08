@@ -1,0 +1,26 @@
+<!-- partials/page-welcome.html — стартовая страница -->
+        <!-- Попап поиска/замены вкладок файлов создаётся из общего ядра
+             mkFindBar (app.js) и добавляется сюда динамически -->
+        <!-- Welcome tab (permanent, first) -->
+        <section class="tab-panel welcome-tab" id="welcome-tab" role="tabpanel" data-tab-id="welcome">
+          <div class="dz-actions-top">
+            <button class="btn big" id="landing-create-mod"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg><span data-i18n="create_mod">Создать мод</span></button>
+            <button class="btn big" id="landing-unpacker" data-i18n-title="up_title" title="Распаковщик архивов"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg><span data-i18n="up_title">Распаковщик</span></button>
+            <button class="btn big" id="landing-uprising" data-i18n-title="upr_title" title="Uprising Map Editor"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14"/><path d="M15 6v14"/></svg><span data-i18n="upr_title">Uprising Map Editor</span></button>
+            <button class="btn big" id="landing-swt" data-i18n-title="swt_title" title="SWT редактор"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg><span data-i18n="swt_title">SWT редактор</span></button>
+            <button class="btn big" id="landing-compare" data-i18n-title="compare" title="Сравнить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg><span data-i18n="compare">Сравнить</span></button>
+          </div>
+          <div class="dropzone" id="dropzone">
+            <div class="dz-icon">🗀</div>
+            <div class="dz-title" data-i18n="open_file">Открыть документ</div>
+            <div class="dz-sub" data-i18n="projects_hint">Перетащите сюда файл .xml или папку проекта мода</div>
+            <div class="dz-buttons">
+              <button class="btn big" id="landing-open-file"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span data-i18n="open_doc_short">Файл</span></button>
+              <button class="btn big" id="landing-open-project"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg><span data-i18n="open_folder_short">Папка</span></button>
+            </div>
+            <div class="dz-recent">
+              <button class="btn big ghost" id="landing-records-btn" data-i18n="recent">Недавние</button>
+            </div>
+            <input type="file" id="file-input" accept=".xml" hidden>
+          </div>
+        </section>

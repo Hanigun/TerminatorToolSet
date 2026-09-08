@@ -1,0 +1,36 @@
+<!-- partials/page-unpacker.html — страница распаковщика -->
+        <!-- Unpacker page (permanent tab) -->
+        <section class="tab-panel unpacker-tab" id="unpacker-tab" data-tab-id="unpacker">
+          <div class="up-page">
+            <h2 class="cm-title" data-i18n="up_title">Распаковка игры</h2>
+            <div class="up-form">
+              <label class="cm-row">
+                <span class="cm-label" data-i18n="up_game_root">Корень игры</span>
+                <div class="cm-dir-row">
+                  <input type="text" id="up-root" class="cm-input" spellcheck="false"
+                         placeholder="C:\Games\Terminator Dark Fate - Defiance">
+                  <button class="btn" id="up-pick-root" data-i18n="cm_pick_dir">Указать путь к игре</button>
+                </div>
+              </label>
+              <label class="cm-row">
+                <span class="cm-label" data-i18n="up_dest">Папка распаковки</span>
+                <div class="cm-dir-row">
+                  <input type="text" id="up-dest" class="cm-input" spellcheck="false"
+                         placeholder="C:\TDF_Unpacked">
+                  <button class="btn" id="up-pick-dest" data-i18n="up_pick_dest">Выбрать папку</button>
+                </div>
+              </label>
+              <div class="up-actions">
+                <button class="btn" id="up-scan" data-i18n="up_scan">Сканировать</button>
+                <button class="btn accent" id="up-run" data-i18n="up_run" disabled>Распаковать</button>
+                <button class="icon-btn up-abort danger" id="up-abort" data-i18n-title="up_abort" title="Прервать" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+              </div>
+              <div class="up-progress" id="up-progress" hidden>
+                <div class="up-progress-fill" id="up-progress-fill"></div>
+                <span class="up-progress-text" id="up-progress-text"></span>
+              </div>
+              <div class="up-hint" data-i18n="up_hint">Все пакы игры распаковываются в basis\: сначала basis.pak, затем патчи по номерам — каждый следующий перезаписывает файлы. Legion → dlc\legion\basis, Resistance → dlc\resistance\basis, Evolution → dlc\evolution\basis.</div>
+              <div class="up-plan" id="up-plan" hidden></div>
+            </div>
+          </div>
+        </section>

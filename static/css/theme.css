@@ -1,0 +1,12 @@
+/* theme.css — 18/20 · светлая тема (поверх всего — держать поздно) · порядок каскада: CSS_ORDER в scripts/verify-ui-wiring.mjs */
+/* Light theme */
+body.light {
+  --bg: #f2f3f5; --bg-elev: #ffffff; --bg-card: #ececf0; --border: #d4d7dd;
+  --border-soft: #e2e4e8; --text: #23262b; --text-mute: #6a707c;
+  --accent: #c79a33; --accent-2: #96731f; --accent-glow: rgba(199, 154, 51, .4);
+}
+body.light .grid thead th.sticky-col, body.light .grid tbody td.sticky-col,
+body.light .cmp-grid thead th.sticky-col, body.light .cmp-grid tbody td.sticky-col { background: #e4e6ea; }
+body.light .grid tbody tr.sel td { background: #dde3ef; }
+body.light .btn { color: #1a1a1a; }
+

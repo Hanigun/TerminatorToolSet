@@ -57,17 +57,18 @@ try:
         "FAIL: /api/i18n"
 
     # большой статический файл: полный ответ без обрыва (баг >64КБ),
-    # повторно + параллельно — эпизодические зависания роняют гейт
-    st, body = fetch("/static/js/app.js")
-    assert st == 200 and len(body) > 100000, "FAIL: app.js truncated (%d)" % len(body)
-    assert b"cmpFocusSearch" in body, "FAIL: app.js content missing"
+    # повторно + параллельно — эпизодические зависания роняют гейт.
+    # Самый большой чанк фронта после нарезки app.js — uprising.js
+    st, body = fetch("/static/js/uprising.js")
+    assert st == 200 and len(body) > 100000, "FAIL: uprising.js truncated (%d)" % len(body)
+    assert b"uprWriteCell" in body, "FAIL: uprising.js content missing"
     expected = len(body)
     threads = []
     results = []
 
     def _worker():
         try:
-            _, b2 = fetch("/static/js/app.js")
+            _, b2 = fetch("/static/js/uprising.js")
             results.append(len(b2))
         except Exception as e:  # noqa: BLE001
             results.append(str(e))
@@ -79,7 +80,7 @@ try:
     for th in threads:
         th.join(30)
     for r in results:
-        assert r == expected, "FAIL: parallel app.js fetch broken: %r" % (r,)
+        assert r == expected, "FAIL: parallel uprising.js fetch broken: %r" % (r,)
 
     st, body = fetch("/api/game_tree")
     assert st == 200, "FAIL: /api/game_tree status"

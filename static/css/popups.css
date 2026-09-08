@@ -1,0 +1,131 @@
+/* popups.css — 04/20 · ранние попапы: выбор ключа, cmp-fs, ресайзер · порядок каскада: CSS_ORDER в scripts/verify-ui-wiring.mjs */
+/* сравнение: окно выбора ключа (без скруглений, широкое, с поиском) */
+.key-dd { position: relative; }
+.key-dd-btn { display: inline-flex; align-items: center; gap: 6px; min-width: 150px; }
+.key-dd-arrow { font-size: 10px; opacity: .7; }
+.key-dd-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 440px;
+  max-height: 420px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card, #1b1e24);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: 0 12px 32px rgba(0,0,0,.5);
+  z-index: 90;
+}
+.key-dd-pop[hidden] { display: none; }
+.key-dd-pop input {
+  margin: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--bg, #14161a);
+  color: var(--text);
+}
+.key-dd-list { overflow: auto; padding: 0 8px 8px; flex: 1; }
+.key-dd-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 0;
+}
+.key-dd-item:hover { background: var(--bg-hover, rgba(255,255,255,.06)); }
+.key-dd-item.active { color: var(--accent); font-weight: 600; }
+.key-dd-empty { padding: 10px; color: var(--text-mute); font-size: 12px; }
+
+/* сравнение: жёлтая кнопка переноса */
+.btn.yellow {
+  background: #f2c500;
+  border-color: #f2c500;
+  color: #14161a;
+  font-weight: 600;
+}
+.btn.yellow:hover { background: #ffd11a; }
+.btn.yellow:disabled { opacity: .45; }
+
+/* сравнение: полноэкранная модалка панели */
+.cmp-fs {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: rgba(10, 11, 13, .88);
+  display: flex;
+  flex-direction: column;
+}
+.cmp-fs[hidden] { display: none; }
+.cmp-fs-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg-card, #1b1e24);
+  border-bottom: 1px solid var(--border);
+}
+.cmp-fs-file {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cmp-fs-head input {
+  width: 300px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--bg, #14161a);
+  color: var(--text);
+}
+.cmp-fs-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  padding: 0;
+}
+.cmp-fs-body .cmp-pane {
+  flex: 1;
+  max-width: none;
+  overflow: auto;
+  background: var(--bg, #14161a);
+}
+}
+.tree-body {
+  /* plain wrapper: the sidebar itself is the scroll container, so the
+     title, path, search and the tree all scroll together */
+}
+.sidebar .tree {
+  padding: 8px 10px 16px;
+}
+
+.sidebar-resizer {
+  width: 4px;
+  background: transparent;
+  cursor: ew-resize;
+  position: relative;
+  z-index: 20;
+  transition: background 0.1s;
+}
+.sidebar-resizer:hover,
+.sidebar-resizer.dragging {
+  background: var(--accent);
+}
+.sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  right: -4px;
+}
+

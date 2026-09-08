@@ -1,0 +1,45 @@
+/* base.css — 01/20 · переменные :root, reset, body · порядок каскада: CSS_ORDER в scripts/verify-ui-wiring.mjs */
+:root {
+  --bg: #1d1f24;
+  --bg-elev: #252830;
+  --bg-card: #2c3038;
+  --border: #363b45;
+  --border-soft: #2a2e36;
+  --text: #e6e8ec;
+  --text-mute: #9aa1ad;
+  --accent: #e8b84b;
+  --accent-2: #b8922f;
+  --accent-glow: rgba(232, 184, 75, .45);
+  --accent-card: #7b5cf0;
+  --green: #3fb56f;
+  --red: #e2584a;
+  --yellow: #e0b04a;
+  --blue: #5a9bd6;
+  --radius: 2px;
+  --font: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --mono: "Consolas", "Cascadia Mono", monospace;
+  --sidebar-w: 320px;
+  --grid-font: 12px;
+
+  /* ядро масштаба: контент страниц и общий интерфейс масштабируются
+     независимо (двигаются из app.js: hotkeys Ctrl+= / Ctrl+- / Ctrl+0
+     для контента и селекты в настройках для обоих) */
+  --content-zoom: 1;
+  --ui-zoom: 1;
+  /* column widths scale with the grid font so the whole table grows together */
+  --grid-col-w: calc(var(--grid-font) * 14 + 2px);
+  --sticky-w: calc(var(--grid-font) * 18 + 4px);
+  --cmp-sticky-w: 220px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  overflow: hidden;
+}
+

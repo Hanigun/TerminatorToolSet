@@ -62,7 +62,7 @@
   </style>
 </head>
 <body>
-  <img class="logo" src="/assets/icons/app_icon.png" alt="">
+  <img class="logo" src="{{ logo_data_url or '/assets/icons/app_icon.png' }}" alt="">
   <div class="name">{{ title }}</div>
   <div class="spin"></div>
   <div class="barrow"><div class="bar"><div class="bar-fill" id="fill"></div></div><div class="pct" id="pct">0%</div></div>

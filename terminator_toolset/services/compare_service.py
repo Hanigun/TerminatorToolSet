@@ -99,9 +99,11 @@ class Compare:
 
     # -- merge ------------------------------------------------------------------------
     def merge_all(self, left_path: str, right_path: str,
-                  key_col=0, default_key: str = "") -> dict:
-        """Copy everything new/updated from the right (source) file into
-        the left (base) file. Right wins on conflicts."""
+                  key_col=0, default_key: str = "", mode: str = "all") -> dict:
+        """Copy new/updated rows from the right (source) file into the left
+        (base) file. Right wins on conflicts. Mode follows the compare
+        filter: "all" (new + edited), "new" (only missing rows), "edited"
+        (only changed rows)."""
         dst = self._store.get(self._store.normal(left_path or ""))
         src = self._store.get(self._store.normal(right_path or ""))
         key_col = self._key_col(dst.worksheet, key_col, default_key)
@@ -113,44 +115,48 @@ class Compare:
         created = updated = 0
         try:
             # 1) rows missing on the left -> append from the right
-            for key, sri in src_idx.items():
-                if key in dst_keys:
-                    continue
-                dst_row_i, _cr = comp_mod.transfer_row(sws, dws, sri, key_col, col_map)
-                created += 1
-                after = dws.row_payload(dws.rows[dst_row_i])
-                after_ri = dws.row_index_attr(dws.rows[dst_row_i])
-                self._db.log_change(dst.path, "row_set",
-                                    {"r": dst_row_i, "existed": False, "ri_o": None,
-                                     "cells_o": [], "ri_n": after_ri, "cells_n": after},
-                                    "row %s created (merge)" % key)
-            # 2) rows present on both -> right wins per mapped column
-            for dri, drow in enumerate(dws.rows):
-                key = drow.cell_value(key_col).strip()
-                if not key or key not in src_idx:
-                    continue
-                srow = sws.rows[src_idx[key]]
-                before = dws.row_payload(drow)
-                before_ri = dws.row_index_attr(drow)
-                changed = False
-                for dcol, scol in col_map.items():
-                    sv = srow.cell_value(scol)
-                    if drow.cell_value(dcol) != sv:
-                        stype = srow.cells[scol].type if scol < len(srow.cells) else None
-                        drow.set_cell_value(dcol, sv, stype)
-                        changed = True
-                if changed:
-                    updated += 1
-                    after = dws.row_payload(drow)
-                    after_ri = dws.row_index_attr(drow)
+            if mode in ("all", "new"):
+                for key, sri in src_idx.items():
+                    if key in dst_keys:
+                        continue
+                    dst_row_i, _cr = comp_mod.transfer_row(sws, dws, sri, key_col, col_map)
+                    created += 1
+                    after = dws.row_payload(dws.rows[dst_row_i])
+                    after_ri = dws.row_index_attr(dws.rows[dst_row_i])
                     self._db.log_change(dst.path, "row_set",
-                                        {"r": dri, "existed": True, "ri_o": before_ri,
-                                         "cells_o": before, "ri_n": after_ri, "cells_n": after},
-                                        "row %s updated (merge)" % key)
+                                        {"r": dst_row_i, "existed": False, "ri_o": None,
+                                         "cells_o": [], "ri_n": after_ri, "cells_n": after},
+                                        "row %s created (merge)" % key)
+            # 2) rows present on both -> right wins per mapped column
+            if mode in ("all", "edited"):
+                for dri, drow in enumerate(dws.rows):
+                    key = drow.cell_value(key_col).strip()
+                    if not key or key not in src_idx:
+                        continue
+                    srow = sws.rows[src_idx[key]]
+                    before = dws.row_payload(drow)
+                    before_ri = dws.row_index_attr(drow)
+                    changed = False
+                    for dcol, scol in col_map.items():
+                        sv = srow.cell_value(scol)
+                        if drow.cell_value(dcol) != sv:
+                            stype = srow.cells[scol].type if scol < len(srow.cells) else None
+                            drow.set_cell_value(dcol, sv, stype)
+                            changed = True
+                    if changed:
+                        updated += 1
+                        after = dws.row_payload(drow)
+                        after_ri = dws.row_index_attr(drow)
+                        self._db.log_change(dst.path, "row_set",
+                                            {"r": dri, "existed": True, "ri_o": before_ri,
+                                             "cells_o": before, "ri_n": after_ri, "cells_n": after},
+                                            "row %s updated (merge)" % key)
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "error": str(e)}
-        if self._config.get("auto_save", True):
-            self._saves.safe_save(dst)
+        # переносы в сравнении не пишут на диск: правки живут в памяти,
+        # пользователь сохраняет их сам (кнопка сохранения / Ctrl+S)
+        dst.dirty = True
+        self._store.dirty.add(dst.path)
         return {"ok": True, "created": created, "updated": updated,
                 **self._hist.flags(dst.path)}
 
@@ -203,8 +209,9 @@ class Compare:
                              "ri_n": after_ri, "cells_n": after},
                             "row %s (r%d)" % ("created" if created else "transferred",
                                               dst_row))
-        if self._config.get("auto_save", True):
-            self._saves.safe_save(dst)
+        # перенос строки не пишет на диск — только в память (см. merge_all)
+        dst.dirty = True
+        self._store.dirty.add(dst.path)
         return {"ok": True, "dst_row": dst_row, "created": created,
                 **self._hist.flags(dst.path)}
 
@@ -243,6 +250,7 @@ class Compare:
                              "name_o": name_o, "cells_o": cells_o,
                              "name_n": name_n, "cells_n": cells_n},
                             "column transferred (c%d)" % dst_col)
-        if self._config.get("auto_save", True):
-            self._saves.safe_save(dst)
+        # перенос колонки не пишет на диск — только в память (см. merge_all)
+        dst.dirty = True
+        self._store.dirty.add(dst.path)
         return {"ok": True, "dst_col": dst_col, **self._hist.flags(dst.path)}

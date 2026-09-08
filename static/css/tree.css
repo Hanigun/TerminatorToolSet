@@ -1,0 +1,139 @@
+/* tree.css — 06/20 · дерево проекта · порядок каскада: CSS_ORDER в scripts/verify-ui-wiring.mjs */
+/* ---- Project tree (sidebar) ---- */
+.tree-filter {
+  background: var(--bg-card); border: 1px solid var(--border); color: var(--text);
+  border-radius: var(--radius); padding: 5px 8px; margin: 8px 10px 0;
+  font-family: var(--font); font-size: 12px; outline: none; width: calc(100% - 20px);
+}
+.tree-filter:focus { border-color: var(--accent); }
+
+/* compact toolbar: search + filter dropdown trigger */
+.tree-toolbar { display: flex; align-items: center; gap: 6px; margin: 8px 10px 0; position: relative; }
+.tree-toolbar[hidden] { display: none; }
+.tree-toolbar .tree-filter { flex: 1; min-width: 0; margin: 0; width: auto; }
+.tree-filter-btn { flex-shrink: 0; width: 30px; height: 30px; padding: 0; }
+.tree-filter-btn.active { color: var(--accent); border-color: var(--accent); }
+.tree-filter-btn.active svg { filter: drop-shadow(0 0 3px var(--accent-glow)); }
+
+/* filter dropdown: extensions + folders checkboxes */
+.tree-filter-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+  max-height: 420px; overflow-y: auto;
+  background: var(--bg-elev); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+  padding: 8px; z-index: 30;
+}
+.tree-filter-menu input[type="search"] {
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 4px 8px; font-family: var(--font);
+  font-size: 12px; outline: none; width: 100%; margin-bottom: 6px;
+  box-sizing: border-box;
+}
+.tree-filter-menu input[type="search"]:focus { border-color: var(--accent); }
+.tfm-presets { display: flex; gap: 6px; margin-bottom: 6px; }
+.tfm-presets button {
+  flex: 1; background: var(--bg-card); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 4px 6px; font-family: var(--font); font-size: 11px; cursor: pointer;
+}
+.tfm-presets button:hover { border-color: var(--accent); color: var(--accent); }
+.tfm-section { margin-bottom: 8px; }
+.tfm-title {
+  font-weight: 700; color: var(--accent); font-size: 10px; text-transform: uppercase;
+  letter-spacing: .6px; padding: 2px 0 4px;
+}
+.tfm-list { display: flex; flex-direction: column; }
+.tfm-item {
+  display: flex; align-items: center; gap: 7px; padding: 3px 4px;
+  border-radius: var(--radius); cursor: pointer; font-size: 12px; color: var(--text);
+}
+.tfm-item:hover { background: var(--bg-card); }
+.tfm-item input[type="checkbox"] { accent-color: var(--accent); margin: 0; flex-shrink: 0; }
+.tfm-item .tfm-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tfm-item .tfm-count { color: var(--text-mute); font-size: 10px; flex-shrink: 0; }
+.tfm-empty { color: var(--text-mute); font-size: 11px; padding: 2px 4px; }
+
+.tree-dir {
+  display: flex; align-items: center; gap: 7px; padding: 5px 8px 5px 6px;
+  border-radius: var(--radius); cursor: pointer; color: var(--text);
+  user-select: none; transition: background 0.1s;
+}
+.tree-dir:hover { background: var(--bg-card); }
+.tree-dir .chev { flex-shrink: 0; color: var(--text-mute); transition: transform .12s; }
+.tree-dir.expanded .chev { transform: rotate(90deg); }
+.tree-dir .file-icon { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; display: block; }
+.tree-dir .file-name {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 13px; font-weight: 600;
+}
+.tree-dir .file-meta { color: var(--text-mute); font-size: 11px; white-space: nowrap; flex-shrink: 0; }
+.tree-dir.dragging { opacity: .5; }
+.tree-empty { color: var(--text-mute); font-size: 11px; font-style: italic; padding: 8px 10px; }
+
+/* overlay chips (Компания / DLC Legion / DLC Resistance) — clean section
+   headers: no background, no border, gold name only when expanded */
+.overlay-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px; margin: 2px 0 4px;
+  border-radius: var(--radius);
+  cursor: pointer; user-select: none;
+  transition: background .12s;
+}
+.overlay-head:hover { background: var(--bg-card); }
+.overlay-head .ov-chev { flex-shrink: 0; color: var(--text-mute); transition: transform .14s; }
+.overlay-head.expanded .ov-chev { color: var(--accent); transform: rotate(90deg); }
+.overlay-head-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.overlay-name {
+  font-weight: 700; color: var(--accent); font-size: 13px;
+  text-transform: uppercase; letter-spacing: .5px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  text-shadow: 0 0 8px var(--accent-glow);
+}
+.overlay-path { color: var(--text-mute); font-size: 11px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.overlay-head:not(.expanded) .overlay-name { color: var(--text-mute); text-shadow: none; }
+
+/* category subsections inside unit folders (Пехота / Машины / Танки…) */
+.tree-cat {
+  display: flex; align-items: center; gap: 7px; padding: 5px 8px 5px 6px;
+  border-radius: var(--radius); cursor: pointer; user-select: none;
+  color: var(--text-mute); transition: background .1s;
+}
+.tree-cat:hover { background: var(--bg-card); }
+.tree-cat .chev { flex-shrink: 0; color: var(--text-mute); transition: transform .12s; }
+.tree-cat.collapsed .chev { transform: rotate(0deg); }
+.tree-cat:not(.collapsed) .chev { transform: rotate(90deg); }
+.tree-cat .cat-icon { width: 18px; height: 18px; object-fit: contain; flex-shrink: 0; display: block; opacity: .95; }
+.tree-cat .cat-name {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 13px; font-weight: 700; color: var(--accent);
+  text-transform: uppercase; letter-spacing: .4px;
+}
+.tree-cat .cat-count {
+  color: var(--text-mute); font-size: 11px; flex-shrink: 0;
+  background: var(--bg-card); border-radius: 9px; padding: 1px 7px; font-weight: 600;
+}
+.tree-file {
+  display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: var(--radius);
+  cursor: pointer; color: var(--text); transition: background 0.1s, color 0.1s;
+}
+.tree-file:hover { background: var(--bg-card); }
+.tree-file.active { background: var(--accent); color: #1a1a1a; box-shadow: 0 0 10px var(--accent-glow); }
+.tree-file.active .file-icon,
+.tree-file.active .file-name,
+.tree-file.active .file-meta { color: #1a1a1a; }
+.tree-file .file-icon { width: 18px; height: 18px; object-fit: contain; flex-shrink: 0; display: block; }
+.tree-file .file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.tree-file.edited .file-name::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: #3ddc84;
+  box-shadow: 0 0 5px rgba(61, 220, 132, .9);
+  vertical-align: 2px;
+}
+.tree-file .file-meta { color: var(--text-mute); font-size: 10px; white-space: nowrap; flex-shrink: 0; }
+

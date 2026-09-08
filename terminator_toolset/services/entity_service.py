@@ -9,6 +9,10 @@ from ..domain import links as links_mod
 from ..domain.project import Project
 
 
+# группы отчёта режем для фронта: cells первые N + total (модалка кажет N)
+_GROUP_CAP = 200
+
+
 # -- entity index -----------------------------------------------------------
 class EntityIndex:
     """Single owner of the open project and its entity map.
@@ -26,6 +30,10 @@ class EntityIndex:
         self._snapshot = None   # frozenset of (path, mtime), None when empty
         self.ready = threading.Event()
         self.building = threading.Event()
+        # per-file defs cache: normpath -> (mtime, {value: [locs]}).
+        # Повторные проходы (фон/Анализ) парсят только изменённые файлы —
+        # на BaseGame это секунды вместо полного рескана.
+        self._file_defs: dict = {}
 
     # -- project lifecycle --------------------------------------------------
     def open(self, root: str, *, db, config) -> dict:
@@ -56,7 +64,10 @@ class EntityIndex:
         with self.lock:
             self.map = {}
             self._snapshot = None
+        # оба ключа: иначе project_path воскрешает проект при рестарте,
+        # а поле в настройках показывает удалённый путь
         config.set("last_project", "")
+        config.set("project_path", "")
 
     # -- snapshot -----------------------------------------------------------
     def paths(self) -> list:
@@ -85,6 +96,42 @@ class EntityIndex:
             return self._key(paths) != self._snapshot
 
     # -- builds ---------------------------------------------------------------
+    def _cached_defs(self, paths: "list[str]", load_fn) -> dict:
+        """Merged defs map with per-file mtime cache (incremental).
+
+        Неизменённые файлы не парсятся повторно; удалённые выкидываются."""
+        merged: dict = {}
+        live = set()
+        # гонка фон/Анализ по _file_defs безопасна: худший исход — лишний
+        # парсинг одного файла, содержимое детерминировано.
+        for p in paths or []:
+            key = links_mod._norm(p)
+            live.add(key)
+            mt = self._mtime(p)
+            ent = self._file_defs.get(key)
+            if ent is not None and ent[0] == mt:
+                fdefs = ent[1]
+            else:
+                try:
+                    grid = load_fn(p)
+                except Exception:  # noqa: BLE001
+                    self._file_defs.pop(key, None)
+                    continue
+                fdefs = links_mod.defs_from_grid(grid, p)
+                self._file_defs[key] = (mt, fdefs)
+            for v, locs in fdefs.items():
+                merged.setdefault(v, []).extend(locs)
+        for key in list(self._file_defs):
+            if key not in live:
+                del self._file_defs[key]
+        return merged
+
+    def _store_map(self, new_map, paths) -> None:
+        with self.lock:
+            self.map = new_map
+            self._snapshot = self._key(paths)
+        self.ready.set()
+
     def _build_bg(self) -> None:
         # yield the GIL between files + low thread priority: indexing must
         # not hurt UI latency or werkzeug request threads
@@ -103,11 +150,7 @@ class EntityIndex:
 
         paths = self.paths()
         if paths:
-            new_map = links_mod.collect_entity_from_paths(paths, _load_yield)
-            with self.lock:
-                self.map = new_map
-                self._snapshot = self._key(paths)
-        self.ready.set()
+            self._store_map(self._cached_defs(paths, _load_yield), paths)
 
     def kick(self) -> None:
         """Start a background entity-map build when the snapshot is stale."""
@@ -149,6 +192,49 @@ class EntityIndex:
         """Cross-file link targets for a session (locked read)."""
         with self.lock:
             return links_mod.link_targets(session, self.map)
+
+    def analyze(self, path_key: str) -> dict:
+        """Кнопка «Анализ» открытого файла: синхронный пересчёт зависимостей.
+
+        Строит свежую карту определений одним проходом и кладёт в общий
+        индекс — пропавшие ссылки чинятся детерминированно, без ожидания
+        фона. Исходящие ссылки — с приоритетом правил семейства и запретом
+        само-ссылки; входящие — файлы, чьи ячейки ссылаются на sysname
+        этого файла. Без проекта — только по открытым сессиям."""
+        s = (self._store.sessions.get(self._store.normal(path_key))
+             or self._store.get(path_key))
+        paths = self.paths()
+        own_names = links_mod.own_sysnames(s)
+        if paths:
+            # defs — из mtime-кэша (повторный Анализ почти бесплатный);
+            # incoming — полный проход: якоря свои, искать надо везде
+            defs = self._cached_defs(paths, self._store.minimal_grid)
+            incoming = links_mod.collect_incoming(
+                paths, self._store.minimal_grid, own_names, s.path)
+            self._store_map(defs, paths)
+            files_n = len(paths)
+        else:
+            with self.lock:
+                with_db = {}
+                for sess in list(self._store.sessions.values()):
+                    with_db[sess.path] = sess
+                defs = links_mod.collect_entity_map(with_db)
+            incoming = {}
+            files_n = len(with_db)
+        deps = links_mod.dep_targets_for(os.path.basename(s.path or ""))
+        links = links_mod.link_targets(s, defs, deps)
+        refs = links_mod.all_refs(s, defs, deps)
+        by_count = lambda kv: (-len(kv[1]), kv[0].lower())
+        # группы режем для фронта: cells первые N + total (модалка кажет N)
+        grouped = {}
+        for link in refs:
+            grouped.setdefault(link["target_file"], []).append(link)
+        outgoing = [{"file": f, "cells": c[:_GROUP_CAP], "total": len(c)}
+                    for f, c in sorted(grouped.items(), key=by_count)]
+        inc = [{"file": f, "cells": c[:_GROUP_CAP], "total": len(c)}
+               for f, c in sorted(incoming.items(), key=by_count)]
+        return {"ok": True, "links": links, "outgoing": outgoing,
+                "incoming": inc, "files": files_n}
 
     def links(self, path_key: str) -> dict:
         """Link-target payload for a file (rebuilds the index first).

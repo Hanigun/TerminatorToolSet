@@ -4,7 +4,31 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ title }}</title>
-  <link rel="stylesheet" href="/static/css/style.css?v={{ v }}">
+  <!-- Стили нарезаны по фичам (порядок = каскад, как был в style.css):
+       base -> chrome -> sidebar -> popups -> tabs -> tree -> grid ->
+       dialogs -> create -> swt -> uprising -> dnd -> compare -> findbar ->
+       history -> menus -> widgets -> theme -> unpacker -> overrides.
+       Гейт клеит их по CSS_ORDER в scripts/verify-ui-wiring.mjs -->
+  <link rel="stylesheet" href="/static/css/base.css?v={{ v }}">
+  <link rel="stylesheet" href="/static/css/chrome.css?v={{ v }}">
+  <link rel="stylesheet" href="/static/css/sidebar.css?v={{ v }}">
+  <link rel="stylesheet" href="/static/css/popups.css?v={{ v }}">
+  <link rel="stylesheet" href="/static/css/tabs.css?v={{ v }}">
+  <link rel="stylesheet" href="/static/css/tree.css?v={{ v }}">
+  <link rel="stylesheet" href="/static/css/grid.css?v={{ v }}">
+  <link rel="stylesheet" href="/static/css/dialogs.css?v={{ v }}">
+  <link rel="stylesheet" href="/static/css/create.css?v={{ v }}">
+  <link rel="stylesheet" href="/static/css/swt.css?v={{ v }}">
+  <link rel="stylesheet" href="/static/css/uprising.css?v={{ v }}">
+  <link rel="stylesheet" href="/static/css/dnd.css?v={{ v }}">
+  <link rel="stylesheet" href="/static/css/compare.css?v={{ v }}">
+  <link rel="stylesheet" href="/static/css/findbar.css?v={{ v }}">
+  <link rel="stylesheet" href="/static/css/history.css?v={{ v }}">
+  <link rel="stylesheet" href="/static/css/menus.css?v={{ v }}">
+  <link rel="stylesheet" href="/static/css/widgets.css?v={{ v }}">
+  <link rel="stylesheet" href="/static/css/theme.css?v={{ v }}">
+  <link rel="stylesheet" href="/static/css/unpacker.css?v={{ v }}">
+  <link rel="stylesheet" href="/static/css/overrides.css?v={{ v }}">
 </head>
 <body>
   <header class="topbar pywebview-drag-region">
@@ -17,6 +41,7 @@
     </div>
     <div class="topbar-right pywebview-no-drag">
     <button class="donate-btn" id="btn-donate" data-i18n-title="donate" title="Поддержать проект"><img src="/assets/icons/social/donate.png" alt=""><span data-i18n="donate">Поддержать проект</span></button>
+    <button class="donate-btn" id="btn-discord" data-i18n-title="discord_btn" title="Terminator Discord"><img src="/assets/icons/social/discord.png" alt=""><span data-i18n="discord_btn">Terminator Discord</span></button>
     <button class="icon-btn upd-btn" id="btn-update" data-i18n-title="upd_check" title="Проверить обновления" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 21h16"/></svg><span class="upd-dot" id="btn-update-dot" hidden></span></button>
     <button class="icon-btn" id="btn-history" data-i18n-title="history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>
     <button class="icon-btn" id="btn-open-browser" data-i18n-title="open_in_browser" title="Открыть в браузере"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18"/></svg></button>
@@ -43,6 +68,9 @@
     </button>
     <button class="btn-fab" id="btn-fix" data-i18n-title="fix_file" title="Исправить файл (счётчики Excel)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4.5 4.5 0 0 0-6 6L3 18v3h3l5.7-5.7a4.5 4.5 0 0 0 6-6L14 13l-3-3 3.7-3.7z"/></svg>
+    </button>
+    <button class="btn-fab" id="btn-analyze" data-i18n-title="analyze" title="Анализ зависимостей">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.3 15.3 21 21"/><circle cx="10.5" cy="10.5" r="1.6" fill="currentColor" stroke="none"/></svg>
     </button>
     <span class="toolbar-sep"></span>
     <span class="toolbar-hint" data-i18n="find_hint">Ctrl+F — поиск</span>
@@ -71,13 +99,13 @@
       <div class="tree-body">
       <div class="sidebar-header">
         <span class="sidebar-title" id="sidebar-title"></span>
-        <button class="icon-btn sidebar-clear-edited" id="sidebar-clear-edited" data-i18n-title="clear_edited" title="Очистить пометки редактирования">
+        <button class="icon-btn sidebar-clear-edited gold" id="sidebar-clear-edited" data-i18n-title="clear_edited" title="Очистить пометки редактирования">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M6.2 6.2l11.6 11.6"/></svg>
         </button>
-        <button class="icon-btn sidebar-close" id="sidebar-close" data-i18n-title="close_project" title="Закрыть проект">
+        <button class="icon-btn sidebar-close danger" id="sidebar-close" data-i18n-title="close_project" title="Закрыть проект">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
-        <button class="icon-btn sidebar-toggle" id="sidebar-toggle" data-i18n-title="close" title="Collapse">
+        <button class="icon-btn sidebar-toggle gold" id="sidebar-toggle" data-i18n-title="close" title="Collapse">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
       </div>
@@ -152,293 +180,17 @@
 
       <!-- Tab panels container -->
       <div class="tab-panels" id="tab-panels">
-        <!-- Попап поиска/замены вкладок файлов создаётся из общего ядра
-             mkFindBar (app.js) и добавляется сюда динамически -->
-        <!-- Welcome tab (permanent, first) -->
-        <section class="tab-panel welcome-tab" id="welcome-tab" role="tabpanel" data-tab-id="welcome">
-          <div class="dz-actions-top">
-            <button class="btn big" id="landing-create-mod"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg><span data-i18n="create_mod">Создать мод</span></button>
-            <button class="btn big" id="landing-unpacker" data-i18n-title="up_title" title="Распаковщик архивов"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg><span data-i18n="up_title">Распаковщик</span></button>
-            <button class="btn big" id="landing-uprising" data-i18n-title="upr_title" title="Uprising Map Editor"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14"/><path d="M15 6v14"/></svg><span data-i18n="upr_title">Uprising Map Editor</span></button>
-            <button class="btn big" id="landing-swt" data-i18n-title="swt_title" title="SWT редактор"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg><span data-i18n="swt_title">SWT редактор</span></button>
-            <button class="btn big" id="landing-compare" data-i18n-title="compare" title="Сравнить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg><span data-i18n="compare">Сравнить</span></button>
-            <button class="btn big ghost" id="landing-records-btn" data-i18n="recent">Недавние</button>
-          </div>
-          <div class="dropzone" id="dropzone">
-            <div class="dz-icon">🗀</div>
-            <div class="dz-title" data-i18n="open_file">Открыть документ</div>
-            <div class="dz-sub" data-i18n="projects_hint">Перетащите сюда файл .xml или папку проекта мода</div>
-            <div class="dz-buttons">
-              <button class="btn big" id="landing-open-file"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span data-i18n="open_doc_short">Файл</span></button>
-              <button class="btn big" id="landing-open-project"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg><span data-i18n="open_folder_short">Папка</span></button>
-            </div>
-            <input type="file" id="file-input" accept=".xml" hidden>
-          </div>
-        </section>
+        {% include "partials/page-welcome.html" %}
 
-        <!-- Compare page (permanent tab) -->
-        <section class="tab-panel compare-tab" id="compare-tab" data-tab-id="compare">
-          <div class="cmp-page">
-            <div class="cm-sub" data-i18n="cmp_sub">Сравнивайте файлы или папки мода с базовой игрой и переносите отличия</div>
-            <div class="cmp-top">
-              <div class="cmp-side">
-                <span class="cmp-tag base" data-i18n="cmp_base">Основа</span>
-                <div class="src-seg src-seg-sm" id="cmp-left-src" data-pos="0" role="tablist">
-                  <span class="src-seg-ind" aria-hidden="true"></span>
-                  <button type="button" class="src-seg-btn" data-src="project" role="tab"><span data-i18n="tree_tab_project">Проект</span></button>
-                  <button type="button" class="src-seg-btn" data-src="game" role="tab"><span data-i18n="tree_tab_game">Игра</span></button>
-                  <button type="button" class="src-seg-btn" data-src="mod" role="tab"><span data-i18n="tree_tab_mod">Мод</span></button>
-                </div>
-                <div class="cmp-path-row">
-                  <input type="text" id="cmp-left-path" class="cmp-path" data-i18n-ph="cmp_path_ph" placeholder="Файл или папка…" spellcheck="false">
-                  <button class="icon-btn" id="cmp-left-file" data-i18n-title="cmp_pick_file_t" title="Выбрать файл"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></button>
-                  <button class="icon-btn" id="cmp-left-dir" data-i18n-title="cmp_pick_folder_t" title="Выбрать папку"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg></button>
-                  <button class="icon-btn cmp-clear" id="cmp-left-clear" data-i18n-title="close" title="Закрыть"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-                  <button class="icon-btn cmp-fs-btn" id="cmp-left-fs" data-i18n-title="cmp_fullscreen" title="На весь экран"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
-                </div>
-                <div class="cmp-dd" id="cmp-left-dd" hidden>
-                  <button type="button" class="cmp-dd-btn" id="cmp-left-dd-btn">
-                    <span class="cmp-dd-face" id="cmp-left-dd-face">Файл…</span>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                  </button>
-                  <div class="cmp-list cmp-dd-pop" id="cmp-left-list" hidden></div>
-                </div>
-                <div class="cmp-side-status" id="cmp-left-status" hidden></div>
-              </div>
-              <div class="cmp-mid">
-                <label class="cmp-key-label"><span data-i18n="cmp_key">Ключ</span>
-                  <div class="key-dd" id="cmp-key-dd">
-                    <button type="button" class="cmp-dd-btn key-dd-btn" id="cmp-key-btn">
-                      <span class="cmp-dd-face" id="cmp-key-face">Все ключи</span>
-                      <span class="key-dd-arrow">▾</span>
-                    </button>
-                    <div class="key-dd-pop" id="cmp-key-pop" hidden>
-                      <input type="search" id="cmp-key-search" data-i18n-ph="cmp_key_search_ph" placeholder="Поиск ключа…" spellcheck="false">
-                      <div class="key-dd-list" id="cmp-key-list"></div>
-                    </div>
-                  </div>
-                </label>
-                <div class="cmp-btns">
-                  <button class="btn accent" id="cmp-run" data-i18n="compare">Сравнить</button>
-                  <button class="btn yellow" id="cmp-merge" data-i18n="cmp_merge" data-i18n-title="cmp_merge_t" title="Перенести всё новое справа налево">Слияние</button>
-                  <label class="cmp-sync" id="cmp-sync-label"><input type="checkbox" id="cmp-sync-scroll" checked><span data-i18n="cmp_sync_scroll">Синхр. прокрутка</span></label>
-                </div>
-                <div class="cmp-filters" id="cmp-filters" hidden></div>
-              </div>
-              <div class="cmp-side">
-                <span class="cmp-tag src" data-i18n="cmp_source">Источник</span>
-                <div class="src-seg src-seg-sm" id="cmp-right-src" data-pos="1" role="tablist">
-                  <span class="src-seg-ind" aria-hidden="true"></span>
-                  <button type="button" class="src-seg-btn" data-src="project" role="tab"><span data-i18n="tree_tab_project">Проект</span></button>
-                  <button type="button" class="src-seg-btn" data-src="game" role="tab"><span data-i18n="tree_tab_game">Игра</span></button>
-                  <button type="button" class="src-seg-btn" data-src="mod" role="tab"><span data-i18n="tree_tab_mod">Мод</span></button>
-                </div>
-                <div class="cmp-path-row">
-                  <input type="text" id="cmp-right-path" class="cmp-path" data-i18n-ph="cmp_path_ph" placeholder="Файл или папка…" spellcheck="false">
-                  <button class="icon-btn" id="cmp-right-file" data-i18n-title="cmp_pick_file_t" title="Выбрать файл"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></button>
-                  <button class="icon-btn" id="cmp-right-dir" data-i18n-title="cmp_pick_folder_t" title="Выбрать папку"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg></button>
-                  <button class="icon-btn cmp-clear" id="cmp-right-clear" data-i18n-title="close" title="Закрыть"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-                  <button class="icon-btn cmp-fs-btn" id="cmp-right-fs" data-i18n-title="cmp_fullscreen" title="На весь экран"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
-                </div>
-                <div class="cmp-dd" id="cmp-right-dd" hidden>
-                  <button type="button" class="cmp-dd-btn" id="cmp-right-dd-btn">
-                    <span class="cmp-dd-face" id="cmp-right-dd-face">Файл…</span>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                  </button>
-                  <div class="cmp-list cmp-dd-pop" id="cmp-right-list" hidden></div>
-                </div>
-                <div class="cmp-side-status" id="cmp-right-status" hidden></div>
-              </div>
-            </div>
-            <div class="cmp-grid-wrap" id="cmp-grid-wrap">
-              <div class="cmp-empty" id="cmp-empty" data-i18n="cmp_hint">Укажите файл или папку слева (основа) и справа (источник), затем нажмите «Сравнить»</div>
-              <div class="cmp-pane" id="cmp-pane-left">
-                <!-- попап поиска создаётся из общего ядра mkFindBar (app.js) -->
-                <table class="cmp-grid" id="cmp-table-left"><thead></thead><tbody></tbody></table>
-                <div class="cmp-loading hidden" id="cmp-loading-left"><div class="loading-spinner"></div></div>
-              </div>
-              <div class="cmp-divider" id="cmp-divider"></div>
-              <div class="cmp-pane" id="cmp-pane-right">
-                <!-- попап поиска создаётся из общего ядра mkFindBar (app.js) -->
-                <table class="cmp-grid" id="cmp-table-right"><thead></thead><tbody></tbody></table>
-                <div class="cmp-loading hidden" id="cmp-loading-right"><div class="loading-spinner"></div></div>
-              </div>
-            </div>
-            <div class="page-foot" data-i18n="cmp_foot">Сравнение и слияние в проект</div>
-          </div>
-        </section>
+        {% include "partials/page-compare.html" %}
 
-        <!-- Create mod page (permanent tab) -->
-        <section class="tab-panel create-mod-tab" id="create-mod-tab" data-tab-id="create-mod">
-          <div class="cm-page">
-            <h2 class="cm-title" data-i18n="cm_title">Создание модов</h2>
-            <div class="cm-sub" data-i18n="cm_sub">Создайте свой мод или дополните существующий файлами из дерева проекта</div>
-            <div class="cm-form">
-              <div class="cm-duo-main">
-                <div class="cm-col">
-                  <label class="cm-row">
-                    <span class="cm-label" data-i18n="cm_name">Название мода</span>
-                    <input type="text" id="cm-name" class="cm-input" spellcheck="false" data-i18n-ph="cm_name_ph" placeholder="Мой мод">
-                    <span class="cm-path-hint" id="cm-path-hint"></span>
-                  </label>
-                  <label class="cm-row">
-                    <span class="cm-label" data-i18n="cm_desc">Описание мода</span>
-<textarea id="cm-desc" class="cm-input" rows="6" spellcheck="false"
-data-i18n-ph="cm_desc_ph" placeholder="Описание мода… (\n — перенос строки)"></textarea>
-                  </label>
-                </div>
-                <div class="cm-col cm-col-icon">
-                  <div class="cm-row">
-                    <span class="cm-label cm-ghost-label" aria-hidden="true">Превью</span>
-                    <div class="cm-icon-top">
-                      <button class="btn" id="cm-pick-icon" data-i18n="cm_pick_icon">Выбрать превью…</button>
-                      <div class="cm-hint" data-i18n="cm_icon_hint">Картинка 16:9 — будет сохранена как basis/THUMBNAIL.dds</div>
-                    </div>
-                  </div>
-                  <div class="cm-preview" id="cm-preview">
-                    <span class="cm-no-icon" data-i18n="cm_no_icon">Нет превью (16:9)</span>
-                  </div>
-                </div>
-              </div>
-              <div class="cm-row">
-                <span class="cm-label" data-i18n="cm_files">Файлы мода</span>
-                <div class="cm-drop" id="cm-dropzone">
-                  <div class="cm-drop-head">
-                    <span class="cm-drop-count" id="cm-drop-count"></span>
-                    <button class="icon-btn cm-clear-btn" id="cm-clear-files" data-i18n-title="cm_clear_all" title="Удалить все файлы" disabled>✕</button>
-                  </div>
-                  <div class="cm-drop-hint" id="cm-drop-hint" data-i18n="cm_drop_hint">Перетащите файлы из дерева слева (Ctrl — несколько файлов)</div>
-                  <div class="cm-file-list" id="cm-file-list"></div>
-                </div>
-              </div>
-              <label class="cm-row">
-                <span class="cm-label" data-i18n="cm_game_dir">Путь к установленной игре</span>
-                <div class="cm-dir-row">
-                  <input type="text" id="cm-game-dir" class="cm-input" spellcheck="false"
-                         placeholder="C:\Games\Terminator Dark Fate - Defiance">
-                  <button class="btn" id="cm-pick-dir" data-i18n="cm_pick_dir">Указать путь к игре</button>
-                </div>
-              </label>
-              <div class="cm-actions">
-                <select id="cm-target-mod" class="cm-input cm-select" title=""></select>
-                <button class="btn" id="cm-copy-files" data-i18n="cm_copy_files" disabled>Скопировать файлы</button>
-                <button class="btn accent big" id="cm-create" data-i18n="cm_create">Создать мод</button>
-              </div>
-              <div class="cm-result" id="cm-result" hidden></div>
-            </div>
-            <div class="page-foot" data-i18n="cm_foot">Создай свой мод.</div>
-          </div>
-        </section>
+        {% include "partials/page-create.html" %}
 
-        <!-- Unpacker page (permanent tab) -->
-        <section class="tab-panel unpacker-tab" id="unpacker-tab" data-tab-id="unpacker">
-          <div class="up-page">
-            <h2 class="cm-title" data-i18n="up_title">Распаковка игры</h2>
-            <div class="cm-sub" data-i18n="up_sub">Распакуйте архивы игры, чтобы сравнивать их с модом и редактировать</div>
-            <div class="up-form">
-              <label class="cm-row">
-                <span class="cm-label" data-i18n="up_game_root">Корень игры</span>
-                <div class="cm-dir-row">
-                  <input type="text" id="up-root" class="cm-input" spellcheck="false"
-                         placeholder="C:\Games\Terminator Dark Fate - Defiance">
-                  <button class="btn" id="up-pick-root" data-i18n="cm_pick_dir">Указать путь к игре</button>
-                </div>
-              </label>
-              <label class="cm-row">
-                <span class="cm-label" data-i18n="up_dest">Папка распаковки</span>
-                <div class="cm-dir-row">
-                  <input type="text" id="up-dest" class="cm-input" spellcheck="false"
-                         placeholder="C:\TDF_Unpacked">
-                  <button class="btn" id="up-pick-dest" data-i18n="up_pick_dest">Выбрать папку</button>
-                </div>
-              </label>
-              <div class="up-actions">
-                <button class="btn" id="up-scan" data-i18n="up_scan">Сканировать</button>
-                <button class="btn accent" id="up-run" data-i18n="up_run" disabled>Распаковать</button>
-                <button class="icon-btn up-abort" id="up-abort" data-i18n-title="up_abort" title="Прервать" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-              </div>
-              <div class="up-progress" id="up-progress" hidden>
-                <div class="up-progress-fill" id="up-progress-fill"></div>
-                <span class="up-progress-text" id="up-progress-text"></span>
-              </div>
-              <div class="up-hint" data-i18n="up_hint">Все пакы игры распаковываются в basis\: сначала basis.pak, затем патчи по номерам — каждый следующий перезаписывает файлы. Legion → dlc\legion\basis, Resistance → dlc\resistance\basis, Evolution → dlc\evolution\basis.</div>
-              <div class="up-plan" id="up-plan" hidden></div>
-              <div class="up-log" id="up-log" hidden></div>
-            </div>
-            <div class="page-foot" data-i18n="up_foot">Распаковка базовой игры и dlc</div>
-          </div>
-        </section>
+        {% include "partials/page-unpacker.html" %}
 
-        <!-- SWT editor (mission trigger scripts) -->
-        <section class="tab-panel" id="swt-tab" data-tab-id="swt">
-          <div class="swt-page">
-            <div class="swt-head">
-              <div class="swt-head-main">
-                <h2 class="cm-title" data-i18n="swt_title">SWT редактор</h2>
-                <div class="cm-sub" id="swt-file" data-i18n="swt_sub">Сценарии миссий (.swt): триггеры, условия и действия</div>
-              </div>
-              <button class="icon-btn cmp-fs-btn" id="swt-fs" data-i18n-title="cmp_fullscreen" title="На весь экран"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
-              <button class="btn" id="swt-analyze" data-i18n="swt_analyze" data-i18n-title="swt_analyze_tt" title="Повторный анализ: пересобрать значения файла и словари проекта" disabled>Анализ</button>
-              <button class="btn accent" id="swt-save" data-i18n="save" disabled>Сохранить</button>
-            </div>
-            <div class="swt-wrap" id="swt-wrap" hidden>
-              <div class="swt-side">
-                <input type="text" id="swt-search" class="cm-input" spellcheck="false" data-i18n-ph="find_ph" placeholder="Поиск триггера…">
-                <div class="swt-side-add">
-                  <button class="btn" id="swt-add-trigger">+ Триггер</button>
-                  <button class="btn" id="swt-add-var">+ Переменная</button>
-                </div>
-                <div class="swt-sec-head swt-side-sec" id="swt-vars-head">
-                  <button class="icon-btn swt-sec-chev" tabindex="-1"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
-                  <span data-i18n="swt_variables">Переменные</span>
-                </div>
-                <div class="swt-vars" id="swt-vars"></div>
-                <div class="swt-sec-head swt-side-sec" id="swt-trig-head">
-                  <button class="icon-btn swt-sec-chev" tabindex="-1"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
-                  <span data-i18n="swt_triggers">Триггеры</span>
-                </div>
-                <div class="swt-trig-list" id="swt-trig-list"></div>
-              </div>
-              <div class="swt-main" id="swt-main">
-                <div class="swt-empty" id="swt-empty" data-i18n="swt_pick">Выберите триггер слева</div>
-              </div>
-            </div>
-            <div class="swt-hint" id="swt-hint" hidden></div>
-          </div>
-        </section>
-        <!-- Uprising map (sector rewards in shop_presets.xml) -->
-        <section class="tab-panel" id="uprising-tab" data-tab-id="uprising">
-          <div class="swt-page">
-            <div class="swt-head">
-              <div class="swt-head-main">
-                <h2 class="cm-title" data-i18n="upr_title">Карта Uprising</h2>
-                <div class="cm-sub" id="upr-file" data-i18n="upr_sub">Награды секторов (shop_presets.xml DLC Resistance)</div>
-              </div>
-              <div class="src-seg" id="upr-src" data-pos="0" role="tablist">
-                <span class="src-seg-ind" aria-hidden="true"></span>
-                <button type="button" class="src-seg-btn" data-src="project" role="tab"><span data-i18n="tree_tab_project">Проект</span></button>
-                <button type="button" class="src-seg-btn" data-src="game" role="tab"><span data-i18n="tree_tab_game">Игра</span></button>
-                <button type="button" class="src-seg-btn" data-src="mod" role="tab"><span data-i18n="tree_tab_mod">Мод</span></button>
-              </div>
-              <button class="btn" id="upr-reload" data-i18n="upr_reload" hidden>Обновить</button>
-              <button class="btn" id="upr-open-grid" data-i18n="upr_open_grid" hidden>Открыть в таблице</button>
-              <button class="icon-btn cmp-fs-btn" id="upr-fs" data-i18n-title="cmp_fullscreen" title="На весь экран" hidden><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
-            </div>
-            <div class="upr-nofile" id="upr-nofile" hidden>
-              <div class="swt-empty" data-i18n="upr_nofile">В моде нет файла dlc\Resistance\basis\scripts\species\shop_presets.xml</div>
-              <div class="upr-nofile-actions" id="upr-nofile-actions"></div>
-            </div>
-            <div class="upr-wrap" id="upr-wrap" hidden>
-              <div class="upr-map" id="upr-map"></div>
-              <div class="upr-loading" id="upr-loading" hidden><div class="upr-loading-spin"></div></div>
-              <button class="upr-panel-toggle" id="upr-panel-toggle" hidden>&#8249;</button>
-              <button class="upr-resizer" id="upr-resizer" hidden title="Расширить/сузить панель"></button>
-              <div class="upr-main" id="upr-main">
-                <div class="swt-empty" data-i18n="upr_pick">Выберите сектор</div>
-              </div>
-            </div>
-          </div>
-        </section>
+        {% include "partials/page-swt.html" %}
+        {% include "partials/page-uprising.html" %}
+        {% include "partials/page-uprising-rnd.html" %}
       </div>
     </div>
   </main>
@@ -448,38 +200,38 @@ data-i18n-ph="cm_desc_ph" placeholder="Описание мода… (\n — пе
     <div class="modal-card upr-modal-card">
       <div class="modal-head">
         <span class="upr-title" id="upr-modal-title"></span>
-        <button class="icon-btn" data-close>✕</button>
+        <button class="icon-btn danger" data-close>✕</button>
       </div>
       <div class="upr-modal-body" id="upr-modal-body"></div>
     </div>
   </div>
 
-  <!-- Рандомайзер Uprising: широкая модалка по центру -->
-  <div class="modal" id="upr-rnd-modal" hidden>
-    <div class="modal-card wide upr-rnd-card">
-      <div class="modal-head">
-        <span data-i18n="upr_rnd_title">Рандомайзер</span>
-        <button class="icon-btn" data-close>✕</button>
-      </div>
-      <div class="upr-rnd-body" id="upr-rnd-body"></div>
-      <div class="upr-rnd-foot" id="upr-rnd-foot"></div>
-    </div>
-  </div>
+  <!-- Редактор режимов рандомайзера v2 живёт вкладкой «Редактор» на странице
+       рандомайзера (upr-rnd-editor-title/tabs/body/foot строит uprRndOpen),
+       отдельной модалки больше нет -->
 
   <!-- Настройки карты Uprising (шестерёнка): вкладки как в главных настройках -->
   <div class="modal" id="upr-colors-modal" hidden>
     <div class="modal-card wide upr-set-card">
       <div class="modal-head">
         <span data-i18n="upr_map_settings">Настройки карты</span>
-        <button class="icon-btn" data-close>✕</button>
+        <button class="icon-btn danger" data-close>✕</button>
       </div>
       <div class="settings-tabs upr-set-tabs">
         <button class="st-tab active" data-st="sectors" data-i18n="upr_set_sectors">Сектора</button>
+        <button class="st-tab" data-st="rnd" data-i18n="upr_set_rnd">Рандомайзер</button>
+        <button class="st-tab" data-st="expert" data-i18n="upr_set_expert">Эксперт</button>
         <button class="st-tab" data-st="presets" data-i18n="upr_set_presets">Пресеты и конфиг</button>
       </div>
       <div class="settings-page" data-stp="sectors">
         <div class="settings-hint" data-i18n="upr_colors_hint">Цвет зоны на карте Uprising. «Как на карте» — цвет по фракции зоны.</div>
         <div class="upr-sectors-grid" id="upr-colors-list"></div>
+      </div>
+      <div class="settings-page" data-stp="rnd" hidden>
+        <div class="upr-cfg-box" id="upr-rnd-box"></div>
+      </div>
+      <div class="settings-page" data-stp="expert" hidden>
+        <div class="upr-cfg-box" id="upr-expert-box"></div>
       </div>
       <div class="settings-page" data-stp="presets" hidden>
         <div class="upr-cfg-box" id="upr-cfg-box"></div>
@@ -492,7 +244,7 @@ data-i18n-ph="cm_desc_ph" placeholder="Описание мода… (\n — пе
     <div class="modal-card">
       <div class="modal-head">
         <span data-i18n="settings">Настройки</span>
-        <button class="icon-btn" data-close>✕</button>
+        <button class="icon-btn danger" data-close>✕</button>
       </div>
       <div class="settings-tabs">
         <button class="st-tab active" data-st="main" data-i18n="set_tab_main">Основные</button>
@@ -543,19 +295,22 @@ data-i18n-ph="cm_desc_ph" placeholder="Описание мода… (\n — пе
           <label class="setting-row"><span data-i18n="set_project_path">Путь проекта</span>
             <div class="cm-dir-row set-path-row">
               <input type="text" id="set-project-path" spellcheck="false">
-              <button class="icon-btn" id="set-project-pick" data-i18n-title="up_pick_dest" title="Выбрать папку"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg></button>
+              <button class="icon-btn gold" id="set-project-pick" data-i18n-title="up_pick_dest" title="Выбрать папку"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg></button>
+              <button class="icon-btn set-path-clear danger" id="set-project-clear" data-i18n-title="set_clear_path" title="Очистить путь">✕</button>
             </div></label>
           <div class="settings-hint" data-i18n="set_project_path_hint">Корень текущего проекта. Используется деревом по умолчанию и автозагрузкой при старте.</div>
           <label class="setting-row"><span data-i18n="up_dest_short">Папка распакованной игры</span>
             <div class="cm-dir-row set-path-row">
               <input type="text" id="set-unpacked" spellcheck="false">
-              <button class="icon-btn" id="set-unpacked-pick" data-i18n-title="up_pick_dest" title="Выбрать папку"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg></button>
+              <button class="icon-btn gold" id="set-unpacked-pick" data-i18n-title="up_pick_dest" title="Выбрать папку"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg></button>
+              <button class="icon-btn set-path-clear danger" id="set-unpacked-clear" data-i18n-title="set_clear_path" title="Очистить путь">✕</button>
             </div></label>
           <div class="settings-hint" data-i18n="set_unpacked_hint">Используется вкладкой «Игра» в дереве проекта. После успешной распаковки путь записывается автоматически.</div>
           <label class="setting-row set-mod-row"><span data-i18n="set_mod_path">Путь к основному моду</span>
             <div class="cm-dir-row set-path-row">
               <input type="text" id="set-mod-path" spellcheck="false">
-              <button class="icon-btn" id="set-mod-pick" data-i18n-title="up_pick_dest" title="Выбрать папку"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg></button>
+              <button class="icon-btn gold" id="set-mod-pick" data-i18n-title="up_pick_dest" title="Выбрать папку"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg></button>
+              <button class="icon-btn set-path-clear danger" id="set-mod-clear" data-i18n-title="set_clear_path" title="Очистить путь">✕</button>
             </div></label>
           <div class="settings-hint set-mod-hint" data-i18n="set_mod_path_hint">Путь к твоему созданному моду (для разработчика мода). Заполняется автоматически при создании мода; используется командой «Скопировать в мод».</div>
           <div class="settings-actions">
@@ -566,7 +321,7 @@ data-i18n-ph="cm_desc_ph" placeholder="Описание мода… (\n — пе
           <label class="setting-row"><span data-i18n="upd_channel">Канал обновлений</span>
             <span class="upd-chan-row">
               <select id="set-upd-channel">
-                <option value="release" data-i18n="upd_ch_release">Релизы</option>
+                <option value="release" data-i18n="upd_ch_release">Релиз</option>
                 <option value="beta" data-i18n="upd_ch_beta">Пре-релиз</option>
               </select>
               <button class="btn" id="set-upd-check" data-i18n="upd_check">Проверить обновления</button>
@@ -607,7 +362,7 @@ data-i18n-ph="cm_desc_ph" placeholder="Описание мода… (\n — пе
     <div class="modal-card guard-card">
       <div class="modal-head">
         <span data-i18n="guard_title">Нельзя сохранить изменения в защищённую папку</span>
-        <button class="icon-btn" data-close>✕</button>
+        <button class="icon-btn danger" data-close>✕</button>
       </div>
       <div class="guard-body">
         <div class="guard-file" id="guard-file"></div>
@@ -628,7 +383,7 @@ data-i18n-ph="cm_desc_ph" placeholder="Описание мода… (\n — пе
       <div class="modal-head">
         <span data-i18n="history">История</span>
         <button class="icon-btn" id="history-clear" data-i18n-title="hist_clear" title="Очистить историю"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
-        <button class="icon-btn" data-close>✕</button>
+        <button class="icon-btn danger" data-close>✕</button>
       </div>
       <div id="history-body" class="history-body"></div>
     </div>
@@ -639,7 +394,7 @@ data-i18n-ph="cm_desc_ph" placeholder="Описание мода… (\n — пе
     <div class="modal-card about-card">
       <div class="modal-head">
         <span data-i18n="about_title">О программе</span>
-        <button class="icon-btn" data-close>✕</button>
+        <button class="icon-btn danger" data-close>✕</button>
       </div>
       <div class="about-body">
         <div class="about-brand">
@@ -668,10 +423,21 @@ data-i18n-ph="cm_desc_ph" placeholder="Описание мода… (\n — пе
         <span data-i18n="recent">Недавние</span>
         <span class="head-actions">
           <button class="btn sm ghost" id="recents-clear" data-i18n="recents_clear">Очистить</button>
-          <button class="icon-btn" data-close>✕</button>
+          <button class="icon-btn danger" data-close>✕</button>
         </span>
       </div>
       <div class="recents-body" id="recents-body"></div>
+    </div>
+  </div>
+
+  <!-- Deps modal: кнопка «Анализ» — зависимости открытого xml -->
+  <div class="modal" id="deps-modal" hidden>
+    <div class="modal-card mid">
+      <div class="modal-head">
+        <span id="deps-title"></span>
+        <button class="icon-btn danger" data-close>✕</button>
+      </div>
+      <div id="deps-body" class="deps-body"></div>
     </div>
   </div>
 
@@ -724,15 +490,26 @@ data-i18n-ph="cm_desc_ph" placeholder="Описание мода… (\n — пе
     <div class="cmp-fs-head">
       <span class="cmp-tag" id="cmp-fs-tag"></span>
       <span class="cmp-fs-file" id="cmp-fs-file"></span>
-      <button class="icon-btn" id="cmp-fs-close" data-i18n-title="close" title="Закрыть"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+      <button class="icon-btn danger" id="cmp-fs-close" data-i18n-title="close" title="Закрыть"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
     </div>
     <div class="cmp-fs-body" id="cmp-fs-body"></div>
   </div>
 
   <div class="toast" id="toast" hidden></div>
 
-  <!-- Загрузчик скриптов с повторами: сначала upr-map-data.js, затем app.js.
-       Файлы подхватываются динамически по цепочке (порядок как раньше);
+  <!-- Оверлей drag&drop поверх всего: подсказка при наведении драга,
+       спиннер на время открытия (нативный дроп идёт через mailbox+poll,
+       пауза до ~1с + работа openFile/loadProject) -->
+  <div class="dnd-overlay" id="dnd-overlay" hidden>
+    <div class="dnd-box">
+      <div class="loading-spinner dnd-spin"></div>
+      <div class="dnd-text" id="dnd-text" data-i18n="dnd_opening">Открываю…</div>
+    </div>
+  </div>
+
+  <!-- Загрузчик скриптов с повторами: сначала upr-map-data.js, затем модули
+       // фронта по порядку зависимостей (core -> ... -> init), в конце
+       // upr-random.js. Файлы подхватываются динамически по цепочке;
        зависший (>12с) или битый файл перезапрашивается с новым cache-buster.
        Иначе один эпизодический вис сокета на большом файле даёт мёртвую
        страницу: синхронный тег стоит, init не стартует, спасает только
@@ -742,8 +519,18 @@ data-i18n-ph="cm_desc_ph" placeholder="Описание мода… (\n — пе
   (function () {
     var FILES = [
       "/static/js/upr-map-data.js?v={{ v }}",
-      "/static/js/app.js?v={{ v }}",
-      "/static/js/upr-random.js?v={{ v }}"
+      "/static/js/core.js?v={{ v }}",
+      "/static/js/grid.js?v={{ v }}",
+      "/static/js/tree.js?v={{ v }}",
+      "/static/js/findbar.js?v={{ v }}",
+      "/static/js/compare.js?v={{ v }}",
+      "/static/js/swt.js?v={{ v }}",
+      "/static/js/uprising.js?v={{ v }}",
+      "/static/js/chrome.js?v={{ v }}",
+      "/static/js/history.js?v={{ v }}",
+      "/static/js/init.js?v={{ v }}",
+      "/static/js/upr-random.js?v={{ v }}",
+      "/static/js/upr-cfg-editor.js?v={{ v }}"
     ];
     var TIMEOUT_MS = 12000, TRY_MAX = 5, tries = 0;
     var fatal = function (msg) {

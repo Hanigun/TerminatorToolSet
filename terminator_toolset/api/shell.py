@@ -14,6 +14,48 @@ from ..infrastructure.filesystem import resolve_external as _resolve_external
 
 
 _ICONS_MEM = {"mt": -1.0, "map": {}}  # name -> data-URL; сброс по mtime папки
+_LOGO_MEM = {"path": "", "mt": 0.0, "url": ""}  # инлайн-логотип сплеша
+
+
+def _logo_data_url(config, base):
+    """Логотип сплеша инлайном (data-URL, кэш по mtime файла).
+
+    Отдельным HTTP-запросом картинка приезжала позже страницы, а во
+    frozen-сборке первый хит ещё и распаковывал embedded-кэш на диск —
+    окно первую секунду стояло без логотипа. Приоритет файла — как у
+    /assets/icons (внешний рядом с EXE, embedded-кэш, встроенный)."""
+    try:
+        from ..services import embedded_cache as _emb
+        emb = _emb.ensure()[0]
+    except Exception:  # noqa: BLE001
+        emb = ""
+    cands = [
+        _resolve_external([config.dir, os.path.dirname(config.dir)],
+                          "assets", "icons", "app_icon.png"),
+        os.path.join(emb, "app_icon.png") if emb else "",
+        os.path.join(base, "assets", "icons", "app_icon.png"),
+    ]
+    path = next((p for p in cands if p and os.path.isfile(p)), "")
+    if not path:
+        return ""
+    try:
+        mt = os.path.getmtime(path)
+    except OSError:
+        return ""
+    mem = _LOGO_MEM
+    if mem["url"] and mem.get("path") == path and mem["mt"] == mt:
+        return mem["url"]
+    try:
+        with open(path, "rb") as fh:
+            raw = fh.read(1 << 20)
+    except OSError:
+        return ""
+    if len(raw) > 512_000:  # вдруг подменили гигантом — старым URL
+        return ""
+    import base64
+    mem.update(path=path, mt=mt,
+               url="data:image/png;base64," + base64.b64encode(raw).decode("ascii"))
+    return mem["url"]
 
 
 def register_shell(app, ctx):
@@ -31,7 +73,8 @@ def register_shell(app, ctx):
     def splash():
         build_id = str(int(time.time()))
         return render_template("splash.html", title=i18n.t("app_title"),
-                               version=version, v=build_id)
+                               version=version, v=build_id,
+                               logo_data_url=_logo_data_url(config, base))
 
     @app.route("/api/version")
     def api_version():
@@ -198,11 +241,21 @@ def register_shell(app, ctx):
         if ext:
             resp = send_from_directory(os.path.dirname(ext), parts[-1])
         else:
-            resp = send_from_directory(os.path.join(base, "assets", "icons"), fn)
+            # frozen exe: icons внутри .exe (embedded-модуль -> локальный кэш)
+            emb = ""
+            try:
+                from terminator_toolset.services import embedded_cache as _emb
+                emb = _emb.ensure()[0]
+            except Exception:  # noqa: BLE001
+                emb = ""
+            if emb and os.path.isfile(os.path.join(emb, *parts)):
+                resp = send_from_directory(emb, "/".join(parts))
+            else:
+                resp = send_from_directory(os.path.join(base, "assets", "icons"), fn)
         resp.headers["Cache-Control"] = "public, max-age=86400"
         return resp
 
-    @app.route("/assets/uprising/<path:filename>")
+    @app.route("/assets/UprisingMap/<path:filename>")
     def uprising_assets(filename):
         # мелкие веб-ассеты карты (череп сложности и т.п.): внешние рядом
         # с EXE в приоритете, иначе встроенные _base
@@ -211,11 +264,11 @@ def register_shell(app, ctx):
             return ("", 404)
         parts = fn.split("/")
         ext = _resolve_external([config.dir, os.path.dirname(config.dir)],
-                                "assets", "uprising", *parts)
+                                "assets", "UprisingMap", *parts)
         if ext:
             resp = send_from_directory(os.path.dirname(ext), parts[-1])
         else:
-            resp = send_from_directory(os.path.join(base, "assets", "uprising"), fn)
+            resp = send_from_directory(os.path.join(base, "assets", "UprisingMap"), fn)
         resp.headers["Cache-Control"] = "public, max-age=86400"
         return resp
 
@@ -228,12 +281,12 @@ def register_shell(app, ctx):
             return ("", 404)
         ext = _resolve_external(
             [config.dir, os.path.dirname(config.dir), os.getcwd()],
-            "assets", "UprisingMap Editor", fn)
+            "assets", "UprisingMap", fn)
         if ext:
             resp = send_from_directory(os.path.dirname(ext), fn)
         else:
             resp = send_from_directory(
-                os.path.join(base, "assets", "UprisingMap Editor"), fn)
+                os.path.join(base, "assets", "UprisingMap"), fn)
         resp.headers["Cache-Control"] = "public, max-age=86400"
         return resp
 
@@ -253,6 +306,13 @@ def register_shell(app, ctx):
         for r in (config.dir, os.path.dirname(config.dir)):
             if r:
                 roots.append(os.path.join(r, "assets", "icons", "dark", "icons"))
+        try:  # frozen exe: icons внутри .exe (embedded-модуль -> кэш)
+            from terminator_toolset.services import embedded_cache as _emb
+            _emb_icons = _emb.ensure()[0]
+            if _emb_icons:
+                roots.append(os.path.join(_emb_icons, "dark", "icons"))
+        except Exception:  # noqa: BLE001
+            pass
         roots.append(os.path.join(base, "assets", "icons", "dark", "icons"))
         mts, found = [], {}
         for root in roots:
@@ -301,8 +361,8 @@ def register_shell(app, ctx):
         search_roots = []
         for r in (config.dir, os.path.dirname(config.dir), os.getcwd()):
             if r:
-                search_roots.append(os.path.join(r, "assets", "uprising", "shields"))
-        search_roots.append(os.path.join(base, "assets", "uprising", "shields"))
+                search_roots.append(os.path.join(r, "assets", "UprisingMap", "shields"))
+        search_roots.append(os.path.join(base, "assets", "UprisingMap", "shields"))
         for cand in cands:
             if "/" in cand or "\\" in cand:
                 continue
@@ -329,14 +389,17 @@ def register_shell(app, ctx):
         key = имя файла без .webp (напр. player_capital_d3)."""
         return jsonify(upr.shields_data())
 
-    @app.route("/assets/upr-webp/<bucket>/<filename>")
+    @app.route("/assets/upr-webp/<bucket>/<path:filename>")
     def upr_webp_assets(bucket, filename):
         # готовые webp-иконки карты Uprising: отдаём как есть, без конвертации;
+        # custom лежит в подпапках слоёв (BaseGame/проект/мод), поэтому path;
         # immutable-кэш — браузер держит иконки между открытиями карты
-        if (bucket not in upr.webp_buckets or "/" in filename
-                or "\\" in filename or not filename.lower().endswith(".webp")):
+        fn = (filename or "").replace("\\", "/")
+        if (bucket not in upr.webp_buckets
+                or not fn.lower().endswith(".webp") or ".." in fn
+                or fn.startswith("/") or not fn.strip("/")):
             return ("", 404)
-        resp = send_from_directory(upr.webp_bucket_dir(bucket), filename)
+        resp = send_from_directory(upr.webp_bucket_dir(bucket), fn)
         resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
         return resp
 
@@ -358,6 +421,7 @@ def register_shell(app, ctx):
     _OPEN_LINK_ALLOW = (
         "https://dalink.to/hanigun",
         "https://github.com/Hanigun/TerminatorToolSet",
+        "https://discord.com/invite/mNvUs8rRPS",
     )
 
     @app.route("/api/open_link", methods=["POST"])

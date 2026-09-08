@@ -118,3 +118,9 @@ python -m test_roundtrip
 node scripts\verify-ui-wiring.mjs
 python scripts\verify_history.py
 ```
+
+## 14. Древо проекта: обрезка и фильтры (2026-09-08)
+
+- Бэкенд (`infrastructure/filesystem.py walk_tree`, общий для `/api/project_tree`, `/api/game_tree`, `/api/mod_tree`): от выбранного корня проходятся 5 уровней папок (`TREE_MAX_DEPTH = 5` — хватает на `basis/scripts/species` и на DLC-оверлеи `dlc/<Имя>/basis/scripts/species`), файлы — только `TREE_KEEP_EXTS = ("xml", "swt")`, пустые узлы выкидываются. Глубже/шире не лезем: scandir по текстурам/аудио распакованной игры и гигантский JSON тормозили открытие папки (меньший ответ ещё и дружит с HTTP-обходом из п.2).
+- Фронт (`static/js/tree.js`): меню фильтров строится из пришедшего дерева, поэтому в расширениях только xml+swt, в папках — только 5 уровней. Дефолты `TREE_FILTER_DEFAULTS = { exts: ["xml", "swt"], folders: ["scripts", "spawns"] }`; старые дефолты (с `set` и без `swt`) мигрируются в `loadTreeFilters`. Формат `.set` открывалки не имеет (клик — тост «не открывается»), из дефолтов убран.
+- ЖЕЛЕЗНОЕ ПРАВИЛО: поддержка нового расширения файла = добавить его в `TREE_KEEP_EXTS` бэкенда И в `exts` дефолтов фронта. Иначе файлы есть на диске, но невидимы в дереве. Проверяется автоматически: `scripts/gate_tree_swt.py` (фикстура глубины/расширений + DLC-ветка + равенство наборов фронта и бэкенда).

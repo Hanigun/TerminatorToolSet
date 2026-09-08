@@ -83,6 +83,34 @@ class Mods:
         self._log.info("copy_to_mod: %s -> %s", src, dst)
         return {"ok": True, "path": dst}
 
+    def copy_to_project(self, src: str, game_root: str = "") -> dict:
+        """Copy a file/folder into the open project (config key project_path).
+        The relative path inside the game is preserved - the project mirrors
+        the game structure (mirror of copy_to_mod)."""
+        src = os.path.normpath((src or "").strip())
+        if not src or not os.path.exists(src):
+            return {"ok": False, "error": "bad_src"}
+        proj_root = (self._config.get("project_path") or "").strip()
+        if not proj_root:
+            return {"ok": False, "error": "no_project_path"}
+        game = os.path.normpath((game_root or "").strip().rstrip("\\/"))
+        try:
+            if game and src.lower().startswith(game.lower() + os.sep):
+                rel = os.path.relpath(src, game)
+            else:
+                rel = os.path.basename(src)
+            dst = os.path.normpath(os.path.join(proj_root, rel))
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            if os.path.isdir(src):
+                shutil.copytree(src, dst, dirs_exist_ok=True)
+            else:
+                shutil.copy2(src, dst)
+        except Exception as e:  # noqa: BLE001
+            self._log.info("copy_to_project failed: %s: %s", src, e)
+            return {"ok": False, "error": str(e)}
+        self._log.info("copy_to_project: %s -> %s", src, dst)
+        return {"ok": True, "path": dst}
+
     # -- explorer ---------------------------------------------------------------
     def reveal(self, path: str) -> dict:
         """Show a file in Explorer (select) or open a folder."""
