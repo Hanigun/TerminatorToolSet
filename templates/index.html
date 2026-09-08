@@ -219,9 +219,9 @@
       </div>
       <div class="settings-tabs upr-set-tabs">
         <button class="st-tab active" data-st="sectors" data-i18n="upr_set_sectors">Сектора</button>
-        <button class="st-tab" data-st="rnd" data-i18n="upr_set_rnd">Рандомайзер</button>
-        <button class="st-tab" data-st="expert" data-i18n="upr_set_expert">Эксперт</button>
-        <button class="st-tab" data-st="presets" data-i18n="upr_set_presets">Пресеты и конфиг</button>
+        <button class="st-tab" data-st="rnd" data-i18n="upr_set_rnd" data-i18n-title="upr_set_dev" title="В разработке" disabled>Рандомайзер</button>
+        <button class="st-tab" data-st="expert" data-i18n="upr_set_expert" data-i18n-title="upr_set_dev" title="В разработке" disabled>Эксперт</button>
+        <button class="st-tab" data-st="presets" data-i18n="upr_set_presets" data-i18n-title="upr_set_dev" title="В разработке" disabled>Пресеты и конфиг</button>
       </div>
       <div class="settings-page" data-stp="sectors">
         <div class="settings-hint" data-i18n="upr_colors_hint">Цвет зоны на карте Uprising. «Как на карте» — цвет по фракции зоны.</div>
@@ -408,11 +408,24 @@
         <div class="about-row">
           <button class="btn" id="about-check" data-i18n="upd_check">Проверить обновления</button>
           <button class="btn ghost" id="about-updates" data-i18n="about_goto_updates">Открыть обновления</button>
+          <button class="btn ghost" id="about-changelog" data-i18n="upd_changelog">Список изменений</button>
         </div>
         <div class="settings-hint" id="about-upd-state"></div>
         <div class="about-social" id="about-social"></div>
         <button class="btn about-donate" id="about-donate"><img src="/assets/icons/social/donate.png" alt=""><span data-i18n="about_support">Поддержать проект</span></button>
       </div>
+    </div>
+  </div>
+
+  <!-- Changelog modal: весь список изменений последнего релиза канала,
+       тот же mdRender, что и инлайн-бокс вкладки обновлений -->
+  <div class="modal" id="changelog-modal" hidden>
+    <div class="modal-card mid">
+      <div class="modal-head">
+        <span id="changelog-title"></span>
+        <button class="icon-btn danger" data-close>✕</button>
+      </div>
+      <div class="changelog-body upd-notes-inline" id="changelog-body"></div>
     </div>
   </div>
 
@@ -514,9 +527,44 @@
        Иначе один эпизодический вис сокета на большом файле даёт мёртвую
        страницу: синхронный тег стоит, init не стартует, спасает только
        перезапуск. Регистрация init() внизу app.js терпит и такой способ
-       загрузки (readyState-проверка), запуск остаётся ровно один. -->
+       загрузки (readyState-проверка), запуск остаётся ровно один.
+       Стили — тем же строем: init() меряет layout (виртуализация,
+       sticky-колонки), поэтому цепочка скриптов стартует только после
+       того, как все <link>-таблицы встали (sheet доступен). На холодном
+       старте после обновления «по воздуху» и во внешнем браузере часть
+       таблиц эпизодически не приезжает (рваный HTTP/1.0 без keep-alive):
+       без ожидания страница собирается «в кучу» и такой остаётся —
+       замеры уже сделаны по голому DOM. Битые таблицы перезапрашиваются
+       с новым cache-buster, потолок ожидания — ~6с, дальше едем как есть. -->
   <script>
   (function () {
+    // битая таблица стилей: перезапрос с новым cache-buster (до 3 попыток).
+    // Без этого один рваный ответ — и страница навсегда без куска каскада.
+    var armLink = function (link) {
+      link.addEventListener("error", function () {
+        var n = (parseInt(link.getAttribute("data-css-try") || "0", 10) || 0) + 1;
+        if (n > 3) return;
+        var nl = document.createElement("link");
+        nl.rel = "stylesheet";
+        nl.setAttribute("data-css-try", String(n));
+        var base = link.href.split(/[?&]r=\d+/)[0];
+        nl.href = base + (base.indexOf("?") >= 0 ? "&" : "?") + "r=" + Date.now() + n;
+        armLink(nl);
+        link.replaceWith(nl);
+        link = nl;
+      });
+    };
+    Array.prototype.forEach.call(
+      document.querySelectorAll('link[rel="stylesheet"]'), armLink);
+    var cssOk = function () {
+      var links = document.querySelectorAll('link[rel="stylesheet"]');
+      for (var i = 0; i < links.length; i++) {
+        var sh = null;
+        try { sh = links[i].sheet; } catch (e) { return false; }
+        if (!sh) return false;
+      }
+      return true;
+    };
     var FILES = [
       "/static/js/upr-map-data.js?v={{ v }}",
       "/static/js/core.js?v={{ v }}",
@@ -580,7 +628,13 @@
         setTimeout(function () { if (!window.__tshBooted) location.reload(); }, 300);
       }
     });
-    loadOne(0);
+    // скрипты — только по вставшим стилям (потолок ~6с, дальше как есть)
+    var cssWaited = 0;
+    (function bootGated() {
+      if (cssOk() || cssWaited >= 10) { loadOne(0); return; }
+      cssWaited++;
+      setTimeout(bootGated, 600);
+    })();
   })();
   </script>
 </body>

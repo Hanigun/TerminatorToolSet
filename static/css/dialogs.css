@@ -95,6 +95,9 @@
 }
 .st-tab:hover { color: var(--text); }
 .st-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+/* вкладки в разработке (настройки карты): серые, не кликаются */
+.st-tab:disabled { color: var(--text-faint, #5a6068); opacity: 0.55; cursor: not-allowed; }
+.st-tab:disabled:hover { color: var(--text-faint, #5a6068); }
 .settings-page { display: flex; flex-direction: column; gap: 12px; }
 .settings-page[hidden] { display: none; }
 .settings-hint { font-size: 11px; color: var(--text-mute); margin-top: -6px; }

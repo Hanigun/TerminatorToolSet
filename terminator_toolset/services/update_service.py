@@ -356,9 +356,16 @@ class Updates:
                 and is_newer(str(cached.get("version") or ""),
                              self._current)):
             cached = None
+        latest = self._read_cached().get("latest")
+        # latest — просто текст последнего релиза с сервера (для кнопки
+        # «Список изменений»): версия уже может стоять, валидируем только
+        # форму, а не новизну
+        if not (isinstance(latest, dict)
+                and str(latest.get("version") or "")):
+            latest = None
         return {"ok": True, "current": self._current, "channel": channel,
                 "last_check": last, "pending": self.pending(),
-                "available": cached,
+                "available": cached, "latest": latest,
                 "just_updated": self._take_applied(),
                 "progress": self.progress()}
 
@@ -406,8 +413,10 @@ class Updates:
             last = 0
         now = int(time.time())
         if not force and now - last < CHECK_TTL:
-            cached = self._read_cached().get("available")
-            return {"ok": True, "cached": True, "available": cached,
+            cached = self._read_cached()
+            return {"ok": True, "cached": True,
+                    "available": cached.get("available"),
+                    "latest": cached.get("latest"),
                     "current": self._current}
         try:
             server = self._config.get("update_server") or ""
@@ -426,6 +435,22 @@ class Updates:
                 if str(a.get("name") or "").lower().endswith(".zip")
                 and a.get("url")]
         asset = zips[0] if zips else None
+        # latest — changelog последнего релиза канала для кнопки
+        # «Список изменений»: есть всегда, когда сервер отдал версию,
+        # даже если она уже установлена (тогда available ниже — None)
+        latest = None
+        if version:
+            latest = {"version": version,
+                      "notes": str(data.get("notes") or ""),
+                      "channel": channel}
+        else:
+            # пустой ответ сервера (сбой воркера): старый текст не затираем
+            try:
+                prev = self._read_cached().get("latest")
+                if isinstance(prev, dict) and str(prev.get("version") or ""):
+                    latest = prev
+            except Exception:  # noqa: BLE001
+                latest = None
         available = None
         if version and is_newer(version, self._current) and asset:
             # The repo is private, so the asset's browser_download_url 404s
@@ -452,9 +477,10 @@ class Updates:
             self._config.set("update_last_check", now)
         except Exception:  # noqa: BLE001
             pass
-        self._write_cached({"available": available, "checked": now})
+        self._write_cached({"available": available, "latest": latest,
+                            "checked": now})
         return {"ok": True, "cached": False, "available": available,
-                "current": self._current}
+                "latest": latest, "current": self._current}
 
     # -- download + stage -----------------------------------------------
     def download(self, url="", version=""):

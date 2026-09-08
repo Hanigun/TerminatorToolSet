@@ -1027,6 +1027,35 @@ function openAbout() {
   $("#about-modal").hidden = false;
 }
 
+// отдельная модалка «Список изменений»: тот же mdRender, что и инлайн-бокс
+// вкладки обновлений, но показывает весь changelog последнего релиза
+// канала (updState.latest с сервера — есть, даже если версия уже стоит).
+// Нет кэша (офлайн с пустым кэшем) — тихая принудительная проверка.
+function updLatest() {
+  if (!updState) return null;
+  if (updState.latest && updState.latest.version) return updState.latest;
+  const av = updState.available;
+  if (av && av.version) return { version: av.version, notes: av.notes || "" };
+  return null;
+}
+
+async function openChangelog() {
+  $("#about-modal").hidden = true;
+  if (!updState) await updStateLoad();
+  let lat = updLatest();
+  if (!lat || !lat.notes) {
+    await updCheck(true, true);
+    lat = updLatest();
+  }
+  const ver = (lat && lat.version) || (updState && updState.current) || "";
+  $("#changelog-title").textContent =
+    (t("upd_changelog") || "Список изменений") + (ver ? " " + ver : "");
+  const body = $("#changelog-body");
+  if (lat && lat.notes) body.innerHTML = mdRender(lat.notes);
+  else body.innerHTML = "<p>" + escapeHtml(t("upd_no_notes") || "Список изменений пуст.") + "</p>";
+  $("#changelog-modal").hidden = false;
+}
+
 // ---------- настройки: вкладки внутри модалки ----------
 // строго в пределах своей модалки: иначе клик по вкладкам главных настроек
 // гасил бы страницы настроек карты и наоборот
@@ -1034,6 +1063,7 @@ function setupSettingsTabs() {
   $$(".settings-tabs").forEach(bar => {
     const scope = bar.closest(".modal-card") || document;
     bar.querySelectorAll(".st-tab").forEach(b => {
+      if (b.disabled) return; // вкладки в разработке: серые, не открываются
       b.addEventListener("click", () => {
         bar.querySelectorAll(".st-tab").forEach(x => x.classList.toggle("active", x === b));
         scope.querySelectorAll(".settings-page").forEach(p => { p.hidden = p.dataset.stp !== b.dataset.st; });
@@ -1782,13 +1812,82 @@ async function updDoRestart() {
   }
 }
 
+// guard перед установкой обновления: процесс выходит сразу после ответа
+// (os._exit), и несохранённые вкладки сгорели бы вместе с ним. Собираем
+// dirty (файловые вкладки + SWT + Uprising) и предлагаем: сохранить всё
+// и продолжить, продолжить без сохранения или отменить установку.
+function updDirtyList() {
+  const out = [];
+  (state.tabs || []).forEach(tb => {
+    if (tb.dirty && tb.type === "file" && tb.path)
+      out.push({ kind: "file", label: tb.title || tb.path, path: tb.path });
+  });
+  if (state.swt && state.swt.dirty && state.swt.path)
+    out.push({ kind: "swt",
+      label: "SWT: " + String(state.swt.path).split(/[\\/]/).pop() });
+  if (state.uprising && state.uprising.dirty && state.uprising.path)
+    out.push({ kind: "uprising",
+      label: "Uprising: " + String(state.uprising.path).split(/[\\/]/).pop() });
+  return out;
+}
+
+async function updSaveAllDirty() {
+  for (const tb of (state.tabs || [])) {
+    if (!(tb.dirty && tb.type === "file" && tb.path)) continue;
+    try {
+      const sr = await api("/api/save", { method: "POST",
+        body: JSON.stringify({ path: tb.path }) });
+      const sj = await sr.json();
+      if (sj && sj.ok) {
+        tb.dirty = false;
+        if (sj.saved) noteSaved(tb.path);
+      }
+    } catch (e) { /* остаток покажет пересчёт ниже */ }
+  }
+  try { if (state.swt && state.swt.dirty) await swtSaveGuarded(false); }
+  catch (e) { /* остаток покажет пересчёт ниже */ }
+  try { if (state.uprising && state.uprising.dirty) await uprSaveGuarded(false); }
+  catch (e) { /* остаток покажет пересчёт ниже */ }
+  updateDirty();
+  renderTabBar();
+  return updDirtyList();
+}
+
 async function updInstall() {
   const inst = $("#upd-install");
   if (inst) inst.disabled = true;
   updRestarted = false;
-  toast(t("upd_applying") || "Applying update…", "ok");
-  await updDoRestart();
-  if (inst) inst.disabled = false;
+  try {
+    const dirty = updDirtyList();
+    if (dirty.length) {
+      const names = dirty.map(d => d.label).join(", ");
+      const choice = await askConfirm({
+        title: t("unsaved_changes"),
+        message: (t("upd_dirty_confirm") ||
+          "Несохранённые изменения будут потеряны при перезапуске. Установить обновление сейчас?") +
+          " (" + names + ")",
+        buttons: [
+          { id: "save", label: t("upd_save_install") || "Сохранить и установить" },
+          { id: "discard", label: t("upd_nosave_install") || "Установить без сохранения", kind: "danger" },
+          { id: "cancel", label: t("cancel"), kind: "ghost" },
+        ],
+      });
+      if (choice === "cancel") return;
+      if (choice === "save") {
+        const rest = await updSaveAllDirty();
+        if (rest.length) {
+          toast((t("upd_save_failed") ||
+            "Не всё удалось сохранить — установка отменена") +
+            " (" + rest.map(d => d.label).join(", ") + ")", "err");
+          return;
+        }
+      }
+    }
+    toast(t("upd_applying") || "Applying update…", "ok");
+    await updDoRestart();
+  } finally {
+    if (inst) inst.disabled = false;
+  }
 }
 
 function updPollStart() {
@@ -1871,9 +1970,10 @@ function updSetup() {
   const inst = $("#upd-install");
   if (inst) inst.onclick = updInstall;
   // ссылки из markdown-changelog: клик уходит в /api/open_link
-  // (не-allowlist бэкенд режет сам — см. _OPEN_LINK_ALLOW в shell.py)
-  const un = $("#upd-notes");
-  if (un) un.onclick = e => {
+  // (не-allowlist бэкенд режет сам — см. _OPEN_LINK_ALLOW в shell.py).
+  // Обработчик общий: и инлайн-бокс вкладки обновлений, и отдельная
+  // модалка «Список изменений» рендерятся тем же mdRender.
+  const mdLinkClick = e => {
     const a = e.target && e.target.closest
       ? e.target.closest("a[data-mdlink]") : null;
     if (!a) return;
@@ -1881,6 +1981,10 @@ function updSetup() {
     api("/api/open_link", { method: "POST",
       body: JSON.stringify({ url: a.getAttribute("data-mdlink") }) });
   };
+  const un = $("#upd-notes");
+  if (un) un.onclick = mdLinkClick;
+  const clb = $("#changelog-body");
+  if (clb) clb.onclick = mdLinkClick;
   const aboutC = $("#about-check");
   if (aboutC) aboutC.onclick = () => {
     $("#about-modal").hidden = true;
@@ -1891,6 +1995,8 @@ function updSetup() {
     $("#about-modal").hidden = true;
     openSettings("updates");
   };
+  const aboutL = $("#about-changelog");
+  if (aboutL) aboutL.onclick = () => openChangelog();
   const aboutD = $("#about-donate");
   if (aboutD) aboutD.onclick = () => api("/api/open_link", { method: "POST",
     body: JSON.stringify({ url: DONATE_URL }) });
