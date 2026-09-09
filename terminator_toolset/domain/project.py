@@ -10,6 +10,7 @@ later, but the defaults live here and cover the stock files).
 from __future__ import annotations
 
 import os
+import time
 from typing import Optional
 
 from .spreadsheet_ml import iter_rows_logical
@@ -196,6 +197,9 @@ class Project:
                                     names.setdefault(vals[0].strip(), v)
                     except Exception:  # noqa: BLE001
                         continue
+                    # тяжёлый парсинг locale держит GIL: отпускаем, иначе
+                    # параллельные /api/boot_progress висят (сплэш на 18%)
+                    time.sleep(0.002)
         self._names = names
         self._names_lang = lang
         return names

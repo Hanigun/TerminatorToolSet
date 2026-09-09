@@ -24,6 +24,15 @@ _ICON_FILES = ["tanks.xml", "cars.xml", "helicopters.xml",
                "squads.xml", "inventory_items.xml"]
 _PRESET_FILES = ["squad_upgrade_presets.xml", "tank_upgrade_presets.xml",
                  "car_upgrade_presets.xml", "heli_upgrade_presets.xml"]
+# detail upgrade files (guns/armor/engines/squads): their sysname rows carry
+# a tech_pic/hover_image_player/icon column like species do — parsed into
+# the same icon map. New units/guns/icons from mods are picked up
+# automatically, no name lists anywhere.
+_GUN_FILES = ["car_gun_upgrades.xml", "car_armor_upgrades.xml",
+              "car_engine_upgrades.xml", "tank_gun_upgrades.xml",
+              "tank_armor_upgrades.xml", "tank_engine_upgrades.xml",
+              "heli_gun_upgrades.xml", "heli_armor_upgrades.xml",
+              "heli_engine_upgrades.xml", "squad_upgrades.xml"]
 _CFG_CATS = ["squads", "tanks", "cars", "helicopters", "inventory_items"]
 # -- рандомайзер v2 -----------------------------------------------------------
 # Папки режимов: встроенные (в exe/рядом) + пользовательские (перекрытия).
@@ -98,13 +107,21 @@ class Uprising:
     просто перезаписывается.
     """
 
-    def __init__(self, store, config, entities, log, base_dir, app_dir):
+    def __init__(self, store, config, entities, log, base_dir, app_dir,
+                 program_dir=""):
         self._store = store
         self._config = config
         self._entities = entities
         self._log = log
         self._base = base_dir   # assets root (frozen: _MEIPASS, else repo)
         self._app_dir = app_dir  # folder with app.py (dev fallback)
+        # program dir для GameAssets (frozen — рядом с exe, dev — корень
+        # исходников); совпадает с config.dir, фолбэк — он же
+        try:
+            _cdir = (config.dir or "") if hasattr(config, "dir") else ""
+        except Exception:  # noqa: BLE001
+            _cdir = ""
+        self._program_dir = program_dir or _cdir
         self.icon_dir = os.path.join(app_dir, "assets", "UprisingMap")
         # release: full assets/ next to the EXE wins over the bundled one
         self.icon_dir_ext = os.path.join(config.dir, "assets",
@@ -134,6 +151,10 @@ class Uprising:
         self.icon_lock = threading.Lock()  # one map rebuild per root
         self.conv_mem = {}    # (src.lower(), mtime) -> png; skips re-stat
         self.data_mem = {"mt": 0.0, "map": {}}  # bucket/file -> data-URL
+        self.sysn_cache = {}  # root-key -> {"mt": float, "res": {...}}
+        self.price_cache = {}  # root-key -> {"mt": float, "res": {...}}
+        # ЭКСПЕРИМЕНТ «слот техники» (откат: удалить поле + capacity/_capacity_build)
+        self.cap_cache = {}  # root-key -> {"mt": float, "res": {...}}
         self.shields_mem = {"mt": -1.0, "map": {}}  # key -> data-URL
         self.placeholder = os.path.join(self.png_cache, "_placeholder.png")
         # кэш иконок в релиз не пакуется (как Logs): папка создаётся
@@ -199,17 +220,18 @@ class Uprising:
             return []
 
     def _species_paths(self, root):
-        """((name, path) base) + {name: [DLC overlay paths]} species files."""
+        """((name, path) base) + {name: [DLC overlay paths]} species files
+        (units, items, upgrade presets and gun/armor/engine details)."""
         sp = os.path.join(root, "basis", "scripts", "species")
         base = []
-        for fname in _ICON_FILES:
+        for fname in _ICON_FILES + _GUN_FILES:
             p = os.path.join(sp, fname)
             if os.path.isfile(p):
                 base.append((fname, p))
         overlay = {}
         for d in self._dlc_dirs(root):
             dsp = os.path.join(d, "basis", "scripts", "species")
-            for fname in _ICON_FILES + _PRESET_FILES:
+            for fname in _ICON_FILES + _PRESET_FILES + _GUN_FILES:
                 p = os.path.join(dsp, fname)
                 if os.path.isfile(p):
                     overlay.setdefault(fname, []).append(p)
@@ -217,9 +239,9 @@ class Uprising:
 
     def _layer_roots(self, root):
         """Data lookup layers in order: the map's own source root first,
-        then unpacked game -> project -> mod. The source the map was
-        opened from wins (e.g. a map from the mod sees mod icons first),
-        the rest fill the gaps. Ready-made app webp assets come even
+        then unpacked game -> project -> mod -> GameAssets. The source the
+        map was opened from wins (e.g. a map from the mod sees mod icons
+        first), the rest fill the gaps. Ready-made app webp assets come even
         earlier, see icon_webp."""
         try:
             game = self.unpacked_root()
@@ -234,8 +256,12 @@ class Uprising:
             mod = self._store.normal(self._config.get("mod_path") or "") or ""
         except Exception:  # noqa: BLE001
             mod = ""
+        try:
+            ga = self._ga_root()
+        except Exception:  # noqa: BLE001
+            ga = ""
         layers = []
-        for cand in (os.path.normpath(root or ""), game, proj, mod,
+        for cand in (os.path.normpath(root or ""), game, proj, mod, ga,
                      self._gamescripts_dir()):
             if not cand or not os.path.isdir(cand):
                 continue
@@ -244,6 +270,17 @@ class Uprising:
             if all(os.path.normcase(x) != key for x in layers):
                 layers.append(p)
         return layers
+
+    def _ga_root(self):
+        """Корень GameAssets (только чтение): <program_dir>/GameAssets при
+        game_assets_downloaded == 1 и существующей папке, иначе ''."""
+        try:
+            from ..infrastructure.gameassets_path import (
+                game_assets_root as _ga,
+            )
+            return _ga(self._config, self._program_dir) or ""
+        except Exception:  # noqa: BLE001
+            return ""
 
     def _gamescripts_dir(self):
         """Bundled GameScripts (stock game scripts + helpers): last-resort
@@ -287,6 +324,8 @@ class Uprising:
                     paths.append(p)
             for ps in overlay.values():
                 paths.extend(ps)
+            for ps in overlay.values():
+                paths.extend(ps)
             per_layer.append((lay, base, overlay))
             all_paths.extend(paths)
         mt = 0.0
@@ -306,14 +345,39 @@ class Uprising:
             if ent and ent["mt"] == mt:
                 return ent["map"]
             amap = {}
+            gun_acc = {}
             for lay, base, overlay in per_layer:
-                sub = self._icon_map_build(lay, base, overlay)
+                sub_acc = {}
+                sub = self._icon_map_build(lay, base, overlay, sub_acc)
                 for k, v in sub.items():
                     amap.setdefault(k, v)
-            self.icon_cache[key] = {"mt": mt, "map": amap}
+                for u, gs in sub_acc.get("unit_guns", {}).items():
+                    dst = gun_acc.setdefault("unit_guns", {}).setdefault(u, [])
+                    for g in gs:
+                        if g not in dst:
+                            dst.append(g)
+                for p, u in sub_acc.get("preset_unit", {}).items():
+                    gun_acc.setdefault("preset_unit", {}).setdefault(p, u)
+            self.icon_cache[key] = {"mt": mt, "map": amap, "guns": gun_acc}
             return amap
 
-    def _icon_map_build(self, root, base, overlay):
+    def gun_index(self, root):
+        """Preset->unit / unit->guns companion of icon_map(), same cache
+        entry (built from the same files, same mtime key)."""
+        try:
+            self.icon_map(root)
+        except Exception:  # noqa: BLE001
+            return {}
+        try:
+            layers = self._layer_roots(root)
+            if not layers:
+                return {}
+            ent = self.icon_cache.get("|".join(layers)) or {}
+            return ent.get("guns") or {}
+        except Exception:  # noqa: BLE001
+            return {}
+
+    def _icon_map_build(self, root, base, overlay, gun_acc):
         """Heavy half of icon_map: parse all species + preset files.
         Runs under icon_lock, never writes the cache (caller does)."""
         amap = {}
@@ -362,8 +426,101 @@ class Uprising:
                                  if len(r) > 1 else "")
                     if sys and not sys.startswith("#") and base_unit in amap:
                         amap[sys] = amap[base_unit]
+        # preset->gun match data (unit_sysname + gun rows of the same unit):
+        # filled into gun_acc, cached together with the map
+        self._acc_gun_rows(root, overlay, gun_acc)
 
         return amap
+
+    @staticmethod
+    def _unit_col(rows):
+        """Column index of unit_sysname by header name (mods may shift
+        columns — never assume a position)."""
+        if not rows:
+            return None
+        for idx, val in rows[0].items():
+            if str(val).strip() == "unit_sysname":
+                return idx
+        return None
+
+    def _acc_gun_rows(self, root, overlay, gun_acc):
+        """Collect {unit -> [gun sysnames]} and {preset -> unit} for the
+        preset-to-gun match (see match_preset_gun). Base first, DLC
+        overlays add rows (same sysname is overridden)."""
+        sp = os.path.join(root, "basis", "scripts", "species")
+        unit_guns = gun_acc.setdefault("unit_guns", {})
+        preset_unit = gun_acc.setdefault("preset_unit", {})
+
+        def add(path, store_presets):
+            try:
+                rows = self._parse_sheet(path)
+            except Exception:  # noqa: BLE001
+                return
+            uidx = self._unit_col(rows)
+            if uidx is None:
+                return
+            # в матче участвуют только орудия (*gun_upgrades): броня/двигатели
+            # — тоже строки улучшений, но иконку задаёт именно орудие
+            is_gun = "gun" in os.path.basename(path).lower()
+            for r in rows[1:]:
+                if not r:
+                    continue
+                try:
+                    sys = str(r.get(0, "")).strip()
+                    unit = str(r.get(uidx, "")).strip()
+                except Exception:  # noqa: BLE001
+                    continue
+                if not sys or sys.startswith("#") or not unit:
+                    continue
+                if store_presets:
+                    preset_unit.setdefault(sys.lower(), unit)
+                elif is_gun:
+                    unit_guns.setdefault(unit.lower(), [])
+                    if sys not in unit_guns[unit.lower()]:
+                        unit_guns[unit.lower()].append(sys)
+
+        for fname in _PRESET_FILES:
+            p = os.path.join(sp, fname)
+            if os.path.isfile(p):
+                add(p, True)
+            for p in overlay.get(fname, []):
+                add(p, True)
+        for fname in _GUN_FILES:
+            p = os.path.join(sp, fname)
+            if os.path.isfile(p):
+                add(p, False)
+            for p in overlay.get(fname, []):
+                add(p, False)
+
+    @staticmethod
+    def _tokens(s):
+        return [w for w in re.split(r"[^a-z0-9]+", (s or "").lower()) if w]
+
+    # родовые слова номенклатуры орудий: в sysname есть (recoilless_gun),
+    # в именах пресетов их нет (steel_recoilless) — при сравнении выкидываем
+    _GUN_STOPWORDS = frozenset({"gun", "upgrade"})
+
+    def match_preset_gun(self, guns, preset, unit=""):
+        """Gun sysname for an upgrade preset name (Res_guntruck_steel_gl_mk19
+        -> res_guntruck_gl_mk19): among the *gun_upgrades of the same unit
+        (by unit_sysname) the longest one whose non-unit tokens all appear
+        in the preset name. Pure data match — new mod units/guns just work."""
+        ug = (guns or {}).get("unit_guns", {})
+        pu = (guns or {}).get("preset_unit", {})
+        pl = (preset or "").strip().lower()
+        if not pl:
+            return ""
+        u = (pu.get(pl, "") or unit or "").strip().lower()
+        if not u:
+            return ""
+        u_toks = set(self._tokens(u))
+        p_toks = set(self._tokens(pl)) - u_toks
+        best = ""
+        for g in ug.get(u, []):
+            g_toks = (set(self._tokens(g)) - u_toks - self._GUN_STOPWORDS)
+            if g_toks and g_toks <= p_toks and len(g) > len(best):
+                best = g
+        return best
 
     @staticmethod
     def _icon_variants(p):
@@ -609,33 +766,67 @@ class Uprising:
         from urllib.parse import quote as _q
         return "/assets/upr-webp/%s/%s" % (bucket, _q(fn))
 
-    def icon_webp(self, root, name):
+    @staticmethod
+    def _icon_name_candidates(key):
+        """Fallback lookup names for one sysname: unit@preset (X@Y from
+        *_upgrade_presets: preset first, then base unit)."""
+        out = [key]
+        if "@" in key:
+            left, _, right = key.partition("@")
+            if right.strip():
+                out.append(right.strip())
+            if left.strip():
+                out.append(left.strip())
+        seen = set()
+        return [c for c in out
+                if c and not (c.lower() in seen or seen.add(c.lower()))]
+
+    def icon_webp(self, root, name, _idx=None, _amap=None, _guns=None):
         """Ready-made webp icon for a sysname -> (bucket, file) | None.
-        Direct name -> preset->base (via the species map) -> icon file
-        name from species. Custom: из всех подпапок слоя выбирается та,
-        что выше в _custom_preference (тот же порядок, что icon_file).
-        No dds search."""
-        idx = self.webp_index()
+        Direct name -> @-preset/base and preset->gun fallbacks -> preset->base
+        (via the species map) -> icon file name from species. Custom: из всех
+        подпапок слоя выбирается та, что выше в _custom_preference (тот же
+        порядок, что icon_file). No dds search.
+        _idx/_amap/_guns — готовые снепшоты для батчей (icons_data снимает
+        один раз на все имена, иначе каждое имя повторяло бы stat-проверки
+        webp_index/icon_map: сотни лишних сисколов на запрос)."""
+        idx = _idx if _idx is not None else self.webp_index()
         key = (name or "").strip()
         if not key:
             return None
-        hit = idx.get(key.lower())
-        base = key.lower()
-        if not hit:
+        try:
+            amap = _amap if _amap is not None else self.icon_map(root)
+        except Exception:  # noqa: BLE001
+            amap = {}
+        cands = self._icon_name_candidates(key)
+        if "@" in key:
+            left, _, right = key.partition("@")
             try:
-                ent = self.icon_map(root).get(key)
+                guns = _guns if _guns is not None else self.gun_index(root)
             except Exception:  # noqa: BLE001
-                ent = None
-            if ent:
-                rel = (ent[0] or "").replace("\\", "/")
-                stem = os.path.splitext(os.path.basename(rel))[0].lower()
-                hit = idx.get(stem)
-                base = stem
-        if hit and hit[0] == "custom":
-            pick = self._custom_pick(root, base)
-            if pick:
-                return ("custom", pick)
-        return hit
+                guns = {}
+            g = self.match_preset_gun(guns, right.strip(), left.strip())
+            if g and g.lower() not in {c.lower() for c in cands}:
+                # gun of the upgrade right after the exact name: its tech_pic
+                # shows the fitted weapon; preset->base unit icon stays next
+                cands.insert(1, g)
+        for cand in cands:
+            hit = idx.get(cand.lower())
+            base = cand.lower()
+            if not hit:
+                ent = amap.get(cand) or amap.get(cand.lower())
+                if ent:
+                    rel = (ent[0] or "").replace("\\", "/")
+                    stem = os.path.splitext(os.path.basename(rel))[0].lower()
+                    hit = idx.get(stem)
+                    base = stem
+            if hit and hit[0] == "custom":
+                pick = self._custom_pick(root, base)
+                if pick:
+                    return ("custom", pick)
+            elif hit:
+                return hit
+        return None
 
     def _custom_pick(self, root, base):
         """Лучший relfn custom-слоя для base: первая подпапка из
@@ -963,6 +1154,41 @@ class Uprising:
             self._log.warning("uprising dds->webp failed %s: %s", src, e)
             return ""
 
+    def icon_source_file(self, root, name):
+        """Source icon file for a sysname through the same fallback chain
+        as icon_webp (exact, preset->gun, @-preset/base, preset->base unit):
+        (path, kind) | None. Bulk conversion and preload go through it, so
+        mod guns and unit@preset entries convert like plain species names."""
+        key = (name or "").strip()
+        if not key:
+            return None
+        try:
+            amap = self.icon_map(root)
+        except Exception:  # noqa: BLE001
+            amap = {}
+        cands = self._icon_name_candidates(key)
+        if "@" in key:
+            left, _, right = key.partition("@")
+            try:
+                guns = self.gun_index(root)
+            except Exception:  # noqa: BLE001
+                guns = {}
+            g = self.match_preset_gun(guns, right.strip(), left.strip())
+            if g and g.lower() not in {c.lower() for c in cands}:
+                cands.insert(1, g)
+        for cand in cands:
+            ent = amap.get(cand) or amap.get(cand.lower())
+            if not ent:
+                continue
+            try:
+                p = self.icon_file(root, ent[0], ent[1],
+                                   custom_first=False)
+            except Exception:  # noqa: BLE001
+                continue
+            if p:
+                return (p, ent[1])
+        return None
+
     def convert_missing(self, root, names):
         """Bulk DDS -> CustomImages/<слой>/ WebP одним запросом
         (кнопка «Анализ»). Имя строго {stem}.webp, существующий
@@ -975,18 +1201,17 @@ class Uprising:
                "missing": 0, "failed": 0}
         if not names:
             return out
-        amap = self.icon_map(root)
         tasks = []
         for n in names:
-            ent = amap.get(n)
-            if not ent:
+            hit = self.icon_source_file(root, n)
+            if not hit:
                 # sysname нет в species, но прямой webp мог уже лежать
                 if self.icon_webp(root, n):
                     out["ready"] += 1
                 else:
                     out["missing"] += 1
                 continue
-            p = self.icon_file(root, ent[0], ent[1], custom_first=False)
+            p = hit[0]
             if not p:
                 out["missing"] += 1
                 continue
@@ -1153,6 +1378,9 @@ class Uprising:
         try:
             t0 = time.time()
             self.webp_index()
+            # сплэш/boot_progress отвечают тем же GIL: паузы между тяжёлыми
+            # кусками, иначе /splash и статика висят десятки секунд (18%).
+            time.sleep(0.3)
             for cand in (self.unpacked_root(),
                          self._store.normal(self._config.get("mod_path") or "") or ""):
                 try:
@@ -1160,6 +1388,7 @@ class Uprising:
                         self.icon_map(cand)
                 except Exception:  # noqa: BLE001
                     pass
+                time.sleep(0.3)
             try:
                 for cand in (os.path.join(self.icon_dir_ext, "global_map.webp"),
                              os.path.join(self._base, "assets",
@@ -1177,8 +1406,21 @@ class Uprising:
         except Exception as e:  # noqa: BLE001
             self._log.warning("upr warmup failed: %s", e)
 
-    def start_warmup(self):
-        threading.Thread(target=self.warmup, daemon=True,
+    def start_warmup(self, delay: float = 20.0):
+        """Фоновый прогрев после старта. Задержка по умолчанию 20с: сплэш,
+        boot_progress и display_names проходят первыми, иначе холодный
+        старт душит GIL и сплэш висит на 18% (см. app.log: /splash 124с)."""
+        def _delayed():
+            try:
+                if delay and delay > 0:
+                    time.sleep(delay)
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                self.warmup()
+            except Exception:  # noqa: BLE001
+                pass
+        threading.Thread(target=_delayed, daemon=True,
                          name="upr-warm").start()
 
     # -- icon operations (response payloads) ------------------------------------
@@ -1188,15 +1430,12 @@ class Uprising:
         names = [str(n) for n in (names or []) if str(n).strip()][:600]
         if not names:
             return {"ok": True, "missing": []}
-        amap = self.icon_map(root)
 
         def warm(name):
-            ent = amap.get(name)
-            if not ent:
+            hit = self.icon_source_file(root, name)
+            if not hit:
                 return name
-            icon_rel, kind = ent
-            # исходник из слоёв: stale-webp не должен прятать свежий .dds
-            p = self.icon_file(root, icon_rel, kind, custom_first=False)
+            p = hit[0]
             if not p:
                 return name
             if p.lower().endswith(".dds"):
@@ -1238,13 +1477,47 @@ class Uprising:
         """All icons in one request: {name: data:image/webp;base64,...}.
         The server speaks HTTP/1.0 without keep-alive - hundreds of separate
         <img> cost seconds of per-connection overhead (~5ms each); one
-        response removes it: the frontend sets data-URLs, all from memory."""
+        response removes it: the frontend sets data-URLs, all from memory.
+        Чтение сотен webp — пулом потоков (I/O ждёт без GIL): холодный
+        первый запрос карты в разы быстрее последовательного."""
         names = sorted({str(n).strip() for n in (names or [])
                         if str(n).strip()})[:1200]
         out = {}
-        for n in names:
-            hit = self.icon_webp(root, n)
-            out[n] = self.data_url(*hit) if hit else ""
+        # снепшоты один раз на батч: иначе каждое имя повторяло бы
+        # stat-проверки webp_index/icon_map (сотни лишних сисколов)
+        try:
+            _idx = self.webp_index()
+        except Exception:  # noqa: BLE001
+            _idx = {}
+        try:
+            _amap = self.icon_map(root)
+        except Exception:  # noqa: BLE001
+            _amap = {}
+        try:
+            _guns = self.gun_index(root)
+        except Exception:  # noqa: BLE001
+            _guns = {}
+
+        def one(n):
+            try:
+                hit = self.icon_webp(root, n, _idx, _amap, _guns)
+            except Exception:  # noqa: BLE001
+                return (n, "")
+            if not hit:
+                return (n, "")
+            try:
+                return (n, self.data_url(*hit))
+            except Exception:  # noqa: BLE001
+                return (n, "")
+
+        if len(names) > 24:
+            with ThreadPoolExecutor(max_workers=8) as ex:
+                for n, u in ex.map(one, names):
+                    out[n] = u
+        else:
+            for n in names:
+                _n, u = one(n)
+                out[_n] = u
         return {"ok": True, "icons": out}
 
     def sprite(self, root, names):
@@ -2580,6 +2853,15 @@ class Uprising:
         cands = [os.path.join(root, "basis", "scripts", "species", fname)]
         for d in self._dlc_dirs(root):
             cands.append(os.path.join(d, "basis", "scripts", "species", fname))
+        try:
+            ga = self._ga_root()
+        except Exception:  # noqa: BLE001
+            ga = ""
+        if ga and os.path.isdir(ga):
+            cands.append(os.path.join(ga, "basis", "scripts", "species", fname))
+            for d in self._dlc_dirs(ga):
+                cands.append(os.path.join(d, "basis", "scripts", "species",
+                                          fname))
         gs = self._gamescripts_dir()
         if gs:
             cands.append(os.path.join(gs, "basis", "scripts", "species", fname))
@@ -2678,21 +2960,23 @@ class Uprising:
         of basis + DLC overlay species files (+ inventory). cats: split by
         category strictly from their own files - cars/squads/tanks/
         helicopters/inventory_items (for autocomplete). Bundled GameScripts
-        is unioned as a fallback for names missing in the source root."""
-        out = set()
-        cats = {"squads": set(), "tanks": set(), "cars": set(),
-                "helicopters": set(), "inventory_items": set()}
-        cat_by_file = {"squads.xml": "squads", "tanks.xml": "tanks",
-                       "cars.xml": "cars", "helicopters.xml": "helicopters",
-                       "inventory_items.xml": "inventory_items",
-                       "invs.xml": "inventory_items"}
+        is unioned as a fallback for names missing in the source root.
+        Результат кэшируется по max mtime сканируемых файлов: повторное
+        открытие карты — только stat-проверки, без чтения десятков XML."""
         scan_roots = [root] if (root and os.path.isdir(root)) else []
+        try:
+            ga = self._ga_root()
+        except Exception:  # noqa: BLE001
+            ga = ""
+        if ga and all(os.path.normcase(ga) != os.path.normcase(r)
+                      for r in scan_roots):
+            scan_roots.append(ga)
         gs = self._gamescripts_dir()
         if gs and all(os.path.normcase(gs) != os.path.normcase(r)
                       for r in scan_roots):
             scan_roots.append(gs)
+        paths = []
         for r in scan_roots:
-            paths = []
             for pattern in (os.path.join(r, "basis", "scripts", "species", "*.xml"),
                             os.path.join(r, "dlc", "*", "basis", "scripts",
                                          "species", "*.xml")):
@@ -2701,35 +2985,103 @@ class Uprising:
                           os.path.join(r, "basis", "scripts", "inventory_items.xml")):
                 if os.path.isfile(extra):
                     paths.append(extra)
-            for p in paths:
-                try:
-                    with open(p, "r", encoding="utf-8", errors="replace") as fh:
-                        text = fh.read()
-                except OSError:
-                    continue
-                cat = cat_by_file.get(os.path.basename(p).lower())
-                for i, m in enumerate(_SPECIES_ROW_RE.finditer(text)):
-                    if i == 0:
-                        continue  # header
-                    mm = _SPECIES_NAME_RE.search(m.group(1))
-                    if mm:
-                        name = (mm.group(1).strip()
-                                .replace("&amp;", "&").replace("&lt;", "<")
-                                .replace("&gt;", ">").replace("&quot;", '"'))
-                        if name and not name.startswith("#"):
-                            out.add(name)
-                            if cat:
-                                cats[cat].add(name)
+        paths = sorted(set(paths))
+        mt = 0.0
+        for p in paths:
+            try:
+                mt = max(mt, os.path.getmtime(p))
+            except OSError:
+                pass
+        key = "|".join(os.path.normcase(p) for p in
+                       ([os.path.normcase(root or "")] + paths))
+        ent = self.sysn_cache.get(key)
+        if ent and ent["mt"] == mt:
+            return ent["res"]
+        res = self._sysnames_build(paths)
+        self.sysn_cache[key] = {"mt": mt, "res": res}
+        if len(self.sysn_cache) > 32:
+            self.sysn_cache.clear()
+        return res
+
+    def _sysnames_build(self, paths):
+        """Тяжёлая половина sysnames: чтение и regex-разбор файлов.
+        Чистая функция от списка путей — кэш выше решает, звать ли её."""
+        out = set()
+        cats = {"squads": set(), "tanks": set(), "cars": set(),
+                "helicopters": set(), "inventory_items": set()}
+        cat_by_file = {"squads.xml": "squads", "tanks.xml": "tanks",
+                       "cars.xml": "cars", "helicopters.xml": "helicopters",
+                       "inventory_items.xml": "inventory_items",
+                       "invs.xml": "inventory_items"}
+        for p in paths:
+            try:
+                with open(p, "r", encoding="utf-8", errors="replace") as fh:
+                    text = fh.read()
+            except OSError:
+                continue
+            cat = cat_by_file.get(os.path.basename(p).lower())
+            for i, m in enumerate(_SPECIES_ROW_RE.finditer(text)):
+                if i == 0:
+                    continue  # header
+                mm = _SPECIES_NAME_RE.search(m.group(1))
+                if mm:
+                    name = (mm.group(1).strip()
+                            .replace("&amp;", "&").replace("&lt;", "<")
+                            .replace("&gt;", ">").replace("&quot;", '"'))
+                    if name and not name.startswith("#"):
+                        out.add(name)
+                        if cat:
+                            cats[cat].add(name)
 
         return {"ok": True, "names": sorted(out),
                 "cats": {k: sorted(v) for k, v in cats.items()}}
 
     def prices(self, root):
-        """Unit/item prices (cost column) by category: {cat: {sys: cost}}."""
+        """Unit/item prices (cost column) by category: {cat: {sys: cost}}.
+
+        Плюс stats: {cat: {sys: {cost, cp_cost, supply_consumption,
+        people_capacity}}} — для попапа кампании (правка cost/потребления/
+        вместимости с записью в species).
+        Порядок base -> DLC и setdefault — как у цен: шильдик, попап
+        и запись смотрят на одну и ту же строку.
+        Результат кэшируется по max mtime species-файлов: повторное
+        открытие карты/кампании — только stat-проверки без парсинга."""
         files = {"squads": "squads.xml", "tanks": "tanks.xml",
                  "cars": "cars.xml", "helicopters": "helicopters.xml",
                  "inventory_items": "inventory_items.xml"}
+        all_paths = []
+        if root and os.path.isdir(root):
+            for _fn in files.values():
+                all_paths.append(os.path.join(
+                    root, "basis", "scripts", "species", _fn))
+                all_paths.extend(sorted(glob.glob(
+                    os.path.join(root, "dlc", "*", "basis", "scripts",
+                                 "species", _fn))))
+        all_paths = sorted(set(all_paths))
+        mt = 0.0
+        for p in all_paths:
+            try:
+                mt = max(mt, os.path.getmtime(p))
+            except OSError:
+                pass
+        key = os.path.normcase(root or "") + "|" + "|".join(
+            os.path.normcase(p) for p in all_paths)
+        ent = self.price_cache.get(key)
+        if ent and ent["mt"] == mt:
+            return ent["res"]
+        res = self._prices_build(root, files)
+        self.price_cache[key] = {"mt": mt, "res": res}
+        if len(self.price_cache) > 32:
+            self.price_cache.clear()
+        return res
+
+    def _prices_build(self, root, files):
+        """Тяжёлая половина prices: ElementTree-парсинг species-файлов.
+        Чистая функция от корня — кэш выше решает, звать ли её."""
+        stat_cols = ("cost", "cp_cost", "supply_consumption",
+                     "people_capacity")
         out = {k: {} for k in files}
+        stats = {k: {} for k in files}
         if root and os.path.isdir(root):
             for cat, fn in files.items():
                 paths = [os.path.join(root, "basis", "scripts", "species", fn)]
@@ -2738,37 +3090,176 @@ class Uprising:
                 for p in paths:
                     if not os.path.isfile(p):
                         continue
-                    try:
-                        with open(p, "r", encoding="utf-8", errors="replace") as fh:
-                            text = fh.read()
-                    except OSError:
-                        continue
-                    rows = list(_SPECIES_ROW_RE.finditer(text))
+                    # через _parse_sheet (ElementTree): самозакрытые
+                    # <Cell/> без Data — пустые ячейки, regex-вариант глотал
+                    # их вместе со следующей ячейкой и колонки съезжали
+                    # (у inventory_items cost читался пустым — без шильдика)
+                    rows = self._parse_sheet(p)
                     if not rows:
                         continue
-                    heads = _SPECIES_NAME_RE.findall(rows[0].group(1))
+                    heads = rows[0]
                     try:
-                        ci = [h.strip().lower() for h in heads].index("cost")
-                    except ValueError:
+                        ci = next(i for i, h in heads.items()
+                                  if h.strip().lower() == "cost")
+                    except StopIteration:
+                        ci = None
+                    sidx = {}
+                    for sc in stat_cols:
+                        try:
+                            sidx[sc] = next(
+                                i for i, h in heads.items()
+                                if h.strip().lower() == sc)
+                        except StopIteration:
+                            pass
+                    if ci is None and not sidx:
                         continue
-                    for m in rows[1:]:
-                        # cells with an ss:Index shift - positional parse
-                        cells = {}
-                        idx = 0
-                        for cm in re.finditer(r"<Cell([^>]*)>(.*?)</Cell>",
-                                              m.group(1), re.S):
-                            im = re.search(r'ss:Index="(\d+)"', cm.group(1))
-                            if im:
-                                idx = int(im.group(1)) - 1
-                            dm = re.search(r"<Data[^>]*>(.*?)</Data>",
-                                           cm.group(2), re.S)
-                            cells[idx] = dm.group(1).strip() if dm else ""
-                            idx += 1
-                        name = cells.get(0, "")
+                    for cells in rows[1:]:
+                        name = (cells.get(0, "") or "").strip()
                         if not name or name.startswith("#"):
                             continue
-                        out[cat].setdefault(name, cells.get(ci, ""))
-        return {"ok": True, "prices": out}
+                        if ci is not None:
+                            out[cat].setdefault(
+                                name, (cells.get(ci, "") or "").strip())
+                        if sidx:
+                            st = stats[cat].setdefault(name, {})
+                            for sc, si in sidx.items():
+                                st.setdefault(
+                                    sc, (cells.get(si, "") or "").strip())
+        return {"ok": True, "prices": out, "stats": stats}
+
+    # ЭКСПЕРИМЕНТ «слот техники» (откат: удалить метод + роут /api/unit_capacity
+    # + vehDecor): пассажирские места техники (people_capacity) из species.
+    def capacity(self, root):
+        """{sysname: people_capacity} для cars/tanks/helicopters.xml
+        (base -> DLC, первое вхождение побеждает — как у цен).
+        Кэш по max mtime species-файлов, как у prices."""
+        files = {"tanks": "tanks.xml", "cars": "cars.xml",
+                 "helicopters": "helicopters.xml"}
+        all_paths = []
+        if root and os.path.isdir(root):
+            for _fn in files.values():
+                all_paths.append(os.path.join(
+                    root, "basis", "scripts", "species", _fn))
+                all_paths.extend(sorted(glob.glob(
+                    os.path.join(root, "dlc", "*", "basis", "scripts",
+                                 "species", _fn))))
+        all_paths = sorted(set(all_paths))
+        mt = 0.0
+        for p in all_paths:
+            try:
+                mt = max(mt, os.path.getmtime(p))
+            except OSError:
+                pass
+        key = os.path.normcase(root or "") + "|" + "|".join(
+            os.path.normcase(p) for p in all_paths)
+        ent = self.cap_cache.get(key)
+        if ent and ent["mt"] == mt:
+            return ent["res"]
+        res = self._capacity_build(root, files)
+        self.cap_cache[key] = {"mt": mt, "res": res}
+        if len(self.cap_cache) > 32:
+            self.cap_cache.clear()
+        return res
+
+    def _capacity_build(self, root, files):
+        """Тяжёлая половина capacity: ElementTree через _parse_sheet.
+        Чистая функция от корня — кэш выше решает, звать ли её."""
+        out = {}
+        if root and os.path.isdir(root):
+            for cat, fn in files.items():
+                paths = [os.path.join(root, "basis", "scripts", "species", fn)]
+                paths.extend(sorted(glob.glob(
+                    os.path.join(root, "dlc", "*", "basis", "scripts", "species", fn))))
+                for p in paths:
+                    if not os.path.isfile(p):
+                        continue
+                    rows = self._parse_sheet(p)
+                    if not rows:
+                        continue
+                    heads = rows[0]
+                    try:
+                        ci = next(i for i, h in heads.items()
+                                  if h.strip().lower() == "people_capacity")
+                    except StopIteration:
+                        continue
+                    for cells in rows[1:]:
+                        name = (cells.get(0, "") or "").strip()
+                        if not name or name.startswith("#"):
+                            continue
+                        try:
+                            cap = int(float((cells.get(ci, "") or "").strip() or 0))
+                        except (TypeError, ValueError):
+                            continue
+                        out.setdefault(name, cap)
+        return {"ok": True, "capacity": out}
+
+    # ЭКСПЕРИМЕНТ «слот пехоты» (откат: удалить метод + роут /api/squad_size):
+    # размер отряда (members) из squads.xml — шильдик N/N слева внизу.
+    def squad_size(self, root):
+        """{sysname: members-total} для squads.xml. Форматы members:
+        'Lgn_wolf:4' -> 4; 'A, B, C' -> 3; 'A:2, C' -> 3.
+        Кэш по max mtime, как у capacity (ключи — по путям, коллизий нет)."""
+        files = {"squads": "squads.xml"}
+        all_paths = []
+        if root and os.path.isdir(root):
+            for _fn in files.values():
+                all_paths.append(os.path.join(
+                    root, "basis", "scripts", "species", _fn))
+                all_paths.extend(sorted(glob.glob(
+                    os.path.join(root, "dlc", "*", "basis", "scripts",
+                                 "species", _fn))))
+        all_paths = sorted(set(all_paths))
+        mt = 0.0
+        for p in all_paths:
+            try:
+                mt = max(mt, os.path.getmtime(p))
+            except OSError:
+                pass
+        key = os.path.normcase(root or "") + "|" + "|".join(
+            os.path.normcase(p) for p in all_paths)
+        ent = self.cap_cache.get(key)
+        if ent and ent["mt"] == mt:
+            return ent["res"]
+        res = self._squad_size_build(root, files)
+        self.cap_cache[key] = {"mt": mt, "res": res}
+        if len(self.cap_cache) > 32:
+            self.cap_cache.clear()
+        return res
+
+    def _squad_size_build(self, root, files):
+        """Тяжёлая половина squad_size: ElementTree через _parse_sheet."""
+        import re as _re
+        out = {}
+        if root and os.path.isdir(root):
+            for cat, fn in files.items():
+                paths = [os.path.join(root, "basis", "scripts", "species", fn)]
+                paths.extend(sorted(glob.glob(
+                    os.path.join(root, "dlc", "*", "basis", "scripts", "species", fn))))
+                for p in paths:
+                    if not os.path.isfile(p):
+                        continue
+                    rows = self._parse_sheet(p)
+                    if not rows:
+                        continue
+                    heads = rows[0]
+                    try:
+                        ci = next(i for i, h in heads.items()
+                                  if h.strip().lower() == "members")
+                    except StopIteration:
+                        continue
+                    for cells in rows[1:]:
+                        name = (cells.get(0, "") or "").strip()
+                        if not name or name.startswith("#"):
+                            continue
+                        total = 0
+                        for part in str(cells.get(ci, "") or "").split(","):
+                            part = part.strip()
+                            if not part:
+                                continue
+                            m = _re.match(r"^(.*\S)\s*:(\d+)$", part)
+                            total += int(m.group(2)) if m else 1
+                        out.setdefault(name, total)
+        return {"ok": True, "squad": out}
 
     def unit_meta(self, project_root, unpacked):
         """Unit metadata for the Uprising randomizer: faction (squads.xml
@@ -2781,6 +3272,12 @@ class Uprising:
             for r in (project_root, unpacked):
                 if r and os.path.isdir(r) and r not in roots:
                     roots.append(r)
+            try:
+                ga = self._ga_root()
+            except Exception:  # noqa: BLE001
+                ga = ""
+            if ga and os.path.isdir(ga) and ga not in roots:
+                roots.append(ga)
             for root in roots:
                 sp = lambda *p: os.path.join(  # noqa: E731
                     root, "basis", "scripts", "species", *p)
@@ -2811,6 +3308,12 @@ class Uprising:
             for r in (project_root, unpacked):
                 if r and os.path.isdir(r) and r not in roots:
                     roots.append(r)
+            try:
+                ga = self._ga_root()
+            except Exception:  # noqa: BLE001
+                ga = ""
+            if ga and os.path.isdir(ga) and ga not in roots:
+                roots.append(ga)
             for root in roots:
                 sp_dir = ("basis", "scripts", "species")
                 sp_dlc = ("dlc", "*", "basis", "scripts", "species")

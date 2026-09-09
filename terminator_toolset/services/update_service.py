@@ -40,21 +40,24 @@ CHECK_TTL = 24 * 3600  # auto-check at most once a day
 CHECK_TIMEOUT = 15
 DOWNLOAD_TIMEOUT = 30
 
-# version tags, ordered: beta < rc < final (unknown tags sort as beta)
-_TAG_RANK = {"beta": 0, "rc": 1}
+# version tags, ordered: alpha < pre < beta < rc < final
+# (unknown tags sort as beta)
+_TAG_RANK = {"alpha": 0, "pre": 1, "beta": 2, "rc": 3}
+_FINAL_RANK = 4
 _VER_RE = re.compile(r"^v?(\d+(?:\.\d+)*)(?:[-.]([A-Za-z]+)(\d*))?$")
 
 
 def parse_version(s):
-    """'v1.2.3-beta1' -> ((1,2,3), 0, 1); unparseable -> None."""
+    """'v1.2.3-beta1' -> ((1,2,3), 2, 1); '0.9.2-pre1' -> ((0,9,2), 1, 1);
+    unparseable -> None."""
     m = _VER_RE.match(str(s or "").strip())
     if not m:
         return None
     nums = tuple(int(x) for x in m.group(1).split("."))
     tag = (m.group(2) or "").lower()
     if not tag:
-        return (nums, 2, 0)
-    return (nums, _TAG_RANK.get(tag, 0), int(m.group(3) or 0))
+        return (nums, _FINAL_RANK, 0)
+    return (nums, _TAG_RANK.get(tag, _TAG_RANK["beta"]), int(m.group(3) or 0))
 
 
 def _pad(nums, n):
@@ -551,6 +554,12 @@ class Updates:
 
         def _spawn_and_exit():
             try:
+                # профиль освобождаем ДО спавна: иначе новая копия стартует
+                # на занятом user-data-dir и висит серой на 18%
+                try:
+                    kill_child_processes(log=self._log)
+                except Exception:  # noqa: BLE001
+                    pass
                 subprocess.Popen(
                     cmd, close_fds=True, start_new_session=True,
                     stdin=subprocess.DEVNULL,
@@ -579,6 +588,16 @@ class Updates:
             return {"ok": True, "restarting": True}
         try:
             kill_child_processes(log=self._log)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            # сироты прошлых сессий держат WebView2-профиль: новая версия
+            # после updater'а стартует сразу, без паузы
+            from ..infrastructure.window import _kill_stale_webview
+            _storage = os.path.join(
+                os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"),
+                "TerminatorToolSet", "WebView2")
+            _kill_stale_webview(_storage)
         except Exception:  # noqa: BLE001
             pass
         upb = self._updater_binary()

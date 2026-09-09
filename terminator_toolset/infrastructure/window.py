@@ -90,24 +90,36 @@ def _center_xy(w, h):
     return None
 
 
+def _ps_like_escape(s: str) -> str:
+    """Экранировать wildcard-символы -like (` * ? [ ])."""
+    out = []
+    for ch in s:
+        if ch in ("`", "*", "?", "[", "]"):
+            out.append("`")
+        out.append(ch)
+    return "".join(out)
+
+
 def _kill_stale_webview(storage: str) -> None:
     """Убить осиротевшие msedgewebview2 ПРОШЛЫХ сессий нашего приложения.
 
-    Такие процессы остаются после жёсткого завершения (kill python) и держат
-    user-data-dir занятым - тогда новый запуск может не создать окружение
-    WebView2 (окно «серое», запуск «через раз»). Чистим только те процессы,
-    чья командная строка ссылается на НАШ storage-путь; чужие приложения,
-    использующие WebView2 (Teams и т.п.), не трогаем."""
+    Один вызов powershell по cmdline-подстроке storage. Грубо (часть детей
+    без пути в cmdline пропускает), но не висит: Restart Manager здесь был
+    и умирал — RmGetList блокируется на hung-держателях ровно в нашем
+    кейсе (занятый профиль). Остаток серого старта лечит вотчдог
+    авто-рестартом процесса. Чужие приложения не трогаем (матч только по
+    нашему storage-пути)."""
     try:
         import subprocess
         # БЕЗ .format: фигурные скобки PowerShell ({ ... }) ломали форматирование
-        # ("unexpected '{' in field name") и роняли ВСЮ чистку на каждом запуске —
-        # занятый user-data-dir давал «серое» окно через раз. Конкатенация вместо.
+        # ("unexpected '{' in field name") и роняли ВСЮ чистку на каждом запуске.
+        # Конкатенация вместо.
+        pat = _ps_like_escape(storage)
         ps = ("Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" | "
-              "Where-Object { $_.CommandLine -like '*" + storage.replace("'", "''") + "*' } | "
+              "Where-Object { $_.CommandLine -like '*" + pat.replace("'", "''") + "*' } | "
               "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }")
         subprocess.run(["powershell", "-NoProfile", "-Command", ps],
-                       capture_output=True, timeout=20, **_nw_kwargs())
+                       capture_output=True, timeout=15, **_nw_kwargs())
     except Exception as e:  # noqa: BLE001
         _log("stale webview cleanup: %s" % e)
 
@@ -116,11 +128,12 @@ def _our_webview_count(storage: str) -> int:
     """Сколько живых msedgewebview2 ссылаются на НАШ storage-путь."""
     try:
         import subprocess
+        pat = _ps_like_escape(storage)
         ps = ("Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" | "
-              "Where-Object { $_.CommandLine -like '*" + storage.replace("'", "''") + "*' } | "
+              "Where-Object { $_.CommandLine -like '*" + pat.replace("'", "''") + "*' } | "
               "Measure-Object | Select-Object -ExpandProperty Count")
         out = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
-                             capture_output=True, timeout=20, text=True,
+                             capture_output=True, timeout=15, text=True,
                              **_nw_kwargs())
         return int((out.stdout or "0").strip() or 0)
     except Exception:  # noqa: BLE001
@@ -128,23 +141,22 @@ def _our_webview_count(storage: str) -> int:
 
 
 def _wait_stale_webview_gone(storage: str, timeout: float = 10.0) -> None:
-    """Дождаться освобождения user-data-dir прошлой сессией.
+    """Пауза после чистки сирот: Edge-процессы дохнут асинхронно.
 
-    Прошлая сессия могла выйти секунды назад (быстрый перезапуск): её
-    Edge-процессы ещё держат профиль, и новый контроллер тогда стартует
-    мёртвым — страница грузится, а JS не исполняется («серый старт»,
-    лечится только перезапуском с паузой). Ждём до timeout, иначе стартуем
-    как есть (вотчдог уже умеет показывать причину в лаунчере)."""
+    Фиксированная пауза 2с + одна проверка для лога. Если профиль всё
+    ещё занят — стартуем как есть, серый старт лечит вотчдог перезагрузкой."""
     if _our_webview_count(storage) == 0:
         return
-    _log("stale webview: waiting for previous session to release profile")
-    t0 = time.time()
-    while time.time() - t0 < timeout:
-        time.sleep(0.5)
-        if _our_webview_count(storage) == 0:
-            _log("stale webview: profile released")
-            return
-    _log("stale webview: processes still alive after wait")
+    _log("stale webview: orphans found, waiting 2s for profile release")
+    time.sleep(2.0)
+    try:
+        left = _our_webview_count(storage)
+    except Exception:  # noqa: BLE001
+        left = -1
+    if left == 0:
+        _log("stale webview: profile released")
+    else:
+        _log("stale webview: %s process(es) still alive, start anyway" % left)
 
 
 def _on_dropfiles(hdrop: int) -> None:
@@ -669,6 +681,7 @@ def run_pywebview(config, url, app=None, app_dir=None):
 
     def _boot_watchdog():
         import time as _t
+        fails = 0  # подряд evaluate failed = контроллер мёртв, reload не лечит
         for attempt in range(6):
             _t.sleep(4)
             if boot["seen"]:
@@ -681,21 +694,76 @@ def run_pywebview(config, url, app=None, app_dir=None):
                 continue   # главное окно ещё не создано (проверка обновлений)
             try:
                 alive = win.evaluate_js("!!window.__tshBooted")
+                fails = 0
             except Exception as e:  # noqa: BLE001
                 _log("boot watchdog: evaluate failed: %s" % e)
                 alive = None
+                fails += 1
+                if fails >= 2:
+                    # два провала подряд: контроллер мёртв (серый старт),
+                    # load_url его не воскресит — сразу к self-restart
+                    _log("boot watchdog: controller dead, skip reload")
+                    break
             if alive:
                 _log("boot watchdog: page alive w/o config request; skip reload")
                 return
             _log("boot watchdog: no config request, reload (try %d)" % (attempt + 1))
             try:
-                win.load_url(url)
+                # load_url на мёртвом контроллере висит ~20с: в фоне + join
+                # с таймаутом, вотчдог не должен ползти минуты
+                box = []
+                _t_done = threading.Event()
+
+                def _reload():
+                    try:
+                        win.load_url(url)
+                    except Exception as e:  # noqa: BLE001
+                        box.append(str(e))
+                    finally:
+                        _t_done.set()
+
+                threading.Thread(target=_reload, daemon=True,
+                                 name="boot-reload").start()
+                if not _t_done.wait(10):
+                    _log("boot watchdog: load_url hung, continue watch")
+                elif box:
+                    _log("boot watchdog: load_url failed: %s" % box[0])
+                    return
             except Exception as e:  # noqa: BLE001
                 _log("boot watchdog: load_url failed: %s" % e)
                 return
-        # все попытки исчерпаны: окно не ожило - показать причину в лаунчере,
-        # чтобы не висеть вечно на 18% без объяснений
+        # все попытки исчерпаны: мёртвый контроллер лечится только новым
+        # процессом (сироты к этому моменту уже прибиты чисткой). До 2
+        # авто-рестартов через TS_BOOT_TRY, дальше — текст в лаунчере.
         if not boot["seen"]:
+            try:
+                ntry = int(os.environ.get("TS_BOOT_TRY") or 0)
+            except (TypeError, ValueError):
+                ntry = 0
+            if ntry < 2:
+                _log("boot watchdog: window dead, self-restart (try %d)"
+                     % (ntry + 1))
+                try:
+                    _kill_kids(log=_log)
+                except Exception:  # noqa: BLE001
+                    pass
+                try:
+                    import subprocess as _sp
+                    if getattr(sys, "frozen", False):
+                        cmd = [sys.executable] + sys.argv[1:]
+                    else:
+                        cmd = [sys.executable,
+                               os.path.abspath(sys.argv[0])] + sys.argv[1:]
+                    env = dict(os.environ)
+                    env["TS_BOOT_TRY"] = str(ntry + 1)
+                    _sp.Popen(cmd, env=env, close_fds=True)
+                except Exception as e:  # noqa: BLE001
+                    _log("boot watchdog: self-restart failed: %s" % e)
+                    _boot_ping(app, 18,
+                               "Окно не запустилось — закройте и запустите снова")
+                    return
+                os._exit(0)
+                return
             _log("boot watchdog: window did not start, close and restart the app")
             _boot_ping(app, 18, "Окно не запустилось — закройте и запустите снова")
 
@@ -854,10 +922,27 @@ def run_pywebview(config, url, app=None, app_dir=None):
                 return win, None
 
         def minimize(self):
+            """Кнопка «Свернуть» кастомного тайтлбара. Напрямую Win32
+            SW_MINIMIZE по хендлу формы: не зависит от маппинга
+            BrowserView.instances/uid в pywebview (там тихий no-op при
+            отсутствии uid). Фолбэк — штатный win.minimize(). Каждый шаг
+            в лог: по boot.log видно, дошёл ли клик до бэкенда."""
             try:
-                win = self._win()
-                if win is not None:
-                    win.minimize()
+                _log("minimize: called")
+                _win, form = self._form()
+                if form is not None:
+                    try:
+                        hwnd = int(form.Handle.ToInt64())
+                        ctypes.windll.user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
+                        _log("minimize: native SW_MINIMIZE ok")
+                        return True
+                    except Exception as e:  # noqa: BLE001
+                        _log("minimize: native failed: %s" % e)
+                if _win is not None:
+                    _win.minimize()
+                    _log("minimize: pywebview fallback")
+                else:
+                    _log("minimize: no window at all")
             except Exception as e:  # noqa: BLE001
                 _log("minimize: %s" % e)
             return True
@@ -946,9 +1031,17 @@ def run_pywebview(config, url, app=None, app_dir=None):
             except Exception:  # noqa: BLE001
                 pass
             # своих webview-призраков — насильно: иначе переживают выход,
-            # держат профиль занятым и мешают следующему запуску/обновлению
+            # держат профиль занятым и мешают следующему запуску/обновлению.
+            # Детей бьём по pid, сирот прошлой жизни — по storage-пути
             try:
                 _kill_kids(log=_log)
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                _storage = os.path.join(
+                    os.environ.get("LOCALAPPDATA") or app_dir,
+                    "TerminatorToolSet", "WebView2")
+                _kill_stale_webview(_storage)
             except Exception:  # noqa: BLE001
                 pass
             try:
@@ -1002,7 +1095,11 @@ def run_pywebview(config, url, app=None, app_dir=None):
                         NotifyIcon, ContextMenuStrip,
                         ToolStripMenuItem, MouseEventHandler, MouseButtons)
                     ni = NotifyIcon()
-                    ni.Icon = self._app_icon()
+                    icon = self._app_icon()
+                    if icon is None:
+                        _log("tray: no icon source at all, abort create")
+                        return
+                    ni.Icon = icon
                     ni.Text = "Terminator ToolSet"
                     # ПКМ — контекстное меню; ЛКМ — показать окно
                     cms = ContextMenuStrip()
@@ -1081,8 +1178,18 @@ def run_pywebview(config, url, app=None, app_dir=None):
                 hicon = __import__("ctypes").windll.shell32.ExtractIconW(
                     handle, sys.executable, 0)
                 if hicon:
-                    from System.Drawing import Icon
-                    return Icon.FromHandle(hicon)
+                    try:
+                        from System.Drawing import Icon
+                        return Icon.FromHandle(hicon)
+                    except Exception:  # noqa: BLE001
+                        pass
+                # последний рубеж: системная иконка есть всегда — лучше
+                # дефолтная, чем отсутствие иконки (окно станет недостижимым)
+                try:
+                    from System.Drawing import SystemIcons
+                    return SystemIcons.Application
+                except Exception:  # noqa: BLE001
+                    return None
             except Exception as e:  # noqa: BLE001
                 _log("tray: icon error: %s" % e)
             return None
@@ -1115,8 +1222,17 @@ def run_pywebview(config, url, app=None, app_dir=None):
             win = self._win()
             if win is None:
                 return False
-            # без иконки не прячем: окно будет недостижимо
-            if self._ensure_tray() is None:
+            # без иконки не прячем: окно будет недостижимо.
+            # Форма WinForms появляется асинхронно — одна повторная попытка
+            # через полсекунды (транзиентный None BrowserView).
+            tray = self._ensure_tray()
+            if tray is None:
+                try:
+                    time.sleep(0.5)
+                except Exception:  # noqa: BLE001
+                    pass
+                tray = self._ensure_tray()
+            if tray is None:
                 _log("tray: icon unavailable, window stays")
                 return False
             try:
@@ -1167,28 +1283,59 @@ def run_pywebview(config, url, app=None, app_dir=None):
             return False
 
     api = Api()
+
+    def _browser_fallback(reason):
+        """Нативное окно не поднялось (битый ToolSetLibs / нет .NET-хоста
+        на машине): программа остаётся рабочей в обычном браузере вместо
+        краша «Failed to execute script 'main'». Причина — в boot.log."""
+        _log("mode=browser-fallback: %s" % reason)
+        print("native window unavailable (%s) - opening browser: %s"
+              % (reason, url))
+        try:
+            webbrowser.open(url)
+        except Exception as e:  # noqa: BLE001
+            _log("browser open failed: %s" % e)
+        keep_alive()
+
     win_w, win_h = _clamp_to_workarea(
         *WINDOW_SIZES.get(config.get("window_size", "normal"), (1280, 800)))
     _log("mode=pywebview window=%s size=%sx%s" % (url, win_w, win_h))
+
+    # пробный подъём .NET-моста ДО создания окон: если встроенного Framework
+    # нет (выключен в компонентах / выпотрошенная сборка) или ToolSetLibs
+    # бит — уходим в браузер сразу, с пометкой ветки в boot.log, а не падаем
+    # в webview.start() необработанным исключением
+    try:
+        import clr  # noqa: E402
+        clr.AddReference("System.Windows.Forms")
+    except Exception as e:  # noqa: BLE001
+        _browser_fallback("dotnet bridge (%s): %s"
+                          % (os.environ.get("PYTHONNET_RUNTIME", "?"), e))
+        return
 
     # -- лаунчер: маленькое окно с логотипом и прогрессом проверки обновлений.
     # Живёт до сигнала main_ready от фронтенда (интерфейс + дерево загружены).
     # background_color = цвет темы: без него форма вспыхивает белым до отрисовки
     # страницы; x/y — явное центрирование (CenterScreen pywebview сломан).
     splash_x, splash_y = _center_xy(420, 280) or (None, None)
-    api._splash = webview.create_window(
-        "Terminator ToolSet",
-        url + "splash",
-        width=420,
-        height=280,
-        x=splash_x,
-        y=splash_y,
-        resizable=False,
-        frameless=True,
-        on_top=True,
-        background_color="#1d1f24",
-        js_api=api,
-    )
+    try:
+        api._splash = webview.create_window(
+            "Terminator ToolSet",
+            url + "splash",
+            width=420,
+            height=280,
+            x=splash_x,
+            y=splash_y,
+            resizable=False,
+            frameless=True,
+            on_top=True,
+            background_color="#1d1f24",
+            js_api=api,
+        )
+    except Exception as e:  # noqa: BLE001
+        # бэкенд может грузиться уже здесь (зависит от версии pywebview)
+        _browser_fallback("splash window: %s" % e)
+        return
 
     def _launch_main():
         # проверка обновлений в лаунчере (быстрый опрос воркера; найденный
@@ -1284,15 +1431,29 @@ def run_pywebview(config, url, app=None, app_dir=None):
     threading.Thread(target=_launch_main, daemon=True, name="launcher").start()
     threading.Thread(target=_boot_watchdog, daemon=True, name="bootwatch").start()
     # постоянный профиль вместо private temp-режима (см. комментарий выше);
-    # на старых pywebview без этих аргументов - обычный запуск
+    # на старых pywebview без этих аргументов - обычный запуск.
+    # ВАЖНО: WinForms-бэкенд (winforms → pythonnet/.NET) грузится ЛЕНИВО
+    # именно в start(), а не на `import webview` выше: чистая Win11 без
+    # совместимого .NET-хоста или битый ToolSetLibs дают
+    # «Failed to resolve Python.Runtime.Loader.Initialize» — раньше это
+    # было необработанным исключением, теперь уходим в браузер.
     try:
-        webview.start(private_mode=False, storage_path=storage)
-    except TypeError:
-        webview.start()
+        try:
+            webview.start(private_mode=False, storage_path=storage)
+        except TypeError:
+            webview.start()
+    except Exception as e:  # noqa: BLE001
+        _browser_fallback("webview backend: %s" % e)
+        return
     # штатный выход через X: своих webview-призраков — насильно, чтобы не
-    # висели в фоне и не держали профиль/файлы для следующего запуска
+    # висели в фоне и не держали профиль/файлы для следующего запуска.
+    # Детей — по pid, сирот — по storage (пережили прошлый os._exit).
     try:
         _kill_kids(log=_log)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        _kill_stale_webview(storage)
     except Exception:  # noqa: BLE001
         pass
 
@@ -1346,3 +1507,201 @@ def keep_alive():
             threading.Event().wait(1)
     except KeyboardInterrupt:
         pass
+
+
+def _tray_icon():
+    """Иконка трея без окна: файлы assets/icons, embedded-кэш, _MEIPASS,
+    exe-иконка, в конце системная. Возвращает Icon или None."""
+    try:
+        from System.Drawing import Icon
+        cands = []
+        base = _pick_app_dir()
+        meipass = getattr(sys, "_MEIPASS", None)
+        try:
+            from terminator_toolset.services import embedded_cache as _emb
+            emb_icons = _emb.ensure()[0]
+        except Exception:  # noqa: BLE001
+            emb_icons = ""
+        for root in filter(None, (base, emb_icons, meipass)):
+            for name in ("app_icon.ico",
+                         os.path.join("assets", "icons", "app_icon.ico"),
+                         os.path.join("assets", "icons", "app_icon.png")):
+                cands.append(os.path.join(root, name))
+        for p in cands:
+            if p and os.path.isfile(p):
+                try:
+                    if p.lower().endswith(".ico"):
+                        return Icon(p)
+                    from System.Drawing import Bitmap
+                    with Bitmap(p) as bmp:
+                        h = bmp.GetHicon()
+                        try:
+                            return Icon.FromHandle(h)
+                        finally:
+                            pass
+                except Exception:  # noqa: BLE001
+                    continue
+        handle = __import__("ctypes").windll.kernel32.GetModuleHandleW(None)
+        hicon = __import__("ctypes").windll.shell32.ExtractIconW(
+            handle, sys.executable, 0)
+        if hicon:
+            try:
+                return Icon.FromHandle(hicon)
+            except Exception:  # noqa: BLE001
+                pass
+        from System.Drawing import SystemIcons
+        return SystemIcons.Application
+    except Exception as e:  # noqa: BLE001
+        _log("tray: icon error: %s" % e)
+    return None
+
+
+def run_browser_tray(url):
+    """Режим «запуск в браузере при старте»: окна нет, единственный пульт —
+    иконка трея (открыть URL заново / закрыть сервер). Без неё процесс
+    виден только в диспетчере задач. Отдельный STA-поток WinForms."""
+    import webbrowser as _wb
+
+    def _open_browser(_s=None, _e=None):
+        try:
+            _wb.open(url)
+        except Exception as e:  # noqa: BLE001
+            _log("tray: reopen browser failed: %s" % e)
+
+    def _open_window(_s=None, _e=None):
+        """«Открыть»: перезапуск в нативном окне. Новый процесс ждёт
+        освобождения мьютекса (флаг window.request + TS_WINDOW=1),
+        текущий гасит иконку и завершается."""
+        try:
+            import subprocess as _sp
+            from .single_instance import request_window
+            argv = [a for a in sys.argv[1:] if a != "--browser"]
+            if getattr(sys, "frozen", False):
+                cmd = [sys.executable] + argv
+            else:
+                script = os.path.abspath(sys.argv[0])
+                if not script.lower().endswith(".py"):
+                    script = os.path.join(_pick_app_dir(), "main.py")
+                cmd = [sys.executable, script] + argv
+            env = dict(os.environ)
+            env["TS_WINDOW"] = "1"
+            env.pop("TS_BROWSER", None)
+            request_window()
+            _sp.Popen(cmd, env=env, close_fds=True)
+            _log("tray: respawn as window, exit browser process")
+        except Exception as e:  # noqa: BLE001
+            _log("tray: open window failed: %s" % e)
+            return
+        _exit()
+
+    def _exit(_s=None, _e=None):
+        try:
+            if _exit.box:
+                ni = _exit.box[0]
+                try:
+                    ni.Visible = False
+                    ni.Dispose()
+                except Exception:  # noqa: BLE001
+                    pass
+        finally:
+            os._exit(0)
+    _exit.box = []
+
+    def _loop():
+        _log("tray: browser-mode thread start")
+        try:
+            import clr  # noqa: F401
+            clr.AddReference("System.Windows.Forms")
+            from System import EventHandler
+            from System.Windows.Forms import (
+                NotifyIcon, ContextMenuStrip,
+                ToolStripMenuItem, MouseEventHandler, MouseButtons,
+                Application, ToolTipIcon)
+            ni = NotifyIcon()
+            icon = _tray_icon()
+            if icon is None:
+                _log("tray: no icon source at all")
+                return
+            ni.Icon = icon
+            ni.Text = "Terminator ToolSet"
+            cms = ContextMenuStrip()
+            mi_open = ToolStripMenuItem("Открыть")
+            mi_open.add_Click(EventHandler(_open_window))
+            mi_browser = ToolStripMenuItem("Открыть в браузере")
+            mi_browser.add_Click(EventHandler(_open_browser))
+            mi_exit = ToolStripMenuItem("Закрыть")
+            mi_exit.add_Click(EventHandler(_exit))
+            cms.Items.Add(mi_open)
+            cms.Items.Add(mi_browser)
+            cms.Items.Add("-")
+            cms.Items.Add(mi_exit)
+            ni.ContextMenuStrip = cms
+
+            def _click(sender, event):
+                try:
+                    if event is not None and event.Button != MouseButtons.Left:
+                        return
+                except Exception:  # noqa: BLE001
+                    pass
+                _open_window()
+            ni.add_MouseClick(MouseEventHandler(_click))
+            ni.Visible = True
+            _exit.box.append(ni)
+            _log("tray: browser-mode icon up")
+            # Win10 прячет новые иконки в переполнение: balloon подсвечивает
+            try:
+                ni.BalloonTipTitle = "Terminator ToolSet"
+                ni.BalloonTipText = "Сервер запущен. Открыть: пункт «Открыть»."
+                ni.BalloonTipIcon = ToolTipIcon.Info
+                ni.ShowBalloonTip(3000)
+            except Exception:  # noqa: BLE001
+                pass
+            Application.Run()
+        except Exception as e:  # noqa: BLE001
+            _log("tray: browser-mode icon failed: %s" % e)
+
+    try:
+        from System.Threading import Thread, ThreadStart, ApartmentState
+        th = Thread(ThreadStart(_loop))
+        try:
+            th.IsBackground = True
+            th.SetApartmentState(ApartmentState.STA)
+        except Exception:  # noqa: BLE001
+            pass
+        th.Start()
+        _log("tray: browser-mode STA thread started")
+    except Exception as e:  # noqa: BLE001
+        # нет .NET — обычный python-поток (иконки не будет, сервер жив)
+        _log("tray: STA start failed, fallback thread: %s" % e)
+        threading.Thread(target=_loop, daemon=True, name="tray").start()
+    keep_alive()
+
+
+def watch_restore_requests():
+    """Фоновый вотчер (первый процесс): второй запуск exe оставил флаг
+    restore.flag — показать окно штатно (из трея через restore_from_tray:
+    win.show + уборка иконки по настройкам). Win32-показ второго процесса
+    окно уже дёрнул, вотчер докручивает состояние. Опрос раз в секунду —
+    дешевле некуда (один stat несуществующего файла)."""
+    try:
+        from .single_instance import take_restore
+    except Exception:  # noqa: BLE001
+        return
+    while True:
+        try:
+            time.sleep(1.0)
+        except Exception:  # noqa: BLE001
+            return
+        try:
+            if not take_restore():
+                continue
+        except Exception:  # noqa: BLE001
+            continue
+        _log("restore: second launch asks to show the window")
+        try:
+            api._form_invoke(lambda _f: api.restore_from_tray())
+        except Exception:  # noqa: BLE001
+            try:
+                api.restore_from_tray()
+            except Exception:  # noqa: BLE001
+                pass
