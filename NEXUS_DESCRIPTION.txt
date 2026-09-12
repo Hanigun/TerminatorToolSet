@@ -1,0 +1,86 @@
+[center][size=5][b]Terminator ToolSet[/b][/size]
+[size=3][color=#8e9aaf]Modding tool for Terminator: Dark Fate — Defiance[/color][/size][/center]
+
+[center][i]Please leave your suggestions and bug reports on the official Discord, in the Modding Threads - Terminator ToolSet (Modding Tool) section[/i]
+[url=https://discord.com/invite/mNvUs8rRPS][size=3][b]Join Discord[/b][/size][/url][/center]
+
+[hr]
+
+[b]Edit units and game data as tables instead of raw XML.[/b] Compare files, merge new units, edit missions and Uprising maps, unpack [i].pak[/i] archives and manage mods.
+
+[b]Safe to use:[/b] stock game files are [b]read-only[/b] — every edit is backed up with full history and rollback.
+
+[hr]
+
+[center][size=3][color=#cc0000][b]⚠ IMPORTANT: always back up your files before using this tool.[/b][/color]
+[color=#cc0000]The tool is under active development — the author takes no responsibility for any damage.[/color]
+[i]That said, not a single file has been damaged during the entire development.[/i][/center]
+
+[hr]
+[center][size=4][b]✦ Features ✦[/b][/size][/center]
+
+[list]
+[*][b]Spreadsheet editor[/b] — safe save, game format preserved
+[*][b]Project / Game / Mod browser[/b] — search, filters, drag & drop
+[*][b]Compare & Merge[/b] — diff two files by any column, copy rows and columns between them
+[*][b]Cross-file links[/b] — [i]sysname[/i] references jump to the target file, plus readable unit names from localization
+[*][b]Mission (SWT) editor[/b] — triggers and actions with command dictionary
+[*][b]Campaign editor[/b] — campaign search and shop linkage
+[*][b]Uprising tools[/b] — map editor, randomizer, presets, prices and unit limits
+[*][b].pak unpacker[/b] — ordered extraction of base game and DLCs, per-pack skip
+[*][b]Mod tools[/b] — create mods, copy files into them, GameAssets download, DDS to WEBP icons
+[*][b]Safety net[/b] — backups before every write, SQLite history, Undo / Redo, autosave
+[*][b]Service[/b] — auto-update, single instance, tray and browser modes
+[/list]
+
+[hr]
+[center][size=4][b]⬇ Installation ⬇[/b][/size][/center]
+
+[list=1]
+[*]Download the latest [b]Terminator_ToolSet[/b] zip from the [b]Files[/b] tab.
+[*]Extract it [b][u]WHOLE[/u][/b] into an [b]empty folder[/b] — not over an old version.
+[*]Check the layout — next to [i]Terminator ToolSet.exe[/i] you must have:
+[code]ToolSetLibs/
+assets/
+locales/[/code]
+[*]Unblock the files (Windows marks downloads from the web). Open [b]PowerShell[/b] in the app folder and run:
+[code]Get-ChildItem -Recurse | Unblock-File[/code]
+[*]Run [b]Terminator ToolSet.exe[/b] and open your mod folder — or just drop files into the window.
+[/list]
+
+[hr]
+[center][size=4][b]⚙ Requirements[/b][/size][/center]
+
+[list]
+[*][b]Windows 10 / 11[/b], 64-bit
+[*][b]No external .NET needed[/b] — uses built-in Framework 4.8 + WebView2
+[*]Do [b]not[/b] run from OneDrive or a network folder
+[*]If antivirus eats files from [i]ToolSetLibs[/i], restore the folder and add an exclusion
+[/list]
+
+[spoiler=Window does not open?]
+Run the tool in browser mode — same functionality, no native window needed:
+[code]"...\Terminator ToolSet.exe" --browser[/code]
+Details are logged in [i]Logs\boot.log[/i].
+[/spoiler]
+
+[hr]
+[center][size=4][b]❓ FAQ[/b][/size][/center]
+
+[b]Q: The game broke after my edit![/b]
+A: Every write makes a full backup. Open [b]History[/b] and roll back to any previous version.
+
+[b]Q: Can I damage the original game files?[/b]
+A: No. Unpacked game files are the read-only source of truth — edits go only into your project and mod.
+
+[b]Q: How do I add a new unit?[/b]
+A: Open [b]Compare[/b], diff your file against the new-unit file, and transfer the rows over.
+
+[b]Q: Which languages are supported?[/b]
+A: RU / EN / DE / ZH interface, dark and light themes.
+
+[hr]
+[center][size=3][b]Credits[/b][/size]
+Terminator Overhaul team.
+Game by Slitherine / Cats Who Play.
+[i]Fan modding tool, not affiliated with the publisher.[/i][/center]
