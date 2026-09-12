@@ -459,7 +459,8 @@ function edCatBlock(secNum, cat, items) {
   sec.className = "upr-cat";
   const title = document.createElement("div");
   title.className = "upr-cat-title";
-  title.textContent = (t("upr_cat_" + cat) || cat) + " · " + items.length;
+  if (typeof uprCatTitle === "function") uprCatTitle(title, cat, " · " + items.length);
+  else title.textContent = (t("upr_cat_" + cat) || cat) + " · " + items.length;
   sec.appendChild(title);
   const bwrap = document.createElement("div");
   bwrap.className = "upr-cat-body upr-cfg-ed-drop";
@@ -530,6 +531,8 @@ function edChip(u) {
   img.alt = "";
   edIcon(img, u.sys, u.cat, chip);
   chip.appendChild(img);
+  // ЭКСПЕРИМЕНТ «слот техники»: фон + sysname + полоса мест
+  if (typeof vehDecor === "function") vehDecor(chip, u.sys, u.cat);
   // перенос указателем как на карте: mousedown+движение = перетаскивание
   // (HTML5 DnD в WebView2 ненадёжен — там тот же pointer-механизм);
   // клик без движения ничего не делает, правка — dblclick/ПКМ
@@ -583,11 +586,16 @@ function edDragMove(e) {
     const r = d.chipEl.getBoundingClientRect();
     d.offX = d.sx - r.left;
     d.offY = d.sy - r.top;
-    const g = d.chipEl.cloneNode(true);
+    const g = (typeof ghostStrip === "function"
+      ? ghostStrip(d.chipEl.cloneNode(true)) : d.chipEl.cloneNode(true));
     g.className = "upr-chip upr-card upr-drag-ghost";
     g.style.width = r.width + "px";
     document.body.appendChild(g);
     d.ghost = g;
+    // курсор — левый верхний угол призрака (+12, как нативный DnD):
+    // точка хвата не сохраняется — иначе призрак, обрезанный до иконки,
+    // оказывается ровно по центру курсора
+    d.offX = 12; d.offY = 12;
     d.chipEl.classList.add("upr-chip-dragging");
     document.body.classList.add("upr-dragging");
   }
@@ -670,6 +678,12 @@ function edMoveUnit(uid, secNum, cat) {
 }
 
 function edIcon(img, sys, cat, chip) {
+  // иконка через общий хелпер карты: мгновенный плейсхолдер категории
+  // (предметы — squads-плейсхолдер) под спиннером, реальная подменяет
+  if (typeof uprChipIcon === "function") {
+    try { uprChipIcon(img, chip, sys, cat); return; }
+    catch (e) { /* ниже — старый путь */ }
+  }
   const fin = () => { if (chip) chip.classList.remove("upr-loading"); };
   if (chip) chip.classList.add("upr-loading");
   img.onload = fin;

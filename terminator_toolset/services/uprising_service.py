@@ -147,11 +147,16 @@ class Uprising:
                                                "assets", "CustomImages")
         self.webp_idx = {"mt": 0.0, "map": {}}  # stem.lower() -> (bucket, file)
         self.icon_cache = {}  # layers-key -> {"mt": float, "map": {...}}
+        self.icon_low_cache = {}  # layers-key -> пониженный индекс карты
+        # (состояния иконок: запрос любым регистром при регистрозависимых
+        # ключах species; строится один раз на поколение icon_cache)
         self.dlc_cache = {}   # root -> (dlc dir mtime, [dlc dirs])
         self.icon_lock = threading.Lock()  # one map rebuild per root
         self.conv_mem = {}    # (src.lower(), mtime) -> png; skips re-stat
         self.data_mem = {"mt": 0.0, "map": {}}  # bucket/file -> data-URL
         self.sysn_cache = {}  # root-key -> {"mt": float, "res": {...}}
+        self.find_cache = {}  # root -> (path, ts): мемоизация find_shop,
+        # иначе каждый openUprising — полный os.walk по root (секунды)
         self.price_cache = {}  # root-key -> {"mt": float, "res": {...}}
         # ЭКСПЕРИМЕНТ «слот техники» (откат: удалить поле + capacity/_capacity_build)
         self.cap_cache = {}  # root-key -> {"mt": float, "res": {...}}
@@ -322,8 +327,6 @@ class Uprising:
                 p = os.path.join(lay, "basis", "scripts", "species", name)
                 if os.path.isfile(p):
                     paths.append(p)
-            for ps in overlay.values():
-                paths.extend(ps)
             for ps in overlay.values():
                 paths.extend(ps)
             per_layer.append((lay, base, overlay))
@@ -1189,6 +1192,187 @@ class Uprising:
                 return (p, ent[1])
         return None
 
+    # суффиксы файлов-состояний иконок: ховер/выбранное лежат сиблингами
+    # исходника в слоях проект|игра|мод/GameAssets. Техника и пехота
+    # (tech_pic): <stem>_preselected/_selected; предметы (inventory):
+    # <stem>_o/_s. Конверт — тем же dds->webp в CustomImages/<слой>/.
+    _ICON_STATE_SUFFIXES = {
+        "item": (("_o", "hover"), ("_s", "selected")),
+        "unit": (("_preselected", "hover"), ("_selected", "selected")),
+    }
+
+    def icon_state_sources(self, root, name):
+        """Файлы-состояния иконки {hover, selected}: сиблинги исходника
+        со сменой стема (тот же фолбэк-цепочка слоёв, что icon_source_file).
+        Ключи species-карты регистрозависимы (Fnd_abrams), запрос может
+        прийти любым регистром — сводим через пониженный индекс.
+        Нет сиблинга — состояния нет (пусто)."""
+        key = (name or "").strip()
+        if not key:
+            return {}
+        hit = None
+        try:
+            hit = self.icon_source_file(root, key)
+        except Exception:  # noqa: BLE001
+            hit = None
+        if not hit or not hit[0]:
+            # регистр ключа не совпал (Fnd_abrams vs fnd_abrams):
+            # тот же поиск, но по пониженному индексу карты (один на
+            # поколение кэша, не скан на каждое имя)
+            try:
+                layers = self._layer_roots(root)
+                lkey = "|".join(layers)
+                amap = self.icon_map(root)
+                mt = (self.icon_cache.get(lkey) or {}).get("mt")
+                cached = self.icon_low_cache.get(lkey)
+                if cached is None or cached[0] != mt:
+                    low = {}
+                    for k, v in amap.items():
+                        low.setdefault(k.lower(), v)
+                    self.icon_low_cache[lkey] = (mt, low)
+                else:
+                    low = cached[1]
+            except Exception:  # noqa: BLE001
+                return {}
+            ent = low.get(key.lower())
+            if not ent:
+                # имени нет в species (апгрейды upgrd_* идут только
+                # через готовый webp-индекс): прямой поиск dds-исходника
+                # в стандартных папках слоёв + DLC-оверлеев
+                hit = self._icon_direct_source(root, key)
+                if not hit:
+                    return {}
+            else:
+                try:
+                    p = self.icon_file(root, ent[0], ent[1],
+                                       custom_first=False)
+                except Exception:  # noqa: BLE001
+                    return {}
+                if not p:
+                    return {}
+                hit = (p, ent[1])
+        src, kind = hit
+        suffs = self._ICON_STATE_SUFFIXES.get(
+            "item" if kind == "item" else "unit")
+        out = {}
+        d = os.path.dirname(src)
+        stem, _ = os.path.splitext(os.path.basename(src))
+        if not stem:
+            return {}
+        for suf, role in suffs:
+            for v in self._icon_variants(os.path.join(d, stem + suf)):
+                try:
+                    if os.path.isfile(v):
+                        out[role] = v
+                        break
+                except OSError:
+                    pass
+        return out
+
+    # стандартные папки прямого поиска dds-исходника (слой/оверлей + sub):
+    # предметы — inventory, юниты — tech_pic (мелкие/средние иконки) и
+    # раскладка GameAssets (UnitIcons/..., inventory)
+    _ICON_DIRECT_SUBS = (
+        ("basis/textures/ui/pictures/inventory", "item"),
+        ("basis/textures/ui/pictures/tech_pic/infantry_icons_small", "unit"),
+        ("basis/textures/ui/pictures/tech_pic/vehicles_icons_small", "unit"),
+        ("basis/textures/ui/pictures/tech_pic/infantry_icons_big", "unit"),
+        ("basis/textures/ui/pictures/tech_pic/vehicles_icons_big", "unit"),
+        ("UnitIcons/tech_pic/infantry_icons_small", "unit"),
+        ("UnitIcons/tech_pic/vehicles_icons_small", "unit"),
+        ("inventory", "item"),
+    )
+
+    def _icon_direct_source(self, root, key):
+        """Прямой поиск dds-исходника по имени без species-карты:
+        (path, kind) | None. Только точные имена файлов (через
+        _icon_variants — png/dds/tga/webp), без рекурсии: десятки stat
+        на имя, не walk."""
+        try:
+            layers = self._layer_roots(root)
+        except Exception:  # noqa: BLE001
+            return None
+        dirs = list(layers)
+        try:
+            for rt in layers:
+                dirs.extend(self._dlc_dirs(rt))
+        except Exception:  # noqa: BLE001
+            pass
+        for d in dirs:
+            if not d:
+                continue
+            for sub, kind in self._ICON_DIRECT_SUBS:
+                base = os.path.join(d, sub, key)
+                for v in self._icon_variants(base):
+                    try:
+                        if os.path.isfile(v):
+                            return (os.path.normpath(v), kind)
+                    except OSError:
+                        pass
+        return None
+
+    def icon_states(self, root, names):
+        """{name: {hover: url, selected: url}} состояний иконок одним
+        запросом. Сиблинги конвертируются тем же dds->webp в CustomImages,
+        URL — готовых webp (дальше кэш браузера); нет сиблинга — ключа нет.
+        Защита от фолбэка индекса на базовую иконку — сравнением стема."""
+        names = sorted({str(n).strip() for n in (names or [])
+                        if str(n).strip()})[:800]
+        want = {}
+        for n in names:
+            try:
+                srcs = self.icon_state_sources(root, n)
+            except Exception:  # noqa: BLE001
+                continue
+            if srcs:
+                want[n] = srcs
+        # конверт вариантов — пулом (последовательно сотни dds давали
+        # 10+с на запрос состояний и тормозили первый ховер)
+        jobs = []
+        for srcs in want.values():
+            for p in srcs.values():
+                if p.lower().endswith(".dds"):
+                    jobs.append(p)
+        if jobs:
+            def _one(p):
+                try:
+                    self.dds_webp(p, root=root)
+                except Exception:  # noqa: BLE001
+                    pass
+            try:
+                with ThreadPoolExecutor(max_workers=8) as ex:
+                    list(ex.map(_one, dict.fromkeys(jobs)))
+            except Exception:  # noqa: BLE001
+                for p in dict.fromkeys(jobs):
+                    _one(p)
+        try:
+            idx = self.webp_index()
+        except Exception:  # noqa: BLE001
+            idx = {}
+        out = {}
+        for n, srcs in want.items():
+            st = {}
+            for role, p in srcs.items():
+                stem = os.path.splitext(os.path.basename(p))[0].lower()
+                hit = (idx or {}).get(stem)
+                if not hit:
+                    continue
+                fn = hit[1].replace("\\", "/").split("/")[-1]
+                if os.path.splitext(fn)[0].lower() != stem:
+                    continue
+                if hit[0] == "custom":
+                    try:
+                        pick = self._custom_pick(root, stem)
+                    except Exception:  # noqa: BLE001
+                        pick = ""
+                    if not pick:
+                        continue
+                    st[role] = self.webp_asset_url("custom", pick)
+                else:
+                    st[role] = self.webp_asset_url(*hit)
+            out[n] = st
+        return {"ok": True, "states": out}
+
     def convert_missing(self, root, names):
         """Bulk DDS -> CustomImages/<слой>/ WebP одним запросом
         (кнопка «Анализ»). Имя строго {stem}.webp, существующий
@@ -1225,6 +1409,20 @@ class Uprising:
             subdir = self._custom_subdir_for(p, root) or ""
             fn = stem + ".webp"
             tasks.append((n, p, subdir, fn))
+            # состояния иконки (ховер/выбранное) — тем же конвертом, счёт
+            # общий: Анализ греет и их, иначе первый ховер ждал бы dds
+            try:
+                for _pp in self.icon_state_sources(root, n).values():
+                    if not _pp.lower().endswith(".dds"):
+                        continue
+                    _stem = os.path.splitext(os.path.basename(_pp))[0]
+                    if not _stem:
+                        continue
+                    tasks.append((n, _pp,
+                                  self._custom_subdir_for(_pp, root) or "",
+                                  _stem + ".webp"))
+            except Exception:  # noqa: BLE001
+                pass
         if not tasks:
             try:
                 self.webp_index()
@@ -1378,6 +1576,12 @@ class Uprising:
         try:
             t0 = time.time()
             self.webp_index()
+            # карту уже открывали (кэши набиты по требованию) — тяжёлый
+            # icon_map пропускаем: прогрев опоздал и будет только душить
+            # GIL ровно когда пользователь работает с картой
+            if self.icon_cache or self.sysn_cache:
+                self._log.info("upr warmup skipped (caches already warm)")
+                return
             # сплэш/boot_progress отвечают тем же GIL: паузы между тяжёлыми
             # кусками, иначе /splash и статика висят десятки секунд (18%).
             time.sleep(0.3)
@@ -1406,10 +1610,12 @@ class Uprising:
         except Exception as e:  # noqa: BLE001
             self._log.warning("upr warmup failed: %s", e)
 
-    def start_warmup(self, delay: float = 20.0):
-        """Фоновый прогрев после старта. Задержка по умолчанию 20с: сплэш,
-        boot_progress и display_names проходят первыми, иначе холодный
-        старт душит GIL и сплэш висит на 18% (см. app.log: /splash 124с)."""
+    def start_warmup(self, delay: float = 40.0):
+        """Фоновый прогрев после старта. Задержка 40с: сплэш,
+        boot_progress, display_names и первое открытие карты проходят
+        первыми — иначе холодный старт душит GIL и сплэш висит на 18%
+        (см. app.log: /splash 124с). Карту уже открыли — warmup скипается
+        сам (см. warmup: кэши уже набиты по требованию)."""
         def _delayed():
             try:
                 if delay and delay > 0:
@@ -1442,6 +1648,12 @@ class Uprising:
                 try:
                     self.dds_webp(p, root=root)  # persistent webp,
                     # best-effort: подпапка слоя, имя {stem}.webp
+                except Exception:  # noqa: BLE001
+                    pass
+                try:
+                    for _pp in self.icon_state_sources(root, name).values():
+                        if _pp.lower().endswith(".dds"):
+                            self.dds_webp(_pp, root=root)
                 except Exception:  # noqa: BLE001
                     pass
                 try:
@@ -2810,13 +3022,58 @@ class Uprising:
         shop_presets.xml под root по сортированному пути. Путь сам по
         себе ничего не решает: базовый файл из dlc-папки картой не
         станет, а секторный из корня проекта — станет. '' вместо
-        базового файла: пустая карта с тостом больше не открывается."""
+        базового файла: пустая карта с тостом больше не открывается.
+
+        Перф: каждый вызов раньше делал полный os.walk по root (на
+        распакованной игре — 5-12с под GIL-давлением параллельных
+        game_tree/warmup, см. app.log) и стоял на критическом пути до
+        первой отрисовки карты. Теперь: мемоизация (валидация — мс),
+        затем прямые кандидаты basis/DLC без walk, полный walk —
+        лишь фолбэк для нестандартных раскладок."""
         if not root or not os.path.isdir(root):
             return {"ok": True, "path": ""}
-        cands = []
+        # 1. мемоизация: положительный хит валидируем дешёвым сниффом
+        # (файл маленький, мс); отрицательный живёт 30с, чтобы серия
+        # кликов «карты нет» не устраивала walk-шторм
+        hit = self.find_cache.get(root)
+        if hit is not None:
+            hp, hts = hit
+            if hp:
+                try:
+                    if os.path.isfile(hp) and self.is_uprising_shop(hp):
+                        return {"ok": True, "path": hp}
+                except Exception:  # noqa: BLE001
+                    pass
+            elif time.time() - hts < 30:
+                return {"ok": True, "path": ""}
+        # 2. прямые кандидаты без walk: фикс, базовый species, DLC-оверлеи
+        quick = []
         fixed = os.path.join(root, *_UPRISING_REL.split(os.sep))
         if os.path.isfile(fixed):
-            cands.append(fixed)
+            quick.append(fixed)
+        spec_rel = os.path.join("basis", "scripts", "species",
+                                "shop_presets.xml")
+        base = os.path.join(root, spec_rel)
+        if os.path.isfile(base) and base not in quick:
+            quick.append(base)
+        try:
+            dlc = sorted(glob.glob(os.path.join(
+                root, "dlc", "*", "basis", "scripts", "species",
+                "shop_presets.xml")))
+        except Exception:  # noqa: BLE001
+            dlc = []
+        for p in dlc:
+            if p not in quick:
+                quick.append(p)
+        for p in quick:
+            try:
+                if self.is_uprising_shop(p):
+                    self.find_cache[root] = (p, time.time())
+                    return {"ok": True, "path": p}
+            except Exception:  # noqa: BLE001
+                continue
+        # 3. фолбэк: полный walk для нестандартных раскладок
+        cands = []
         extra = []
         for dirpath, dirnames, filenames in os.walk(root):
             for f in filenames:
@@ -2828,9 +3085,11 @@ class Uprising:
         for p in cands:
             try:
                 if self.is_uprising_shop(p):
+                    self.find_cache[root] = (p, time.time())
                     return {"ok": True, "path": p}
             except Exception:  # noqa: BLE001
                 continue
+        self.find_cache[root] = ("", time.time())
         return {"ok": True, "path": ""}
 
     # -- species file lookup («Открыть в таблице» с карты) ---------------------
@@ -3294,15 +3553,34 @@ class Uprising:
             pass
         return {"ok": True, "factions": factions, "costs": costs}
 
-    def swt_sources(self, project_root, unpacked):
-        """Value dictionaries for SWT editor dropdown hints: unit sysnames,
-        crew, upgrade presets (car/tank/squad/heli separately), items, shop
+    def _swt_scope(self, swt_path):
+        """Скоп редактируемого .swt: имя DLC-оверлея, если путь идёт через
+        папку dlc/<name>/, иначе '' (файлы базовой игры)."""
+        try:
+            parts = re.split(r"[\\/]+", str(swt_path or ""))
+        except Exception:  # noqa: BLE001
+            return ""
+        for i, p in enumerate(parts):
+            if p.lower() == "dlc" and i + 1 < len(parts) and parts[i + 1]:
+                return parts[i + 1]
+        return ""
+
+    def swt_sources(self, project_root, unpacked, swt_path=""):
+        """Value dictionaries for SWT editor dropdown hints: unit sysnames
+        (merged AND per type: cars/tanks/squads/heli separately), crew,
+        upgrade presets (car/tank/squad/heli separately), items, shop
         presets from the open project AND/OR unpacked game species files.
-        Neither available - empty lists, the editor just stays text-input
-        (fallback without errors)."""
+        Scope: an edited DLC .swt sees ONLY its own DLC overlay (a unit
+        added to base files is not suggested there until added to the
+        DLC); a base .swt sees base files only. Neither available -
+        empty lists, the editor just stays text-input (fallback
+        without errors)."""
         units, crew, upgrades, items, presets = set(), set(), set(), set(), set()
+        units_car, units_tank = set(), set()
+        units_squad, units_heli = set(), set()
         car_presets, tank_presets = set(), set()
         squad_presets, heli_presets = set(), set()
+        dlc = self._swt_scope(swt_path)
         try:
             roots = []
             for r in (project_root, unpacked):
@@ -3315,44 +3593,69 @@ class Uprising:
             if ga and os.path.isdir(ga) and ga not in roots:
                 roots.append(ga)
             for root in roots:
-                sp_dir = ("basis", "scripts", "species")
-                sp_dlc = ("dlc", "*", "basis", "scripts", "species")
-                for n in ("cars.xml", "tanks.xml", "squads.xml", "helicopters.xml"):
-                    units |= self.scan_names(root, [sp_dir + (n,), sp_dlc + (n,)])
-                crew |= self.scan_names(root, [sp_dir + ("humans.xml",),
-                                               sp_dlc + ("humans.xml",)])
-                upgrades |= self.scan_names(root, [sp_dir + ("*_upgrades.xml",),
-                                                   sp_dlc + ("*_upgrades.xml",)])
-                # upgrade presets: preset name depends on the unit type
-                # (car/tank/squad/helicopter) - scan each file separately
-                for key, fname in (("car", "car_upgrade_presets.xml"),
-                                   ("tank", "tank_upgrade_presets.xml"),
-                                   ("squad", "squad_upgrade_presets.xml"),
-                                   ("heli", "heli_upgrade_presets.xml")):
-                    names = self.scan_names(root, [sp_dir + (fname,),
-                                                   sp_dlc + (fname,)])
-                    if key == "car":
-                        car_presets |= names
-                    elif key == "tank":
-                        tank_presets |= names
-                    elif key == "squad":
-                        squad_presets |= names
-                    else:
-                        heli_presets |= names
-                items |= self.scan_names(root, [
-                    ("basis", "scripts", "inventory_items.xml"),
-                    ("dlc", "*", "basis", "scripts", "inventory_items.xml")])
-                presets |= self.scan_names(root, [sp_dir + ("shop_presets.xml",),
-                                                  sp_dlc + ("shop_presets.xml",)])
+                if dlc:
+                    # только оверлей редактируемого DLC (имя папки - без
+                    # учёта регистра: Resistance ~= resistance); нет такой
+                    # папки в корне - корень ничего не даёт
+                    try:
+                        names = [d for d in os.listdir(os.path.join(root, "dlc"))
+                                 if d.lower() == dlc.lower()]
+                    except OSError:
+                        continue
+                    if not names:
+                        continue
+                    bases = [("dlc", d, "basis") for d in names]
+                else:
+                    bases = [("basis",)]
+                for b in bases:
+                    sp = b + ("scripts", "species")
+                    # юниты: общий словарь + строго по типам (cars.xml и т.д.)
+                    for key, n in (("car", "cars.xml"),
+                                   ("tank", "tanks.xml"),
+                                   ("squad", "squads.xml"),
+                                   ("heli", "helicopters.xml")):
+                        found = self.scan_names(root, [sp + (n,)])
+                        units |= found
+                        if key == "car":
+                            units_car |= found
+                        elif key == "tank":
+                            units_tank |= found
+                        elif key == "squad":
+                            units_squad |= found
+                        else:
+                            units_heli |= found
+                    crew |= self.scan_names(root, [sp + ("humans.xml",)])
+                    upgrades |= self.scan_names(root, [sp + ("*_upgrades.xml",)])
+                    # upgrade presets: preset name depends on the unit type
+                    # (car/tank/squad/helicopter) - scan each file separately
+                    for key, fname in (("car", "car_upgrade_presets.xml"),
+                                       ("tank", "tank_upgrade_presets.xml"),
+                                       ("squad", "squad_upgrade_presets.xml"),
+                                       ("heli", "heli_upgrade_presets.xml")):
+                        names = self.scan_names(root, [sp + (fname,)])
+                        if key == "car":
+                            car_presets |= names
+                        elif key == "tank":
+                            tank_presets |= names
+                        elif key == "squad":
+                            squad_presets |= names
+                        else:
+                            heli_presets |= names
+                    items |= self.scan_names(root, [
+                        b + ("scripts", "inventory_items.xml")])
+                    presets |= self.scan_names(root, [sp + ("shop_presets.xml",)])
         except Exception:  # noqa: BLE001 - dicts must not break the editor
             pass
         cap = lambda s: sorted(s)[:5000]  # noqa: E731
         return {"ok": True,
                 "units": cap(units), "crew": cap(crew),
+                "units_car": cap(units_car), "units_tank": cap(units_tank),
+                "units_squad": cap(units_squad), "units_heli": cap(units_heli),
                 "upgrades": cap(upgrades), "items": cap(items),
                 "presets": cap(presets),
                 "car_presets": cap(car_presets),
                 "tank_presets": cap(tank_presets),
                 "squad_presets": cap(squad_presets),
                 "heli_presets": cap(heli_presets),
-                "teams": list(_SWT_TEAMS)}
+                "teams": list(_SWT_TEAMS),
+                "scope_label": ("DLC " + dlc) if dlc else "base"}

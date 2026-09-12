@@ -11,7 +11,7 @@ function uprFreshState() {
   // ЕДИНСТВЕННЫЙ дефолт состояния карты (старт + закрытие вкладки): все поля,
   // включая поколение загрузки loadSeq — без него переоткрытие давало NaN,
   // guard вечно дропал ответы и карта оставалась бледной (.empty, no sectors)
-  return { path: null, rows: null, columns: [], sheetIndex: 0, sysnames: [], syscats: {}, prices: {}, sysLoading: false, sel: -1, variant: 0, dirty: false, found: false, panel: true, pick: new Set(), clip: [], sectorClip: null, editing: "", loading: false, loadSeq: 0, preloading: false };
+  return { path: null, rows: null, columns: [], sheetIndex: 0, sysnames: [], syscats: {}, prices: {}, stats: {}, sysLoading: false, sel: -1, variant: 0, dirty: false, found: false, panel: true, pick: new Set(), clip: [], sectorClip: null, editing: "", loading: false, loadSeq: 0, preloading: false };
 }
 
 function uprTab() { return state.tabs.find(tb => tb.id === "uprising"); }
@@ -369,9 +369,13 @@ async function uprResetConfig() {
 }
 
 function uprParseList(s) {
-  // "name,name2:3,name3" -> [{name, n}]
+  // "name,name2:3;name3" -> [{name, n}]: элементы делятся запятой ИЛИ
+  // точкой с запятой (в секторах встречается "a;b;c"). Суффикс количества
+  // ":N" при этом не трогаем — сплит идёт раньше, ":N" остаётся приклеенным
+  // к имени и разбирается регексом ниже. Сохранение (uprJoinList) всегда
+  // пишет "," — ";" нормализуется в запятую при первой же записи.
   const out = [];
-  String(s || "").split(",").forEach(part => {
+  String(s || "").split(/[,;]/).forEach(part => {
     const p = part.trim();
     if (!p) return;
     const m = p.match(/^(.*\S)\s*:(\d+)$/);
@@ -512,15 +516,33 @@ async function openUprising(path, opts) {
   // клик во время boot): не плодим параллельные open_file/icons_data —
   // поздний ошибочный ответ затирал хорошие иконки пустой картой
   if (!path && state.uprising.loading) return;
+  // область карты + спиннер — ДО медленного поиска/загрузки: #upr-loading
+  // лежит внутри #upr-wrap, и пока wrap скрыт — спиннер не виден вообще.
+  // При смене источника wrap уже показан, потому там спиннер был, а при
+  // первом открытии его не было — пустая вкладка без фидбэка.
+  try {
+    $("#upr-wrap").hidden = false;
+    $("#upr-nofile").hidden = true;
+  } catch (e) { /* DOM ещё не готов — uprLoad сам покажет */ }
+  uprSetLoading(true);
   if (!path) path = await uprFindFile();
   if (!path) path = await uprCurrentShopFile();
   if (!path) {
+    uprSetLoading(false);
     uprPaintNofile();
     return;
   }
   // тот же файл уже загружен — ничего не делаем
   if (state.uprising.path && normPath(path) === normPath(state.uprising.path) &&
-      state.uprising.rows) return;
+      state.uprising.rows) { uprSetLoading(false); return; }
+  // повторный вход по тому же файлу, пока загрузка в полёте (дабл-клик
+  // по кнопке/файлу, клик во время boot): параллельную цепочку не плодим.
+  // Каждый лишний find — полный os.walk по распакованной игре (в app.log
+  // три параллельных find по 5-12с от нетерпеливых кликов). Вход по ДРУГОМУ
+  // файлу пропускаем: seq-поколение в uprLoad оставит последний ответ.
+  // Спиннер не гасим: им владеет летящая загрузка.
+  if (state.uprising.loading && state.uprising.path &&
+      normPath(path) === normPath(state.uprising.path)) return;
   // смена файла при несохранённых правках — подтверждение
   if (state.uprising.path && state.uprising.dirty) {
     const choice = await askConfirm({
@@ -532,7 +554,7 @@ async function openUprising(path, opts) {
         { id: "cancel", label: t("cancel"), kind: "ghost" },
       ],
     });
-    if (choice !== "ok") return;
+    if (choice !== "ok") { uprSetLoading(false); return; }
   }
   state.uprising.path = path;
   // новое поколение загрузки: устаревший ответ параллельного openUprising
@@ -541,8 +563,18 @@ async function openUprising(path, opts) {
   state.uprising.loading = true;
   try {
     await uprLoad(false, seq);
+  } catch (e) {
+    // uprLoad сам тостит сетевые сбои; здесь — страховка от синхронного
+    // броска (битый JSON и т.п.): иначе спиннер остался бы навсегда
+    if (seq === state.uprising.loadSeq) {
+      uprSetLoading(false);
+      toast(String((e && e.message) || e), "err");
+    }
   } finally {
-    if (seq === state.uprising.loadSeq) state.uprising.loading = false;
+    if (seq === state.uprising.loadSeq) {
+      state.uprising.loading = false;
+      uprSetLoading(false);
+    }
   }
   // файл без секторов Uprising (например, базовый shop_presets): карта пустая
   if (!uprGroups().length) toast(t("upr_no_sectors") || "Секторы не найдены", "err");
@@ -572,6 +604,13 @@ async function openUprising(path, opts) {
     .catch(() => {});
   // справочник sysname (фон, с ленивой повторной попыткой из форм ввода)
   uprLoadSysnames();
+  // имена юнитов — приоритет источника ЭТОЙ карты (фон; корни уже в кэше
+  // бэкенда после первого запроса — повтор дешёвый, только переслияние)
+  try {
+    const pr = (state.project && state.project.root) || "";
+    if (pr && typeof loadDisplayNames === "function")
+      loadDisplayNames(pr, state.uprising.path);
+  } catch (e) { /* имена не критичны */ }
 }
 
 // рандомайзер — отдельная страница-вкладка (не модалка):
@@ -633,7 +672,16 @@ function uprLoadSysnames() {
   // цены юнитов/предметов (колонка cost) — для модалки и шильдика
   api("/api/uprising_prices", { method: "POST", body: JSON.stringify({ root }) })
     .then(r => r.json())
-    .then(j => { if (j.ok) state.uprising.prices = j.prices || {}; })
+    .then(j => {
+      if (j.ok) {
+        state.uprising.prices = j.prices || {};
+        // статы species (cost/cp_cost/...) — для настроек юнита и шильдика;
+        // шильдики уже на экране перерисовать, как после sysnames
+        state.uprising.stats = j.stats || {};
+        if (state.uprising.path === path && state.uprising.rows &&
+            uprSrcRoot() === root) renderUprising();
+      }
+    })
     .catch(() => {});
 }
 
@@ -646,6 +694,20 @@ async function uprAnalyze() {
   state.uprising.analyzing = true;
   const label = t("swt_analyze") || "Анализ";
   if (btn) { btn.disabled = true; btn.textContent = label + "…"; }
+  // сторож: если цепочка зависнет дольше 10 минут — снять флаг, вернуть
+  // кнопку и залогировать (кнопка не должна умирать навсегда)
+  const watchTs = Date.now();
+  const watch = setTimeout(() => {
+    if (!state.uprising.analyzing) return;
+    try {
+      if (typeof reportClientError === "function")
+        reportClientError("analyze", "uprising analyze watchdog: still running after 10min");
+    } catch (e) {}
+    state.uprising.analyzing = false;
+    try { uprConvHide(); } catch (e) {}
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+    toast(t("swt_analyze_stuck") || "Анализ завис — попробуйте ещё раз", "err");
+  }, 600000);
   try {
     // bulk чанками, чтобы мини-прогресс под сегментом показывал ход
     // (один запрос на сотни DDS висит минутами без отклика)
@@ -656,7 +718,8 @@ async function uprAnalyze() {
     if (names.length) uprConvShow(names.length);
     for (let i = 0; i < names.length; i += CH) {
       const r = await api("/api/uprising_convert", { method: "POST",
-        body: JSON.stringify({ root: uprSrcRoot(), names: names.slice(i, i + CH) }) });
+        body: JSON.stringify({ root: uprSrcRoot(), names: names.slice(i, i + CH) }),
+        timeout: 180000 });
       const j = await r.json();
       if (j && j.ok) {
         acc.converted += j.converted || 0;
@@ -683,6 +746,7 @@ async function uprAnalyze() {
     } else toast(lastErr, "err");
   } catch (e) { toast(String((e && e.message) || e), "err"); }
   finally {
+    try { clearTimeout(watch); } catch (e) {}
     state.uprising.analyzing = false;
     uprConvHide();
     if (btn) { btn.disabled = false; btn.textContent = label; }
@@ -695,6 +759,68 @@ function uprPrice(cat, name) {
     const v = ((state.uprising.prices || {})[cat] || {})[name || ""];
     return (v === undefined || v === null) ? "" : String(v).trim();
   } catch (e) { return ""; }
+}
+
+// стат species для настроек юнита (cost/cp_cost/...): чтение из
+// /api/uprising_prices (stats), запись — через /api/species_stat
+function uprStat(cat, name, col) {
+  try {
+    const rec = (((state.uprising.stats || {})[cat] || {})[name || ""]) || {};
+    const v = rec[col];
+    return (v === undefined || v === null) ? "" : String(v).trim();
+  } catch (e) { return ""; }
+}
+
+// запись статов юнита/предмета в species-файл (cost/cp_cost): тот же
+// /api/species_stat, что у кампании (cmpWriteStats) — бэкенд правит первым
+// файлом со строкой sysname. По возврату вливаем в кэши и перерисовываем
+// карту — шильдик с cost обновляется динамически
+function uprWriteStats(cat, name, stats) {
+  const root = uprSrcRoot();
+  if (!root || !name) return Promise.resolve(false);
+  return api("/api/species_stat", { method: "POST",
+    body: JSON.stringify({ root, cat, name, stats, save: true }) })
+    .then(r => r.json())
+    .then(async j => {
+      if (!j || !j.ok) {
+        toast((typeof cmpStatErr === "function"
+          ? cmpStatErr(j, cat, name, stats)
+          : ((j && j.error) || "error")), "err");
+        return false;
+      }
+      if (j.skipped && j.skipped.length) {
+        toast((t("cpg_stat_skipped") || "Не записано в {file} ({cols}): нет таких колонок")
+          .replace("{file}", ((j.path || "").split(/[\\/]/).pop() || ""))
+          .replace("{cols}", j.skipped.join(", ")), "err");
+      }
+      const st = state.uprising.stats[cat] || (state.uprising.stats[cat] = {});
+      const cur = st[name] || (st[name] = {});
+      Object.keys(stats).forEach(k => { cur[k] = stats[k]; });
+      if (stats.cost !== undefined) {
+        const pr = state.uprising.prices[cat] || (state.uprising.prices[cat] = {});
+        pr[name] = stats.cost;
+      }
+      try {
+        cmpSyncFileTabs(j.path, (j.cells || []).map(c => (
+          { row: c.row, col: c.col, value: c.value })));
+      } catch (e) {}
+      if (!j.saved) {
+        try {
+          await guardedSave("file", j.path, async target => {
+            if (!target) return;
+            const sj = await saveAsTo(j.path, "file", target);
+            if (sj.ok && sj.saved) {
+              toast((t("save_success") || "Сохранено") + " → " + sj.dst, "ok");
+              try { await noteExternalTreeChange(target); } catch (e) {}
+            }
+            else toast((sj.error || t("save_failed") || "save failed"), "err");
+          }, false);
+        } catch (e) {}
+      }
+      renderUprising();
+      return true;
+    })
+    .catch(e => { toast(String((e && e.message) || e), "err"); return false; });
 }
 
 // автокомплит строго из своего файла: cars — cars.xml, squads — squads.xml,
@@ -728,12 +854,13 @@ async function uprLoad(reset, seq) {
     hideOwn();
     return;
   }
-  const j = await r.json();
+  const j = await r.json().catch(e => null);
   // пока грузились — стартовало новое поколение (смена источника, повторный
-  // клик): чужой файл не трогаем, иконки не перезаписываем
+  // клик): чужой файл не трогаем, иконки не перезаписываем; спиннером
+  // владеет новое поколение — свой не гасим
   if (my !== state.uprising.loadSeq) return;
-  if (!j.ok) {
-    toast(j.error || "error", "err");
+  if (!j || !j.ok) {
+    toast((j && j.error) || "error", "err");
     hideOwn();
     // файл пропал (источник закрыт/удалён): не оставлять старые строки —
     // иначе висит фантомная карта от прошлого файла
@@ -747,10 +874,14 @@ async function uprLoad(reset, seq) {
   state.uprising.sel = -1;
   state.uprising.variant = 0;
   uprMarkClean();
+  // первый рендер — сразу по строкам, не дожидаясь иконок: скелет карты
+  // (секторы, чипы-плейсхолдеры) виден мгновенно, иконки подтянутся следом;
+  // раньше await icons_data блокировал любую отрисовку на секунды
+  renderUprising();
+  hideOwn();
   await uprEnsureIcons(my);   // один запрос карты URL — иконки видны на первом рендере
   if (my !== state.uprising.loadSeq) return;
   renderUprising();
-  hideOwn();
 }
 
 function renderUprising() {
@@ -760,6 +891,12 @@ function renderUprising() {
   const st = main ? main.scrollTop : 0;
   renderUprSector();
   if (main) main.scrollTop = st;
+  // досмотр зависших иконок чипов (рваный коннект без error): один проход
+  // через 5с после отрисовки; предыдущий таймер сбрасываем
+  try {
+    if (uprImgSweepT) clearTimeout(uprImgSweepT);
+    uprImgSweepT = setTimeout(() => { uprImgSweepT = 0; uprReloadImages(); }, 5000);
+  } catch (e) {}
 }
 
 // перечитать строки карты с сервера после undo/redo (без сброса dirty:
@@ -1030,10 +1167,9 @@ function uprOpenColors() {
     shield.className = "upr-sec-shield";
     const cap = UPR_CAPITALS[s.num] && uprImgFaction(UPR_CAPITALS[s.num]) === uprImgFaction(uprZoneKey(s.num, s.faction));
     shield.innerHTML = `<span class="upr-shield-wrap">${uprShieldSvg(s.num, uprZoneColor(s.num, s.faction).solid, 30)}<b class="upr-shield-num${cap ? " cap" : ""}">${s.num}</b></span>`;
-    // локализованное имя награды + серый sysname
     const nameRow = document.createElement("div");
     nameRow.className = "upr-sec-name";
-    nameRow.innerHTML = `<span>${t("upr_sector_reward").replace("{n}", s.num)}</span><span class="upr-sector-sys">sector_${s.num}_reward</span>`;
+    nameRow.innerHTML = `<span>${escapeHtml((t("upr_sector_reward") || "Награда сектора {n}").replace("{n}", String(s.num)))}</span><span class="upr-sector-sys">sector_${s.num}_reward</span>`;
     const sel = document.createElement("select");
     [["", "upr_color_auto"], ...Object.keys(UPR_COLORS).map(k => [k, "upr_col_" + k])]
       .forEach(([v, lk]) => {
@@ -1398,6 +1534,178 @@ function uprSetPanel(open) {
   if (state.uprising.rows) renderUprising();
 }
 
+// заголовки секций — иконки вместо текста (assets/Campaign/UnitSet,
+// как кампания): squads=infantry, cars=light_vehicle, tanks=tank,
+// helicopters=heli, inventory_items=supply_vehicle. Текст — в title/alt,
+// нет файла — откат на подпись; extra — приписка справа (счётчик)
+var UPR_CAT_ICONS = {
+  squads: "infantry.webp",
+  cars: "light_vehicle.webp",
+  tanks: "tank.webp",
+  helicopters: "heli.webp",
+  inventory_items: "supply_vehicle.webp",
+};
+function uprCatTitle(titleEl, cat, extra) {
+  const label = (t("upr_cat_" + cat) || cat) + (extra || "");
+  titleEl.title = t("upr_cat_" + cat) || cat;
+  const f = UPR_CAT_ICONS[cat];
+  if (!f) { titleEl.textContent = label; return; }
+  const img = document.createElement("img");
+  img.className = "cmp-sec-icon";
+  img.src = "/assets/campaign/UnitSet/" + f;
+  img.alt = label;
+  img.draggable = false;
+  img.onerror = () => { try { titleEl.textContent = label; } catch (e) {} };
+  titleEl.appendChild(img);
+  if (extra) {
+    const s = document.createElement("span");
+    s.className = "cmp-sec-count";
+    s.textContent = extra;
+    titleEl.appendChild(s);
+  }
+}
+
+// вид иконок юнитов: «slot» (слоты эксперимента, дефолт — первая кнопка
+// активна) или «classic» (визуал побайтово как до эксперимента + squads
+// 72x72). Флаг один глобальный (localStorage tsh_upr_icon_view), кнопки —
+// в шапках вкладок карты и кампании, чипы всех панелей и редактора
+// следуют флагу через guard в vehDecor/squadNum + CSS body.upr-view-classic
+function uprIconView() {
+  try {
+    return localStorage.getItem("tsh_upr_icon_view") === "classic"
+      ? "classic" : "slot";
+  } catch (e) { return "slot"; }
+}
+function uprViewApply() {
+  try {
+    document.body.classList.toggle("upr-view-classic",
+      uprIconView() === "classic");
+  } catch (e) {}
+  uprViewPaint();
+}
+function uprViewPaint() {
+  const v = uprIconView();
+  document.querySelectorAll(".upr-view-btn").forEach(b => {
+    const on = b.dataset.view === v;
+    b.classList.toggle("sel", on);
+    try { b.setAttribute("aria-pressed", on ? "true" : "false"); } catch (e) {}
+  });
+}
+// пара кнопок-переключателей без текста для заголовка панели (первая —
+// слот: фон unitslot_main + иконка пехоты внутри, вторая — просто иконка);
+// свежий узел каждый раз — шапки перестраиваются при каждом рендере
+function uprViewToggle() {
+  const g = document.createElement("span");
+  g.className = "upr-view-toggle";
+  g.setAttribute("role", "group");
+  const v = uprIconView();
+  [["slot", true], ["classic", false]].forEach(([vv, composite]) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "upr-view-btn" + (vv === v ? " sel" : "");
+    b.dataset.view = vv;
+    const lab = t("upr_view_" + vv) || vv;
+    b.title = lab;
+    b.setAttribute("aria-label", lab);
+    try { b.setAttribute("aria-pressed", vv === v ? "true" : "false"); } catch (e) {}
+    const img = document.createElement("img");
+    img.src = "/assets/campaign/UnitSet/infantry.webp";
+    img.alt = "";
+    img.draggable = false;
+    if (composite) {
+      const slot = document.createElement("span");
+      slot.className = "upr-view-slot";
+      slot.appendChild(img);
+      b.appendChild(slot);
+    } else b.appendChild(img);
+    b.onclick = () => uprSetIconView(vv);
+    g.appendChild(b);
+  });
+  return g;
+}
+function uprSetIconView(v) {
+  if (v !== "slot" && v !== "classic") return;
+  try { localStorage.setItem("tsh_upr_icon_view", v); } catch (e) {}
+  uprViewApply();
+  // перерендер всех мест с чипами: панель сектора карты, панель кампании,
+  // редактор рандомайзера (у каждого свой рендер — зовём что доступно)
+  try { if (state.uprising.rows) renderUprising(); } catch (e) {}
+  try { if (typeof cmpPaintPanel === "function") cmpPaintPanel(); } catch (e) {}
+  try { if (typeof edRender === "function") edRender(); } catch (e) {}
+}
+
+// локализация имён юнитов на чипах: «on» (дефолт — первая кнопка активна)
+// показывает имя из locale-XML (state.nameMap: проект+мод+игра+GameAssets),
+// «без» — сырой sysname. Нет записи — всегда sysname. Флаг один глобальный
+// (localStorage tsh_upr_unit_loc), кнопки-без-текста — в шапках рядом
+// с переключателем вида иконок; чипы следуют флагу через uprUnitName
+function uprUnitLoc() {
+  try {
+    return localStorage.getItem("tsh_upr_unit_loc") === "off" ? false : true;
+  } catch (e) { return true; }
+}
+function uprUnitName(sys) {
+  const s = String(sys == null ? "" : sys);
+  if (!s) return s;
+  try {
+    if (uprUnitLoc() && state.nameMap && state.nameMap[s])
+      return state.nameMap[s];
+  } catch (e) {}
+  return s;
+}
+function uprLocPaint() {
+  const v = uprUnitLoc() ? "on" : "off";
+  document.querySelectorAll(".upr-loc-btn").forEach(b => {
+    const on = b.dataset.loc === v;
+    b.classList.toggle("sel", on);
+    try { b.setAttribute("aria-pressed", on ? "true" : "false"); } catch (e) {}
+  });
+}
+// иконка-переводчик: облачко + «A» (вкл), то же перечёркнутое (выкл).
+// Буква внутри SVG — часть картинки, текстовых подписей у кнопок нет
+// (название — только в title/aria-label из словаря)
+function uprLocIcon(on) {
+  const slash = on ? ""
+    : '<line x1="5" y1="20" x2="19" y2="4"/>';
+  return '<svg viewBox="0 0 24 24" width="22" height="22" fill="none"'
+    + ' stroke="currentColor" stroke-width="2" stroke-linejoin="round">'
+    + '<path d="M4 5h16v10H9l-5 4V5z"/>'
+    + '<text x="12" y="14.5" text-anchor="middle" font-size="8"'
+    + ' fill="currentColor" stroke="none" font-family="Segoe UI,sans-serif"'
+    + ' font-weight="700">A</text>' + slash + "</svg>";
+}
+// пара кнопок-переключателей без текста для заголовка панели (рядом
+// с uprViewToggle); свежий узел каждый раз — шапки перестраиваются
+function uprLocToggle() {
+  const g = document.createElement("span");
+  g.className = "upr-view-toggle upr-loc-toggle";
+  g.setAttribute("role", "group");
+  const v = uprUnitLoc() ? "on" : "off";
+  ["on", "off"].forEach(vv => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "upr-loc-btn" + (vv === v ? " sel" : "");
+    b.dataset.loc = vv;
+    const lab = t("upr_loc_" + vv) || vv;
+    b.title = lab;
+    b.setAttribute("aria-label", lab);
+    try { b.setAttribute("aria-pressed", vv === v ? "true" : "false"); } catch (e) {}
+    b.innerHTML = uprLocIcon(vv === "on");
+    b.onclick = () => uprSetUnitLoc(vv);
+    g.appendChild(b);
+  });
+  return g;
+}
+function uprSetUnitLoc(v) {
+  const nv = v === "off" ? "off" : "on";
+  try { localStorage.setItem("tsh_upr_unit_loc", nv); } catch (e) {}
+  uprLocPaint();
+  // имена запечены в чипах при рендере — перерисовать всё как вид иконок
+  try { if (state.uprising.rows) renderUprising(); } catch (e) {}
+  try { if (typeof cmpPaintPanel === "function") cmpPaintPanel(); } catch (e) {}
+  try { if (typeof edRender === "function") edRender(); } catch (e) {}
+}
+
 // url иконки юнита/предмета карты Uprising по sysname (сначала готовая webp,
 // затем старый поиск dds; нет иконки = плейсхолдер категории cat, не 404)
 function uprIconUrl(name, cat) {
@@ -1412,7 +1720,8 @@ function uprIconUrl(name, cat) {
 
 // категорийный плейсхолдер чипа (прямой URL готовой webp из плоского
 // assets/UprisingMap, без бэкенда).
-// Предметы с префиксом wpn_ получают собственный wpn_placeholder.webp.
+// Предметы с префиксом wpn_ получают собственный wpn_placeholder.webp,
+// остальные предметы — тот же плейсхолдер, что отряды (squads).
 function uprPlaceholderUrl(cat, name) {
   if ((name || "").toLowerCase().startsWith("wpn_"))
     return "/assets/UprisingMap/wpn_placeholder.webp";
@@ -1426,11 +1735,179 @@ function uprPlaceholderUrl(cat, name) {
   }
 }
 
+// Единая иконка чипа для карты, кампании и cfg-редактора: плейсхолдер
+// категории ставится МГНОВЕННО под спиннер (предметы — squads-плейсхолдер),
+// одиночный запрос — только после готового батча и в фоне (до батча сотни
+// синглов душили сервер по HTTP/1.0, а чипы висели пустыми). Реальная
+// иконка подменяет плейсхолдер; недолёт сингла — остаёмся на плейсхолдере.
+// src — чужой источник ({map, ready}, кампания держит свою карту иконок).
+function uprChipIcon(img, chip, name, cat, src) {
+  if (!img) return;
+  // имя/категория — на img для досмотра недогруженных (uprReloadImages)
+  img.dataset.uprName = name || "";
+  img.dataset.uprCat = cat || "";
+  // ховер/выбранное — один раз на чип (все три рендера идут через хелпер)
+  if (chip && !chip.dataset.uprStBound) {
+    chip.dataset.uprStBound = "1";
+    chip.addEventListener("mouseenter", () => uprChipHover(chip, true));
+    chip.addEventListener("mouseleave", () => uprChipHover(chip, false));
+  }
+  const ph = (typeof uprPlaceholderUrl === "function")
+    ? (uprPlaceholderUrl(cat, name) || "") : "";
+  const ready = src ? !!src.ready
+    : ((typeof uprIconsReady !== "undefined") && uprIconsReady);
+  const icons = (src && src.map)
+    || ((typeof uprIconMap !== "undefined" && uprIconMap) || {});
+  const pending = (typeof uprPendingIcons !== "undefined")
+    && uprPendingIcons.has(name);
+  const du = icons[name] || "";
+  if (chip) chip.classList.add("upr-loading");
+  const showReal = url => {
+    img.dataset.uprReal = "1";
+    if (!img.dataset.uprBase) img.dataset.uprBase = url;
+    img.src = url;
+    uprChipStatePaint(chip, img);
+  };
+  img.onload = () => {
+    if (!img.dataset.uprReal) return; // плейсхолдер встал — ждём реальную
+    if (typeof cmpSpanChip === "function") {
+      try { cmpSpanChip(chip, img); } catch (e) { /* noop */ }
+    }
+    if (chip && !pending) chip.classList.remove("upr-loading");
+  };
+  img.onerror = () => {
+    // реальная не долетела (битый data-URL) — остаёмся на плейсхолдере
+    if (chip && !pending) chip.classList.remove("upr-loading");
+  };
+  if (du) { if (chip && ph) chip.classList.add("upr-chip-ph"); showReal(du); return; }
+  if (ph) { if (chip) chip.classList.add("upr-chip-ph"); img.src = ph; }
+  if (!ready) return; // до батча синглы не дёргаем — батч всё закроет
+  // имя добавлено после батча (правка): фоновый сингл с одним повтором
+  // (оборванный коннект WinError 10054), затем — честный плейсхолдер
+  const solo = new Image();
+  solo.onload = () => showReal(solo.src);
+  solo.onerror = () => {
+    if (solo.dataset.uprRetry) {
+      if (chip && !pending) chip.classList.remove("upr-loading");
+      return;
+    }
+    solo.dataset.uprRetry = "1";
+    let url = uprIconUrl(name, cat);
+    if (!String(solo.src).startsWith("data:")) url += "&retry=1";
+    solo.src = url;
+  };
+  solo.src = uprIconUrl(name, cat);
+}
+
 // карта иконок: sysname -> data-URL webp (один запрос до первого рендера).
 // Чипы — прямые <img> из памяти: ноль конвертации, спрайта и HTTP-запросов.
 // Имён вне карты (правки после загрузки) добираются одиночным
 // /api/uprising_icon (там тоже webp-first).
 let uprIconMap = {};
+// досмотр недогруженных чипов (рваный коннект без error/onload):
+// застрял на плейсхолдере после батча или висит реальная — прогнать
+// через uprChipIcon заново; возвращает число перезапущенных
+function uprReloadImages() {
+  const wrap = $("#upr-wrap");
+  if (!wrap) return 0;
+  const ready = (typeof uprIconsReady !== "undefined") && uprIconsReady;
+  let n = 0;
+  wrap.querySelectorAll("img.upr-chip-icon").forEach(img => {
+    if (!img.isConnected) return;
+    const name = img.dataset.uprName || "";
+    if (!name) return;
+    const real = !!img.dataset.uprReal;
+    let ok = false;
+    try { ok = img.complete && img.naturalWidth > 0; } catch (e) {}
+    if (ok && real) return;
+    if (!real && !ready) return; // батч ещё летит — он всё закроет
+    try {
+      const chip = (img.closest && img.closest(".upr-chip")) || img.parentNode;
+      delete img.dataset.uprReal;
+      uprChipIcon(img, chip, name, img.dataset.uprCat || "");
+      n++;
+    } catch (e) {}
+  });
+  return n;
+}
+let uprImgSweepT = 0;
+// состояния иконок чипов (ховер/выбранное): {name:{hover:url,selected:url}}
+// с бэкенда (/api/uprising_icon_states, сиблинги _preselected/_selected и
+// _o/_s тем же dds->webp в CustomImages). Выбранное бьёт ховер; нет пары —
+// базовая иконка, как раньше
+let uprIconStates = {};
+async function uprEnsureIconStates(root, names) {
+  root = root || "";
+  if (!root || !names || !names.length) return;
+  try {
+    const r = await api("/api/uprising_icon_states", { method: "POST",
+      body: JSON.stringify({ root, names }), timeout: 60000 });
+    const j = await r.json();
+    if (!j || !j.ok) return;
+    Object.assign(uprIconStates, j.states || {});
+    // состояния долетели позже иконок: перекрасить выбранные чипы обеих карт
+    document.querySelectorAll("#upr-wrap img.upr-chip-icon, #cmp-wrap img.upr-chip-icon")
+      .forEach(img => {
+        const chip = (img.closest && img.closest(".upr-chip")) || img.parentNode;
+        if (chip) uprChipStatePaint(chip, img);
+      });
+  } catch (e) {}
+}
+// выбранное (.sel кампания, .picked восстание) vs базовое: подмена src;
+// ховер — только через uprChipHover (иначе гонка с предзагрузкой)
+function uprChipStatePaint(chip, img) {
+  if (!chip) return;
+  try {
+    img = img || (chip.querySelector ? chip.querySelector("img.upr-chip-icon") : null);
+    if (!img || !img.dataset.uprReal) return;
+    const st = uprIconStates[img.dataset.uprName || ""] || null;
+    const sel = chip.classList.contains("sel") || chip.classList.contains("picked");
+    const base = img.dataset.uprBase || "";
+    if (sel && st && st.selected) { if (img.src !== st.selected) img.src = st.selected; }
+    else if (!sel && base && img.src !== base) img.src = base;
+  } catch (e) {}
+}
+function uprChipHover(chip, on) {
+  if (!chip) return;
+  try {
+    const img = chip.querySelector ? chip.querySelector("img.upr-chip-icon") : null;
+    if (!img || !img.dataset.uprReal) return;
+    const st = uprIconStates[img.dataset.uprName || ""] || null;
+    const sel = chip.classList.contains("sel") || chip.classList.contains("picked");
+    if (on && !sel && st && st.hover && img.src !== st.hover) {
+      const pre = new Image();
+      pre.onload = () => {
+        try {
+          if (chip.matches(":hover") && !chip.classList.contains("sel") &&
+              !chip.classList.contains("picked")) img.src = st.hover;
+        } catch (e) {}
+      };
+      pre.src = st.hover;
+    } else if (!on) uprChipStatePaint(chip, img);
+  } catch (e) {}
+}
+// кнопка add (обе карты): ховер и открытое окно — add_unit_h.webp,
+// иначе add_unit.webp (_h предзагружен один раз)
+var UPR_ADD_SRC = "/assets/UprisingMap/add_unit.webp",
+    UPR_ADD_HOV = "/assets/UprisingMap/add_unit_h.webp";
+function uprAddBtn(add, img) {
+  if (!add || !img || add.dataset.uprAddBound) return;
+  add.dataset.uprAddBound = "1";
+  add.addEventListener("mouseenter", () => {
+    if (img.src !== UPR_ADD_HOV) img.src = UPR_ADD_HOV;
+  });
+  add.addEventListener("mouseleave", () => {
+    if (!add.classList.contains("open") && img.src !== UPR_ADD_SRC) img.src = UPR_ADD_SRC;
+  });
+}
+function uprAddOpen(add, on) {
+  if (!add) return;
+  try {
+    add.classList.toggle("open", !!on);
+    const img = add.querySelector ? add.querySelector("img.upr-chip-add-icon") : null;
+    if (img) img.src = on ? UPR_ADD_HOV : UPR_ADD_SRC;
+  } catch (e) {}
+}
 // батч долетел целиком: "" в карте = иконки точно нет (можно сразу
 // категорийный плейсхолдер); иначе чипы добирают одиночными запросами
 let uprIconsReady = false;
@@ -1466,7 +1943,10 @@ async function uprEnsureIcons(seq) {
       body: JSON.stringify({ root, names }), timeout: 60000 });
     const j = await r.json();
     if (j && j.ok) {
-      if (fresh()) { uprIconMap = j.icons || {}; uprIconsReady = true; }
+      if (fresh()) {
+        uprIconMap = j.icons || {}; uprIconsReady = true;
+        uprEnsureIconStates(root, names);
+      }
     } else throw new Error("icons_data not ok");
   } catch (e) {
     if (!fresh()) return;   // устарело — ретрай за новым поколением
@@ -1478,7 +1958,10 @@ async function uprEnsureIcons(seq) {
       const r2 = await api("/api/uprising_icons_data", { method: "POST",
         body: JSON.stringify({ root, names }), timeout: 60000 });
       const j2 = await r2.json();
-      if (j2 && j2.ok && fresh()) { uprIconMap = j2.icons || {}; uprIconsReady = true; }
+      if (j2 && j2.ok && fresh()) {
+        uprIconMap = j2.icons || {}; uprIconsReady = true;
+        uprEnsureIconStates(root, names);
+      }
     } catch (e2) { /* чипы доберут одиночными + onerror-ретраем */ }
   }
   // фон: icons_data видит только готовый webp-индекс (встроенные + уже
@@ -1491,6 +1974,127 @@ async function uprEnsureIcons(seq) {
   if (fresh() && !state.uprising.preloading) {
     const miss = names.filter(n => !uprIconMap[n]);
     if (miss.length) uprPreloadMissing(root, my, miss);
+  }
+}
+
+// ЭКСПЕРИМЕНТ «слот техники» (откат: удалить блок до uprConvShow + вызовы
+// vehDecor в трёх рендерах + CSS .veh + /api/unit_capacity): чип cars/tanks/
+// helicopters — фон unitslot_main.webp, sysname сверху, у кого people_capacity
+// > 0 — тёмная полоса мест «0/N» между именем и иконкой.
+var VEH_CATS = ["cars", "tanks", "helicopters"];
+let vehCapMap = null, vehCapLoading = false, vehCapRoot = "";
+function vehCapEnsure(root) {
+  root = root || ((typeof uprSrcRoot === "function") ? uprSrcRoot() : "");
+  if (vehCapLoading || (vehCapMap && vehCapRoot === (root || ""))) {
+    if (vehCapMap) vehCapFlush();
+    return;
+  }
+  vehCapLoading = true;
+  vehCapRoot = root || "";
+  api("/api/unit_capacity", { method: "POST",
+    body: JSON.stringify({ root: vehCapRoot }), timeout: 30000 })
+    .then(r => r.json())
+    .then(j => {
+      if (j && j.ok) { vehCapMap = j.capacity || {}; vehCapFlush(); }
+    })
+    .catch(() => {})
+    .finally(() => { vehCapLoading = false; });
+}
+function vehCapFlush() {
+  document.querySelectorAll("[data-veh-cap-pending]").forEach(chip => {
+    const sys = chip.dataset.vehCapPending;
+    delete chip.dataset.vehCapPending;
+    const cap = parseInt((vehCapMap || {})[sys], 10) || 0;
+    if (cap > 0) vehCapStripe(chip, cap);
+  });
+}
+// полоса — оверлей вне потока: высоту слота не меняет, резерв не нужен
+function vehCapStripe(chip, cap) {
+  if (!chip || !cap || chip.querySelector(":scope > .upr-chip-veh-cap")) return;
+  const s = document.createElement("span");
+  s.className = "upr-chip-veh-cap";
+  s.textContent = "0/" + cap;
+  chip.appendChild(s);
+}
+function vehDecor(chip, sys, cat, root) {
+  if (!chip || !sys) return;
+  // вид «classic» — как до эксперимента: декора слота нет вообще
+  if (typeof uprIconView === "function" && uprIconView() === "classic") return;
+  // ЭКСПЕРИМЕНТ «слот пехоты»: squads — фон unitslot_main_inf + sysname +
+  // шильдик N/N слева внизу (members), полосы мест нет
+  const isVeh = VEH_CATS.indexOf(cat) !== -1;
+  const isInf = cat === "squads";
+  if (!isVeh && !isInf) return;
+  chip.classList.add(isVeh ? "veh" : "inf");
+  // слот пехоты широкий (148): в сетке кампании занимает 2 колонки, как
+  // техника — cmpSpanChip ставит cmp-span только широким иконкам, квадратные
+  // 60x60 его не получают и наезжают друг на друга (сетка 72px)
+  if (isInf) chip.classList.add("cmp-span");
+  if (!chip.querySelector(":scope > .upr-chip-veh-sys")) {
+    const nm = document.createElement("span");
+    nm.className = "upr-chip-veh-sys";
+    // подпись — локализованное имя при включённой локализации, sysname
+    // всегда остаётся в подсказке чипа
+    nm.textContent = (typeof uprUnitName === "function") ? uprUnitName(sys) : sys;
+    nm.title = sys;
+    chip.insertBefore(nm, chip.firstChild);
+  }
+  if (isVeh) {
+    if (vehCapMap) {
+      const cap = parseInt(vehCapMap[sys], 10) || 0;
+      if (cap > 0) vehCapStripe(chip, cap);
+    } else {
+      chip.dataset.vehCapPending = sys;
+      vehCapEnsure(root);
+    }
+    return;
+  }
+  squadNum(chip, sys, root);
+}
+// ЭКСПЕРИМЕНТ «слот пехоты»: шильдик численности N/N слева внизу слота
+let squadMap = null, squadLoading = false, squadRoot = "";
+function squadEnsure(root) {
+  root = root || ((typeof uprSrcRoot === "function") ? uprSrcRoot() : "");
+  if (squadLoading || (squadMap && squadRoot === (root || ""))) {
+    if (squadMap) squadFlush();
+    return;
+  }
+  squadLoading = true;
+  squadRoot = root || "";
+  api("/api/squad_size", { method: "POST",
+    body: JSON.stringify({ root: squadRoot }), timeout: 30000 })
+    .then(r => r.json())
+    .then(j => {
+      if (j && j.ok) { squadMap = j.squad || {}; squadFlush(); }
+    })
+    .catch(() => {})
+    .finally(() => { squadLoading = false; });
+}
+function squadFlush() {
+  document.querySelectorAll("[data-squad-pending]").forEach(chip => {
+    const sys = chip.dataset.squadPending;
+    delete chip.dataset.squadPending;
+    squadNum(chip, sys);
+  });
+}
+function squadNum(chip, sys, root) {
+  if (!chip || !sys) return;
+  // вид «classic» — счётчика N/N нет (как до эксперимента)
+  if (typeof uprIconView === "function" && uprIconView() === "classic") return;
+  let el = chip.querySelector(":scope > .upr-chip-inf-num");
+  if (!el) {
+    el = document.createElement("span");
+    el.className = "upr-chip-inf-num";
+    chip.appendChild(el);
+  }
+  if (squadMap) {
+    const n = parseInt(squadMap[sys], 10) || 0;
+    el.textContent = n > 0 ? n + "/" + n : "";
+    el.style.display = n > 0 ? "" : "none";
+  } else {
+    el.style.display = "none";
+    chip.dataset.squadPending = sys;
+    squadEnsure(root);
   }
 }
 
@@ -1552,11 +2156,13 @@ async function uprPreloadMissing(root, my, miss) {
       if (fresh()) uprConvPaint(Math.min(i + CH, miss.length), miss.length);
     }
     // всё дожато: остаток miss — честные missing (dds нет нигде), их чипы
-    // висели со спиннером — снять одним финальным рендером
+    // висели со спиннером — снять одним финальным рендером; состояния
+    // (ховер/выбранное) предпрогрев тоже дожал — подтянуть их URL
     if (fresh()) {
       let had = false;
       miss.forEach(n => { if (uprPendingIcons.delete(n)) had = true; });
       if (had) renderUprising();
+      uprEnsureIconStates(root, miss);
     }
   } finally {
     state.uprising.preloading = false;
@@ -1576,6 +2182,10 @@ function uprChipEditor(container, items, onChange, meta) {
     items.forEach((it, i) => {
       const chip = document.createElement("span");
       chip.className = "upr-chip upr-card";
+      // категория для иконок/плейсхолдеров/слотов — на весь чип, а не только
+      // внутрь if (it.name): vehDecor внизу использует её вне того блока
+      // (ReferenceError «phCat is not defined» гасил все непустые сектора)
+      const phCat = meta && meta.cat;
       const known = !state.uprising.sysnames.length
         || state.uprising.sysnames.includes(it.name);
       if (!known) { chip.classList.add("unknown"); }
@@ -1583,25 +2193,37 @@ function uprChipEditor(container, items, onChange, meta) {
       if (key) chip.dataset.key = key;
       if (key && state.uprising.pick.has(key)) chip.classList.add("picked");
       if (it.name) {
-        // подсказка: sysname + сложность + количество
+        // подсказка: локализованное имя + sysname + сложность + количество
+        // (правки идут по sysname — он виден всегда, локализация лишь сверху)
         const ud = (key && uprUdiffs()[key]) || "";
-        chip.title = it.name
+        const dn = (typeof uprUnitName === "function") ? uprUnitName(it.name) : it.name;
+        chip.title = (dn !== it.name ? dn + "\n" : "") + it.name
           + `\n${t("upr_tip_diff") || "Сложность"}: ${ud || "—"}`
           + ` · ${t("upr_tip_count") || "Количество"}: ×${it.n}`
           + (known ? "" : `\n${t("upr_unknown") || "?"}`);
-        // неизменяемый визуальный счётчик слева вверху: череп + сложность × кол-во
-        const badge = document.createElement("span");
-        badge.className = "upr-chip-badge" +
-          ((meta && meta.cat === "inventory_items") ? " upr-chip-badge-items" : "");
+        // два шильдика: сложность с черепом — верхний левый угол голым
+        // текстом, цена+количество — справа внизу в пилюле с подложкой
+        // (как было), в один шильдик: «цена ×n»; цены нет — пилюля только
+        // с количеством (цены/статы уже в памяти после prices-запроса)
+        const effDiff = ud || ((meta && meta.num) ? uprZoneDiff(meta.num) : "—");
+        const bcost = uprPrice(meta && meta.cat, it.name);
+        const df = document.createElement("span");
+        df.className = "upr-chip-corner-diff";
         const skull = document.createElement("img");
         skull.className = "upr-chip-skull";
         skull.src = "/assets/UprisingMap/difficulty.webp";
         skull.alt = "";
         skull.draggable = false;
+        const dt = document.createElement("span");
+        dt.textContent = effDiff;
+        df.append(skull, dt);
+        chip.appendChild(df);
+        const badge = document.createElement("span");
+        badge.className = "upr-chip-badge" +
+          ((meta && meta.cat === "inventory_items") ? " upr-chip-badge-items" : "");
         const bt = document.createElement("span");
-        const effDiff = ud || ((meta && meta.num) ? uprZoneDiff(meta.num) : "—");
-        bt.textContent = effDiff + " ×" + it.n;
-        badge.append(skull, bt);
+        bt.textContent = (bcost ? bcost + " " : "") + "×" + it.n;
+        badge.appendChild(bt);
         chip.appendChild(badge);
         // карточка = чистая иконка реального размера (техника 136x72,
         // пехота 60x60, предметы свои размеры); без подложки и подписей.
@@ -1613,38 +2235,10 @@ function uprChipEditor(container, items, onChange, meta) {
         img.draggable = false;
         img.loading = "lazy";
         img.alt = "";
-        // фолбек долгой загрузки: спиннер + затемнение чипа; onload снимает
-        // только если иконка уже не в ожидании конвертации (иначе плейсхолдер,
-        // подставленный на время предзагрузки, гасил бы спиннер сразу)
-        chip.classList.add("upr-loading");
-        img.onload = () => {
-          if (!uprPendingIcons.has(it.name)) chip.classList.remove("upr-loading");
-        };
-        const phCat = meta && meta.cat;
-        const du = uprIconMap[it.name];
-        if (du) img.src = du;
-        else if (uprIconsReady && uprPlaceholderUrl(phCat, it.name)) {
-          // батч подтвердил: готовой иконки пока нет — категорийный
-          // плейсхолдер (без рамки/фона); идёт предзагрузка — спиннер поверх,
-          // иконка подменится сама, когда чанк дожмётся
-          chip.classList.add("upr-chip-ph");
-          if (!uprPendingIcons.has(it.name)) chip.classList.remove("upr-loading");
-          img.src = uprPlaceholderUrl(phCat, it.name);
-        } else img.src = uprIconUrl(it.name, phCat);
-        // оборванный коннект (HTTP/1.0 без keep-alive, WinError 10054) бил чип
-        // навсегда: однократный повтор — data-URL свежим одиночным запросом,
-        // одиночный новым коннектом; 503 бэкенда (файл блокирован) тоже лечится
-        img.onerror = () => {
-          if (img.dataset.uprRetry) {
-            if (!uprPendingIcons.has(it.name)) chip.classList.remove("upr-loading");
-            return;
-          }
-          img.dataset.uprRetry = "1";
-          let solo = uprIconUrl(it.name, phCat);
-          if (!img.src.startsWith("data:")) solo += "&retry=1";
-          img.src = solo;
-        };
-        chip.appendChild(img);
+  // иконка через общий хелпер: мгновенный плейсхолдер категории
+  // под спиннером, реальная подменяет (см. uprChipIcon)
+  uprChipIcon(img, chip, it.name, phCat);
+  chip.appendChild(img);
       } else {
         chip.textContent = "?";
       }
@@ -1662,6 +2256,8 @@ function uprChipEditor(container, items, onChange, meta) {
         uprDragStart(e, meta, items, i, chip);
       };
       chip.oncontextmenu = e => uprChipCtx(e, meta, items, i);
+      // ЭКСПЕРИМЕНТ «слот техники»: фон + sysname + полоса мест
+      vehDecor(chip, it.name, phCat, uprSrcRoot());
       container.appendChild(chip);
     });
     const add = document.createElement("button");
@@ -1675,6 +2271,7 @@ function uprChipEditor(container, items, onChange, meta) {
     addImg.alt = "";
     addImg.draggable = false;
     add.appendChild(addImg);
+    uprAddBtn(add, addImg);
     add.onclick = ev => { ev.stopPropagation(); uprAddNew(meta, items, onChange, add); };
     container.appendChild(add);
     // вставка из буфера правым кликом по пустому месту секции
@@ -1715,7 +2312,7 @@ function uprTogglePick(meta, name) {
   // точечно, без renderUprising (см. выше про dblclick)
   const on = state.uprising.pick.has(k);
   document.querySelectorAll(`.upr-chip[data-key="${CSS.escape(k)}"]`)
-    .forEach(c => c.classList.toggle("picked", on));
+    .forEach(c => { c.classList.toggle("picked", on); uprChipStatePaint(c); });
 }
 
 // клик по любому месту мимо чипа снимает выделение (жёлтая рамка)
@@ -1730,7 +2327,7 @@ function setupUprDeselect() {
         t.closest(".swt-ac-panel") || t.closest(".ctx-menu"))) return;
     state.uprising.pick.clear();
     document.querySelectorAll(".upr-chip.picked")
-      .forEach(c => c.classList.remove("picked"));
+      .forEach(c => { c.classList.remove("picked"); uprChipStatePaint(c); });
   }, true);
 }
 
@@ -1743,6 +2340,10 @@ let uprEditPopCloser = null;
 function uprCloseEditPop() {
   if (uprEditPopEl) { uprEditPopEl.remove(); uprEditPopEl = null; }
   uprEditPopCloser = null;
+  // окно с кнопки add закрыто — снять подсветку _h (обе карты)
+  try {
+    document.querySelectorAll(".upr-chip-add.open").forEach(a => uprAddOpen(a, false));
+  } catch (e) {}
 }
 
 // добавление: та же модалка, что редактирование (все 3 параметра сразу),
@@ -1758,6 +2359,8 @@ function uprAddNew(meta, items, onChange, anchorEl) {
     }
     onChange();
   }, true);
+  // окно правки открыто с кнопки add — подсветка _h до закрытия
+  uprAddOpen(anchorEl, true);
 }
 
 function uprEditPop(chipEl, meta, items, i, onChange, isNew) {
@@ -1825,6 +2428,27 @@ function uprEditPop(chipEl, meta, items, i, onChange, isNew) {
   dinp.placeholder = "1-6";
   dinp.spellcheck = false;
   rowD.appendChild(dinp);
+  // cost — запись в cost species-файла (шильдик обновится сам); у юнитов
+  // ещё cp_cost. Зеркало кампании (cmpEditPop): те же колонки, тот же API
+  const rowP = mkRow(t("cpg_cost") || "Cost",
+    t("cpg_cost_d") || "запись в cost species-файла");
+  const prc = document.createElement("input");
+  prc.type = "text";
+  prc.className = "mini";
+  prc.spellcheck = false;
+  prc.value = uprPrice(meta.cat, it.name);
+  rowP.appendChild(prc);
+  let cpInp = null;
+  if (["squads", "tanks", "cars", "helicopters"].indexOf(meta.cat) !== -1) {
+    const rowC = mkRow(t("cpg_cp_cost") || "CP-стоимость",
+      t("cpg_cp_cost_d") || "запись в cp_cost");
+    cpInp = document.createElement("input");
+    cpInp.type = "text";
+    cpInp.className = "mini";
+    cpInp.spellcheck = false;
+    cpInp.value = uprStat(meta.cat, it.name, "cp_cost");
+    rowC.appendChild(cpInp);
+  }
   // цена скрыта везде (uprPrice/uprising_prices остаются в коде на будущее)
   // кнопки
   const btns = document.createElement("div");
@@ -1868,6 +2492,16 @@ function uprEditPop(chipEl, meta, items, i, onChange, isNew) {
           uprSetUdiff(newKey, uprUdiffs()[oldKey]);
           uprSetUdiff(oldKey, "");
         }
+        // статы species — только изменившееся и непустое, как у кампании
+        const diff = {};
+        const put = (col, el) => {
+          if (!el) return;
+          const sv = el.value.trim();
+          if (sv !== "" && sv !== uprStat(meta.cat, name, col)) diff[col] = sv;
+        };
+        put("cost", prc);
+        put("cp_cost", cpInp);
+        if (Object.keys(diff).length) uprWriteStats(meta.cat, name, diff);
         state.uprising.pick.delete(oldKey);
         state.uprising.pick.add(newKey);
       }
@@ -1890,7 +2524,8 @@ function uprEditPop(chipEl, meta, items, i, onChange, isNew) {
   };
   canB.onclick = e => { e.stopPropagation(); commit(false); };
   okB.onclick = e => { e.stopPropagation(); commit(true); };
-  [nm, cnt, dinp].forEach(el => {
+  [nm, cnt, dinp, prc, cpInp].forEach(el => {
+    if (!el) return;
     el.addEventListener("keydown", ev => {
       if (ev.key === "Enter") { ev.preventDefault(); commit(true); }
       else if (ev.key === "Escape") { ev.preventDefault(); commit(false); }
@@ -2020,27 +2655,12 @@ async function uprWriteCells(edits, summary) {
   return true;
 }
 
-// значения карты — в открытые таблицы того же файла (cells как в запросе)
+// значения карты — в открытые таблицы того же файла (cells как в запросе):
+// общий хелпер подменяет ячейки, красит дискету и помечает неактивные
+// вкладки stale (перерисуются при возврате — см. activateTab)
 function uprSyncFileTabs(cells) {
-  const np = normPath(state.uprising.path || "");
-  if (!np) return;
-  const si = state.uprising.sheetIndex || 0;
-  let active = false, any = false;
-  state.tabs.forEach(tb => {
-    if (tb.type !== "file" || !tb.fileData || !tb.fileData.rows) return;
-    if (normPath(tb.path || "") !== np) return;
-    if ((tb.sheetIndex || 0) !== si) return;   // другой лист того же файла
-    any = true;
-    cells.forEach(c => {
-      const row = tb.fileData.rows[c.row];
-      if (row && row.values && c.col < row.values.length) row.values[c.col] = c.value;
-    });
-    if (!tb.dirty) tb.dirty = true;
-    if (tb.id === state.activeTabId) active = true;
-  });
-  if (!any) return;
-  renderTabBar();
-  if (active && state.currentFile && state.currentFile.rows) renderGrid();
+  try { return syncFileTabsCells(state.uprising.path || "", cells, state.uprising.sheetIndex || 0); }
+  catch (e) { return false; }
 }
 
 function uprRemoveItems(list) {
@@ -2070,26 +2690,39 @@ function uprMoveItems(list, targetNum) {
   const groups = uprGroups();
   const tgt = groups.find(g => g.num === targetNum);
   if (!tgt || !tgt.list.length) return;
-  const edits = [];
   const moved = [], skipped = [];
-  list.forEach(it => {
+  // кэш разобранных ячеек: несколько переносимых стеков могут делить одну
+  // ячейку источника/цели — читаем её один раз, иначе повторный разбор
+  // брал бы исходное значение и затирал предыдущий перенос тем же батчем
+  const cache = new Map();
+  const cellItems = (ri, ci) => {
+    const k = ri + "|" + ci;
+    if (!cache.has(k))
+      cache.set(k, uprParseList(state.uprising.rows[ri].values[ci] || ""));
+    return cache.get(k);
+  };
+  (list || []).forEach(it => {
     if (!it.name) return;
     const ci = uprCatCol(it.cat);
     if (ci === -1) return;
     const tr = tgt.list[Math.min(it.vi, tgt.list.length - 1)];
-    const cur = uprParseList(state.uprising.rows[tr.ri].values[ci] || "");
+    const cur = cellItems(tr.ri, ci);
     if (cur.some(x => x.name === it.name)) { skipped.push(it); return; }
     cur.push({ name: it.name, n: it.n });
-    edits.push({ ri: tr.ri, ci, items: cur });
     // убрать из зоны-источника
     const src = groups.find(g => g.num === it.num);
     const sr = src && src.list[Math.min(it.vi, src.list.length - 1)];
     if (sr) {
-      edits.push({ ri: sr.ri, ci,
-        items: uprParseList(state.uprising.rows[sr.ri].values[ci] || "")
-          .filter(x => x.name !== it.name) });
+      const scur = cellItems(sr.ri, ci);
+      const si = scur.findIndex(x => x.name === it.name);
+      if (si !== -1) scur.splice(si, 1);
     }
     moved.push(it);
+  });
+  const edits = [];
+  cache.forEach((items, k) => {
+    const p = k.split("|");
+    edits.push({ ri: +p[0], ci: +p[1], items });
   });
   uprWriteCells(edits, (t("upr_h_move") || "Перенос в сектор {n} ({k} шт.)")
     .replace("{n}", targetNum).replace("{k}", moved.length));
@@ -2386,16 +3019,25 @@ function uprDragMove(e) {
     d.offY = d.sy - r.top;
     d.w = r.width;
     d.h = r.height;
-    const g = d.chipEl.cloneNode(true);
-    g.className = "upr-chip upr-card upr-drag-ghost";
+    // набор из 2+ — призрак из всех иконок (общий mkDragGhost),
+    // одиночка — клон чипа как раньше
+    let g;
     if (d.list.length > 1) {
-      const b = document.createElement("span");
-      b.className = "upr-ghost-n";
-      b.textContent = "×" + d.list.length;
-      g.appendChild(b);
+      const extra = [];
+      document.querySelectorAll("#uprising-tab .upr-chip.picked")
+        .forEach(c => { if (c !== d.chipEl) extra.push(c); });
+      g = mkDragGhost(d.chipEl, extra, d.list.length);
+    } else {
+      g = (typeof ghostStrip === "function"
+        ? ghostStrip(d.chipEl.cloneNode(true)) : d.chipEl.cloneNode(true));
+      g.className = "upr-chip upr-card upr-drag-ghost";
     }
     document.body.appendChild(g);
     d.ghost = g;
+    // курсор — левый верхний угол призрака (+12, как нативный DnD):
+    // точка хвата не сохраняется — иначе призрак, обрезанный до иконки,
+    // оказывается ровно по центру курсора
+    d.offX = 12; d.offY = 12;
     const lb = document.createElement("div");
     lb.className = "upr-drop-label";
     lb.hidden = true;
@@ -2413,7 +3055,8 @@ function uprDragMove(e) {
   uprSetHint(ok ? zone : null);
   d.over = ok ? num : 0;
   if (ok) {
-    d.label.textContent = (t("upr_drop_to") || "Перенести в зону {n}").replace("{n}", num);
+    d.label.textContent = (t("upr_drop_to") || "Перенести в зону {n}").replace("{n}", num)
+      + (d.list.length > 1 ? " ×" + d.list.length : "");
     d.label.hidden = false;
     d.label.style.left = (e.clientX + 14) + "px";
     d.label.style.top = (e.clientY + 16) + "px";
@@ -2440,10 +3083,13 @@ function uprDragEnd(e) {
         const only = state.uprising.pick.size === 1 && state.uprising.pick.has(k);
         state.uprising.pick.clear();
         document.querySelectorAll(".upr-chip.picked")
-          .forEach(c => c.classList.remove("picked"));
+          .forEach(c => { c.classList.remove("picked"); uprChipStatePaint(c); });
         if (!only) {
           state.uprising.pick.add(k);
-          if (d.chipEl && d.chipEl.isConnected) d.chipEl.classList.add("picked");
+          if (d.chipEl && d.chipEl.isConnected) {
+            d.chipEl.classList.add("picked");
+            uprChipStatePaint(d.chipEl);
+          }
         }
       }
     }
@@ -2509,9 +3155,11 @@ function renderUprSector() {
       const body = $("#upr-modal-body");
       body.innerHTML = "";
       uprFillSector(body, g, true);
+      const mvi = Math.min(state.uprising.variant, g.list.length - 1);
+      const msys = (g.list[mvi] || {}).sys || ("sector_" + g.num + "_reward");
       $("#upr-modal-title").innerHTML =
         `<span class="upr-title-shield">${uprShieldSvg(g.num, uprZoneColor(g.num, uprSectorFaction(g.num)).solid, 22)}</span> ` +
-        escapeHtml((t("upr_sector_reward") || "Награда сектора {n}").replace("{n}", String(g.num)));
+        escapeHtml((t("upr_sector_reward") || "Награда сектора {n}").replace("{n}", String(g.num)) + " · " + msys);
       if (modal) modal.hidden = false;
       return;
     }
@@ -2567,29 +3215,43 @@ function uprFillSector(root, g, horizontal) {
   });
   hsel.onchange = () => { uprSetZdiff(g.num, hsel.value); renderUprising(); };
   head.appendChild(hsel);
+  // переключатель вида иконок + переключатель локализации имён — в заголовке
+  // панели, справа (флекс)
+  try { head.appendChild(uprViewToggle()); } catch (e) {}
+  try { if (typeof uprLocToggle === "function") head.appendChild(uprLocToggle()); } catch (e) {}
   root.appendChild(head);
 
   const catsRow = document.createElement("div");
   catsRow.className = "upr-cats-row" + (horizontal ? " horiz" : "");
   UPRISING_CATS.forEach(cat => {
-    const ci = uprCatCol(cat);
-    if (ci === -1) return;
-    const sec = document.createElement("div");
-    sec.className = "upr-cat";
-    const title = document.createElement("div");
-    title.className = "upr-cat-title";
-    title.textContent = t("upr_cat_" + cat) || cat;
-    sec.appendChild(title);
-    const body = document.createElement("div");
-    body.className = "upr-cat-body";
-    const items = uprParseList(ci < row.values.length ? row.values[ci] : "");
-    uprChipEditor(body, items, () => {
-      // пустые чипы не пишем в файл
-      const cleaned = items.filter(x => x.name);
-      uprWriteCells([{ ri: rw.ri, ci, items: cleaned }]);
-    }, { num: g.num, vi: vi, cat: cat });
-    sec.appendChild(body);
-    catsRow.appendChild(sec);
+    // один битый блок не гасит всю панель: падение видно тостом с причиной
+    try {
+      const ci = uprCatCol(cat);
+      if (ci === -1) return;
+      const sec = document.createElement("div");
+      sec.className = "upr-cat";
+      const title = document.createElement("div");
+      title.className = "upr-cat-title";
+      uprCatTitle(title, cat);
+      sec.appendChild(title);
+      const body = document.createElement("div");
+      body.className = "upr-cat-body";
+      body.dataset.cat = cat;
+      const items = uprParseList(ci < row.values.length ? row.values[ci] : "");
+      uprChipEditor(body, items, () => {
+        // пустые чипы не пишем в файл
+        const cleaned = items.filter(x => x.name);
+        uprWriteCells([{ ri: rw.ri, ci, items: cleaned }]);
+      }, { num: g.num, vi: vi, cat: cat });
+      sec.appendChild(body);
+      catsRow.appendChild(sec);
+    } catch (err) {
+      try {
+        console.error("uprFillSector block failed:", g.num, cat, err);
+        toast("Сектор " + g.num + " · " + cat + ": " +
+          String((err && err.message) || err), "err");
+      } catch (e) {}
+    }
   });
   root.appendChild(catsRow);
 }
@@ -2634,6 +3296,8 @@ async function uprSave() {
 
 function setupUprising() {
   setupUprDeselect();
+  // применённый вид иконок slot/classic (класс на body переживает рендеры)
+  uprViewApply();
   // щиты карты — одним запросом в память, фоном (к открытию карты уже в кэше)
   uprPreloadShields();
   // сохранение карты — кнопка шапки и Ctrl+S (saveActive → uprSaveGuarded)
@@ -2647,7 +3311,7 @@ function setupUprising() {
     try {
       for (const k of Object.keys(uprShieldCache)) delete uprShieldCache[k];
     } catch (e) { /* noop */ }
-    uprLoad().then(() => uprPreloadShields()).catch(() => {});
+    uprLoad().then(() => { uprReloadImages(); uprPreloadShields(); }).catch(() => {});
   };
   $("#upr-open-grid").onclick = () => { if (state.uprising.path) openFile(state.uprising.path); };
   // рандомайзер — отдельная страница (кнопка в шапке слева от Проект|Игра|Мод)

@@ -26,10 +26,32 @@
 .upr-chip.upr-chip-ph:hover { outline: none; }
 /* кнопка-добавление — иконка upgrd_base.webp последней в ряду */
 .upr-chip-add { border: none; background: transparent; padding: 3px; cursor: pointer;
-  display: inline-flex; align-items: center; }
+  display: inline-flex; align-items: center; max-width: fit-content;
+  flex-grow: 0; flex-shrink: 0; }
 .upr-chip-add-icon { display: block; pointer-events: none; }
 .upr-chip-add:hover .upr-chip-add-icon { outline: 1px dashed var(--accent); }
+/* кнопка-add — своим рядом у левого края блока секции: во флекс-рядах
+   карты flex-basis:100% переносит её на новую строку, в сетке кампании
+   grid-column:1/-1 — ряд во всю ширину с прижатием влево; cfg-редактор
+   (upr-cfg-ed-drop) не тронут — там add остаётся в конце последнего ряда */
+#uprising-tab .upr-cat-body > .upr-chip-add {
+  flex-basis: 100%; margin-left: 0; margin-right: auto;
+  justify-content: flex-start; align-self: flex-start; }
+.upr-cat-body.upr-cfg-ed-drop > .upr-chip-add {
+  margin-left: auto; align-self: flex-end; }
+#campaign-tab .upr-cat-body > .upr-chip-add {
+  grid-column: 1 / -1; justify-self: start; }
 .upr-chip-icon { min-width: 32px; min-height: 32px; }
+/* иконка юнита на 5px ниже везде, кроме squads (пехота остаётся как была).
+   Оба редактора карт: категория висит на секции (.upr-cat-body[data-cat]).
+   veh-слоты техники исключены — там выверенная геометрия слота (имя сверху,
+   полоса мест top:27px), сдвиг иконки её сломает */
+.upr-cat-body[data-cat="cars"] .upr-chip:not(.veh) .upr-chip-icon,
+.upr-cat-body[data-cat="tanks"] .upr-chip:not(.veh) .upr-chip-icon,
+.upr-cat-body[data-cat="helicopters"] .upr-chip:not(.veh) .upr-chip-icon,
+.upr-cat-body[data-cat="inventory_items"] .upr-chip:not(.veh) .upr-chip-icon {
+  margin-top: 5px;
+}
 .upr-map {
   position: relative;
   flex: 1; min-width: 0; min-height: 0; overflow: hidden;
@@ -337,6 +359,15 @@ button.upr-map-btn.rnd {
   display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
   border: 1px solid var(--border); background: var(--bg-card); padding: 8px;
 }
+/* витрины иконок карты и cfg-редактора — те же зазоры, что кампания:
+    2px между чипами, все категории включая предметы */
+#uprising-tab .upr-cat-body,
+.upr-cat-body.upr-cfg-ed-drop { gap: 2px; }
+/* заголовки секций — иконки UnitSet вместо текста, как кампания
+    (52x28 в родном размере 1:1); счётчик рядом с иконкой — в ряд */
+.upr-cat-title .cmp-sec-icon { height: 28px; width: auto; display: block; }
+.upr-cat-title:has(.cmp-sec-icon) { display: flex; align-items: center; gap: 6px; }
+.upr-cat-title .cmp-sec-count { font-size: 12px; color: var(--text-mute); }
 .upr-chip {
   display: inline-flex; align-items: center; gap: 4px;
   border: 1px solid var(--border); background: var(--bg); padding: 2px 4px 2px 6px;
@@ -352,14 +383,22 @@ button.upr-map-btn.rnd {
 /* drag & drop элементов сектора на карту */
 .upr-chip { position: relative; cursor: grab; }
 .upr-chip:active { cursor: grabbing; }
-/* неизменяемый счётчик слева вверху чипа: череп + сложность × количество */
-.upr-chip-badge { position: absolute; top: 2px; left: 2px; display: flex;
-  align-items: center; gap: 3px; background: rgba(0,0,0,.34); border-radius: 0;
-  padding: 1px 5px 1px 2px; font-size: 10px; font-weight: 700; color: #fff;
+/* цена+количество справа внизу чипа — единственные с подложкой-пилюлей
+   (сложность — голым текстом вверху слева: .upr-chip-corner-diff).
+   Геометрия — как шильдик цены кампании (.cmp-price-badge в campaign.css):
+   тот же угол, фон, паддинги и шрифт */
+.upr-chip-badge { position: absolute; right: 4%; bottom: 2px; display: flex;
+  align-items: center; gap: 4px; background: rgba(0,0,0,.55);
+  padding: 2px 7px 2px 3px; font-size: 12px; font-weight: 700; color: #fff;
   pointer-events: none; z-index: 2; line-height: 1.4; }
-.upr-chip-skull { width: 13px; height: 13px; }
-/* чипы предметов: только смещение левее, остальное как у всех */
-.upr-chip-badge-items { top: 7%; left: 3%; }
+.upr-chip-skull { width: 16px; height: 16px; }
+/* угловой шильдик чипа без подложки и рамок (имя corner-diff: короткое diff занято кнопкой редактора): сложность с черепом — верхний левый угол голым текстом, читается тенью; подложка-пилюля — только у цены+количества */
+.upr-chip-corner-diff { position: absolute; left: 1%; top: 5px; display: flex;
+  align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: #fff;
+  border: none; background: none; padding: 0;
+  pointer-events: none; z-index: 2; line-height: 1.4; }
+/* чипы предметов: зеркало базового смещения (было top/left до переезда) */
+.upr-chip-badge-items { right: 3%; bottom: 7%; }
 .upr-chip.picked { outline: 2px solid var(--accent); background: rgba(232, 184, 75, .12); }
 .upr-chip.upr-chip-dragging { opacity: .35; }
 .upr-chip-name-text {
@@ -372,6 +411,11 @@ button.upr-map-btn.rnd {
   border-color: transparent; background: transparent;
   padding: 3px; min-width: 40px; min-height: 40px;
 }
+/* карточки витрин — впритык к иконке, как кампания, все категории
+    (текстовые чипы редактора не трогаем — у них нет .upr-card) */
+#uprising-tab .upr-cat-body .upr-chip.upr-card,
+.upr-cat-body.upr-cfg-ed-drop .upr-chip.upr-card {
+  padding: 0; border: none; }
 /* ховер иконки юнита: пунктирный outline */
 .upr-card:hover { outline: 1px dashed var(--border); }
 .upr-card.picked { outline: 2px solid var(--accent); }
@@ -380,6 +424,77 @@ button.upr-map-btn.rnd {
   background-repeat: no-repeat;
 }
 .upr-chip-icon.noicon { display: none; }
+/* ЭКСПЕРИМЕНТ «слот техники» (откат: удалить блок + vehDecor): чип
+   cars/tanks/helicopters — фон unitslot_main.webp, sysname сверху, тёмная
+   полоса мест 0/N; паддинги витрин перебиваем тем же весом селектора */
+.upr-chip.upr-card.veh { display: inline-flex; flex-direction: column;
+  align-items: center; justify-content: flex-start;
+  /* фон — реальный размер 148x110 без растяжения; в потоке только sysname
+     и иконка; полоса — оверлей поверх (высоту слота не меняет) */
+  background: url(/assets/campaign/unitslot_main.webp) center no-repeat;
+  min-width: 148px; min-height: 110px; }
+#uprising-tab .upr-cat-body .upr-chip.upr-card.veh,
+.upr-cat-body.upr-cfg-ed-drop .upr-chip.upr-card.veh,
+#campaign-tab .upr-cat-body .upr-chip.upr-card.veh {
+  padding: 3px 4px 5px; border: none; }
+/* витрина кампании: трек под слот — 2x72+2=146px; слот 148 переполнял бы
+   трек и съедал 2px зазор между чипами — ужато до трека (фон центрирован,
+   по 1px кропа с боков не видно) */
+#campaign-tab .upr-cat-body .upr-chip.upr-card.veh,
+#campaign-tab .upr-cat-body .upr-chip.upr-card.inf {
+  min-width: 146px; }
+.upr-chip-veh-sys { display: block; max-width: 100%; margin: 0 auto;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  text-align: center; font-size: 11px; color: #9fb3c8;
+  pointer-events: none; user-select: none; }
+.upr-chip-veh-cap { display: block; position: absolute;
+  /* оверлей вне потока: слева — от L-выреза (~17% ширины), справа — до
+     конца фона; top повторяет выверенное место (паддинг 3 + имя ~14 + 8) */
+  top: 27px; left: calc(17% + 1px); right: 0; background: rgba(0,0,0,.35);
+  color: #fff;
+  font-size: 10px; font-weight: 700; text-align: center; line-height: 1.15;
+  pointer-events: none; user-select: none; }
+.upr-chip.veh .upr-chip-icon { align-self: center; }
+/* ЭКСПЕРИМЕНТ «слот техники»: иконка чуть меньше родной (136x72 -> 124,
+   пропорции): в слоте 148 не впритык к краям; заодно перебиваем кампанийный
+   .cmp-span width:100%, чтобы размер не гулял от состояния загрузки */
+.upr-chip.upr-card.veh .upr-chip-icon { width: 124px; height: auto; }
+#campaign-tab .upr-cat-body .upr-chip.upr-card.veh.cmp-span .upr-chip-icon {
+  width: 124px; height: auto; }
+#campaign-tab .upr-cat-body .upr-chip.upr-card.inf.cmp-span .upr-chip-icon {
+  width: 72px; height: auto; }
+/* ЭКСПЕРИМЕНТ «слот техники»: страховка — призрак всегда только иконка
+   (фон/sysname/полоса/цена гасятся, даже если ghostStrip где-то не вызван) */
+.upr-drag-ghost.veh, .upr-drag-ghost .veh { background: transparent;
+  min-width: 0; min-height: 0; }
+.upr-drag-ghost .upr-chip-veh-sys, .upr-drag-ghost .upr-chip-veh-cap,
+.upr-drag-ghost .cmp-price-badge { display: none; }
+/* ЭКСПЕРИМЕНТ «слот пехоты» (откат: удалить блок + squadNum/squad_size):
+   чип squads — фон unitslot_main_inf.webp, sysname сверху (общий
+   .upr-chip-veh-sys), численность N/N слева внизу напротив цены */
+.upr-chip.upr-card.inf { display: inline-flex; flex-direction: column;
+  align-items: center; justify-content: flex-start;
+  /* фон — реальный размер 148x110 без растяжения, как у техники */
+  background: url(/assets/campaign/unitslot_main_inf.webp) center no-repeat;
+  min-width: 148px; min-height: 110px; }
+.upr-chip.inf .upr-chip-icon { align-self: center; }
+/* иконка отряда чуть крупнее родной 60x60 (+20%, замыливания почти нет);
+   авто-маржины сверху/снизу делят свободное место после sysname — иконка
+   встаёт по центру слота (в рядных чипах карты/редактора — по вертикали) */
+.upr-chip.upr-card.inf .upr-chip-icon { width: 72px; height: auto;
+  margin-top: auto; margin-bottom: auto; }
+#uprising-tab .upr-cat-body .upr-chip.upr-card.inf,
+.upr-cat-body.upr-cfg-ed-drop .upr-chip.upr-card.inf,
+#campaign-tab .upr-cat-body .upr-chip.upr-card.inf {
+  padding: 3px 4px 5px; border: none; }
+/* счётчик N/N: без фона, размером как цена (12px/1.4) */
+.upr-chip-inf-num { position: absolute; left: 2px; bottom: 2px;
+  background: transparent; color: #fff;
+  font-size: 12px; font-weight: 700; text-align: center; line-height: 1.4;
+  padding: 2px 5px; pointer-events: none; user-select: none; z-index: 2; }
+.upr-drag-ghost.inf, .upr-drag-ghost .inf { background: transparent;
+  min-width: 0; min-height: 0; }
+.upr-drag-ghost .upr-chip-inf-num { display: none; }
 .upr-card.unknown::after {
   position: absolute; top: 0; right: 2px; content: "?";
   color: #f2c500; font-weight: 700; font-size: 12px;
@@ -430,9 +545,13 @@ body.upr-resizing { user-select: none; cursor: col-resize; }
 .upr-drag-ghost {
   position: fixed; z-index: 1200; margin: 0; display: inline-flex; align-items: center; gap: 4px;
   pointer-events: none; background: var(--bg-elev); box-shadow: 0 10px 28px rgba(0,0,0,.55);
-  border-color: var(--accent); opacity: .95;
+  border-color: transparent; opacity: .95;
 }
 .upr-drag-ghost.upr-card { flex-direction: column; align-items: stretch; }
+/* призрак нескольких чипов: иконки в ряд (переопределяет column выше),
+   бейдж «+N» — тот же .upr-ghost-n */
+.upr-drag-ghost-multi { flex-direction: row; align-items: center; padding: 3px; }
+.upr-drag-ghost-multi > .upr-chip { margin: 0; flex: none; }
 .upr-ghost-n { background: var(--accent); color: #1a1608; border-radius: 10px; padding: 1px 8px; font-size: 11px; font-weight: 700; }
 .upr-drop-label {
   position: fixed; z-index: 1201; pointer-events: none;
@@ -527,4 +646,57 @@ input.upr-unknown { border-color: #c9a227; background: rgba(201,162,39,.08); }
 .upr-cfg-ed-search { flex: 1; min-width: 120px; }
 .upr-cfg-ed-drop { min-height: 44px; border-radius: 4px; }
 .upr-cfg-ed-pop { z-index: 1200; }
+/* переключатель вида иконок slot/classic в заголовке панели: две кнопки
+   без текста, активная подсвечена как .upr-variant.sel; первая кнопка —
+   композит (фон unitslot_main + иконка пехоты внутри), вторая — иконка */
+.upr-view-toggle { display: inline-flex; align-items: center; gap: 4px;
+  margin-left: auto; flex: none; }
+.upr-view-btn { border: 1px solid transparent; background: transparent;
+  padding: 2px; cursor: pointer; border-radius: 4px;
+  display: inline-flex; align-items: center; }
+.upr-view-btn > img { display: block; height: 22px; width: auto;
+  pointer-events: none; }
+.upr-view-slot { display: inline-flex; align-items: center;
+  justify-content: center; width: 34px; height: 25px; pointer-events: none;
+  background: url(/assets/campaign/unitslot_main.webp) center / contain no-repeat; }
+.upr-view-slot img { display: block; height: 15px; width: auto; }
+.upr-view-btn:hover { border-color: var(--border); }
+.upr-view-btn.sel { border-color: var(--accent);
+  background: rgba(232, 184, 75, .12); }
+/* переключатель локализации имён юнитов вкл/выкл: две кнопки-иконки без
+   текста рядом с видом иконок (тот же .upr-view-toggle-ряд, своего
+   margin-left:auto нет — сидит вплотную справа); иконка — инлайн-SVG
+   «облачко+A», выкл — перечёркнутая и приглушённая */
+.upr-loc-toggle { margin-left: 0; }
+.upr-loc-btn { border: 1px solid transparent; background: transparent;
+  padding: 2px; cursor: pointer; border-radius: 4px;
+  display: inline-flex; align-items: center; color: #9fb3c8; }
+.upr-loc-btn > svg { display: block; height: 22px; width: auto;
+  pointer-events: none; }
+.upr-loc-btn[data-loc="off"] > svg { opacity: .55; }
+.upr-loc-btn:hover { border-color: var(--border); }
+.upr-loc-btn.sel { border-color: var(--accent);
+  background: rgba(232, 184, 75, .12); color: #e8b84b; }
+/* вид «classic» (body.upr-view-classic): визуал как до эксперимента
+   «слот» — чистая иконка без фона/sysname/полос (JS-guard в vehDecor уже
+   не создаёт узлы, ниже страховка + возврат госта к accent из бэкапа);
+   поверх бэкапа — только squads 72x72 по data-cat секции */
+body.upr-view-classic .upr-chip-veh-sys,
+body.upr-view-classic .upr-chip-veh-cap,
+body.upr-view-classic .upr-chip-inf-num { display: none; }
+body.upr-view-classic .upr-chip.upr-card.veh,
+body.upr-view-classic .upr-chip.upr-card.inf {
+  background: transparent; min-width: 40px; min-height: 40px;
+  flex-direction: row; padding: 3px; }
+body.upr-view-classic #uprising-tab .upr-cat-body .upr-chip.upr-card.veh,
+body.upr-view-classic #uprising-tab .upr-cat-body .upr-chip.upr-card.inf,
+body.upr-view-classic .upr-cat-body.upr-cfg-ed-drop .upr-chip.upr-card.veh,
+body.upr-view-classic .upr-cat-body.upr-cfg-ed-drop .upr-chip.upr-card.inf {
+  padding: 0; border: none; }
+body.upr-view-classic .upr-chip.upr-card.veh .upr-chip-icon,
+body.upr-view-classic .upr-chip.upr-card.inf .upr-chip-icon {
+  width: auto; margin-top: 0; margin-bottom: 0; }
+body.upr-view-classic .upr-drag-ghost { border-color: var(--accent); }
+body.upr-view-classic .upr-cat-body[data-cat="squads"] .upr-chip.upr-card .upr-chip-icon {
+  width: 72px; height: auto; }
 

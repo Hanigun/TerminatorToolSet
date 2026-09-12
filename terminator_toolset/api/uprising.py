@@ -47,6 +47,25 @@ def register_uprising(app, ctx):
         root = store.normal(data.get("root", ""))
         return jsonify(upr.prices(root))
 
+    # ЭКСПЕРИМЕНТ «слот техники» (откат: удалить роут + capacity в сервисе
+    # + vehDecor на фронте)
+    @app.route("/api/unit_capacity", methods=["POST"])
+    def api_unit_capacity():
+        """Пассажирские места техники: {sysname: people_capacity}
+        из cars/tanks/helicopters.xml — для полосы 0/N на слоте."""
+        data = request.get_json(silent=True) or {}
+        root = store.normal(data.get("root", ""))
+        return jsonify(upr.capacity(root))
+
+    # ЭКСПЕРИМЕНТ «слот пехоты» (откат: удалить роут + squad_size в сервисе)
+    @app.route("/api/squad_size", methods=["POST"])
+    def api_squad_size():
+        """Размер отряда: {sysname: members-total} из squads.xml —
+        для шильдика N/N слева внизу слота."""
+        data = request.get_json(silent=True) or {}
+        root = store.normal(data.get("root", ""))
+        return jsonify(upr.squad_size(root))
+
     # ---------- Иконки юнитов/предметов для карты Uprising ----------
     # (owned by Uprising: species parsing, icon cache, dds conversion)
     @app.route("/api/uprising_icon")
@@ -153,6 +172,16 @@ def register_uprising(app, ctx):
         data = request.get_json(silent=True) or {}
         root = store.normal(data.get("root", ""))
         return jsonify(upr.icons_data(root, data.get("names")))
+
+    @app.route("/api/uprising_icon_states", methods=["POST"])
+    def api_uprising_icon_states():
+        """Состояния иконок {name: {hover, selected}} одним запросом:
+        сиблинги исходника (_preselected/_selected, _o/_s) тем же dds->webp
+        в CustomImages; URL готовых webp (кэш браузера). Нет сиблинга —
+        ключа нет, фронт оставляет базовую иконку."""
+        data = request.get_json(silent=True) or {}
+        root = store.normal(data.get("root", ""))
+        return jsonify(upr.icon_states(root, data.get("names")))
 
     @app.route("/api/uprising_sprite", methods=["POST"])
     def api_uprising_sprite():
@@ -294,10 +323,14 @@ def register_uprising(app, ctx):
     @app.route("/api/swt_sources", methods=["POST"])
     def api_swt_sources():
         """Словари значений для выпадающих подсказок SWT-редактора: sysname
-        юнитов, экипажа, пресетов улучшений (отдельно car/tank/squad/heli),
-        предметов, пресетов магазинов из species-файлов открытого проекта
-        И/ИЛИ распакованной игры. Нет ни того, ни другого - пустые списки,
-        редактор просто остаётся с текстовым вводом (фолбек без ошибок)."""
+        юнитов (общий + строго по типам car/tank/squad/heli), экипажа,
+        пресетов улучшений (отдельно car/tank/squad/heli), предметов,
+        пресетов магазинов из species-файлов открытого проекта
+        И/ИЛИ распакованной игры. Скоп по пути файла: DLC .swt видит
+        ТОЛЬКО свой DLC-оверлей, базовый .swt - только базу. Нет ни того,
+        ни другого - пустые списки, редактор просто остаётся с текстовым
+        вводом (фолбек без ошибок)."""
         data = request.get_json(silent=True) or {}
         return jsonify(upr.swt_sources(store.normal(data.get("project_root", "")),
-                                       store.normal(data.get("unpacked_path", ""))))
+                                       store.normal(data.get("unpacked_path", "")),
+                                       store.normal(data.get("path", ""))))
