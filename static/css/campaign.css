@@ -1,0 +1,214 @@
+/* campaign.css — редактор кампании: GlobalMap-фон + плитки + боковая панель · порядок каскада: CSS_ORDER в scripts/verify-ui-wiring.mjs */
+/* Каркас — клон uprising.css (.upr-wrap/.upr-map/.upr-main): та же геометрия,
+   вместо SVG-секторов поверх текстуры — сетка плиток .cmp-tiles */
+.cmp-wrap { flex: 1; display: flex; gap: 10px; min-height: 0; position: relative; }
+/* оверлей загрузки: затемнение + спиннер по центру */
+.cmp-loading { position: absolute; inset: 0; z-index: 50; display: flex;
+  align-items: center; justify-content: center; background: rgba(0,0,0,.45); }
+.cmp-loading[hidden] { display: none; }
+.cmp-loading-spin { width: 46px; height: 46px; border-radius: 50%;
+  border: 4px solid rgba(255,255,255,.25); border-top-color: #fff;
+  animation: spin .8s linear infinite; }
+.cmp-map {
+  position: relative;
+  flex: 1; min-width: 0; min-height: 0; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); background: var(--bg-card); padding: 8px;
+}
+/* GlobalMap.webp — 3840x2160, пропорции 16/9. Точный размер ставит cmpFitMap():
+   contain-фит в доступную область, поэтому бокс всегда ровно под обрез фона —
+   чёрных полос нет, плитки (inset:0) не выходят за края изображения */
+.cmp-map-box { position: relative; display: block; flex: none; aspect-ratio: 16 / 9; max-width: 100%; max-height: 100%; min-height: 120px; min-width: 200px; background: #101216; }
+.cmp-map-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; display: block; }
+/* сетка плиток поверх фона: всегда закрывает весь кадр целиком.
+   Колонки/ряды ставит cmpFitTiles() под текущий размер бокса и число плиток;
+   плитки тянутся (1fr), лишнего места и скролла нет */
+.cmp-tiles {
+  position: absolute; inset: 0; z-index: 2;
+  display: grid; gap: 10px; padding: 12px; overflow: hidden;
+  pointer-events: none;
+}
+.cmp-tiles > * { pointer-events: auto; }
+/* заглушка плитки (тело добьём артом позже): градиент + sysname.
+   Размер задаёт сетка (1fr) — здесь только минимум под контент */
+.cmp-tile {
+  display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden;
+  border: 1px dashed var(--border); background: rgba(16,18,22,.72);
+  color: var(--text-mute); font-size: 11px; cursor: pointer;
+  transition: transform .16s ease-out, box-shadow .16s ease-out;
+}
+/* pop-up при наведении: чуть вверх и вперёд (масштаб) + тень.
+   Жёлтой рамки на ховере нет — акцент только у выбранного (.sel) */
+.cmp-tile:hover {
+  transform: translateY(-4px) scale(1.03); z-index: 3;
+  box-shadow: 0 10px 24px rgba(0,0,0,.5); }
+.cmp-tile.sel { border-style: solid; border-color: var(--accent);
+  /* выбранная остаётся приподнятой, как на ховере */
+  transform: translateY(-4px) scale(1.03); z-index: 3;
+  box-shadow: 0 10px 24px rgba(0,0,0,.5); }
+/* выбранная плитка: фон заголовка 130,100,64, имя жирнее */
+.cmp-tile.sel .cmp-tile-head { background: rgb(130, 100, 64); }
+.cmp-tile.sel .cmp-tile-name { color: #fff; }
+/* цель переноса + вспышка после дропа */
+.cmp-tile.drop-hint { border-style: solid; border-color: var(--accent); outline: 2px solid var(--accent); }
+.cmp-tile.flash { animation: cmpFlash .7s ease-out; }
+@keyframes cmpFlash { 0% { outline: 3px solid var(--accent); } }
+.cmp-tile-head { display: flex; align-items: center; gap: 6px; padding: 4px 6px; }
+/* имя — гибкий элемент ряда: тянется и режется многоточием, иконки
+   (.cmp-head-icons с margin-left: auto) всегда прижаты к правому краю */
+.cmp-tile-name { flex: 1 1 auto; min-width: 0; color: #fff;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmp-tile-body {
+  flex: 1; display: flex; align-items: stretch; justify-content: stretch;
+  background: linear-gradient(135deg, rgba(255,255,255,.05), rgba(255,255,255,.01));
+  min-height: 0; overflow: hidden; padding: 0;
+}
+.cmp-tile-body img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* мини-прогресс конвертации иконок: те же .upr-conv* из uprising.css,
+   якорь — шапка страницы кампании */
+#campaign-tab .swt-head { position: relative; }
+/* боковая панель — клон .upr-main (без кнопки сворачивания).
+    Ширина-фикс ровно под 4 квадрата 72px без остатка справа:
+    294 (4*72+3*2 зазоры) + 10 (паддинги 4*2 + бордер 1*2 тела) +
+    114 (рельс) + 17 (классический скроллбар, место всегда
+    зарезервировано через scrollbar-gutter) = 435. При любом размере
+    окна в ряд встают 4 иконки 72px; панель уже (max-width 65%) —
+    auto-fill сам роняет лишние колонки.
+    Тяга ресайзера ставит фикс поверх, даблклик сбрасывает на эти 435 */
+.cmp-main { flex: 0 0 435px; min-width: 300px; max-width: 65%;
+  display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+/* заголовок поселения — на всю ширину (окно юнитов + рельс вкладок) */
+.cmp-panel-head { flex: 0 0 auto; }
+/* ряд под заголовком: окно предметов + рельс вкладок; зазора между
+   блоком иконок и кнопками нет — впритык */
+.cmp-main-row { flex: 1; min-height: 0; display: flex; gap: 0;
+  overflow: hidden; }
+/* вкладки Shop/Hire/Supplies — вертикальный рельс у правого края панели:
+    картинки-кнопки button_{shop,hire,supplies}_{n,o,p,a}.webp
+    (p=выбрана, a=покой, n=ховер, o=пресс); нет картинки — CSS-тонирование.
+    Рельс тянется на всю высоту ряда (stretch), кнопки — компактной
+    группой сверху (flex-start + gap 8): враспор больше не разносим,
+    иначе на высоком окне Shop/Hire/Supplies разъезжаются далеко
+    друг от друга. Верх первой кнопки — вровень с верхом сетки (34px):
+    у всех вкладок первая секция начинается с шапки одинаковой высоты
+    (у товаров — невидимая распорка), отдельных отступов не нужно */
+.cmp-panel-body { flex: 1; min-width: 0; overflow: auto;
+  /* место под скроллбар резервируем всегда: ширина контента стабильна,
+     сетка не прыгает при появлении/исчезновении прокрутки */
+  scrollbar-gutter: stable; }
+.cmp-tabs { flex: 0 0 114px; display: flex; flex-direction: column; gap: 8px;
+  padding-top: 34px; justify-content: flex-start; }
+/* display:flex выше бьёт атрибут hidden (как .sidebar/.icon-btn): без этих
+   правил рельс вкладок и заголовок светились бы и без выбранного поселения */
+.cmp-tabs[hidden], .cmp-panel-head[hidden] { display: none; }
+.cmp-tab-btn {
+  background: transparent; border: none; padding: 0; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center;
+  flex: none;
+}
+.cmp-tab-btn img { width: 100%; height: auto; display: block; }
+/* ховер неактивной — кадр "n" ставит JS; CSS-фильтр только фолбэку
+   без картинок; активная всегда оранжевая */
+.cmp-tab-btn.noimg:not(.active):hover { filter: brightness(1.25); }
+.cmp-tab-btn .cmp-tab-label { display: none; }
+.cmp-tab-btn.noimg img { display: none; }
+.cmp-tab-btn.noimg { border: 1px solid var(--border); background: var(--bg-card);
+  color: var(--text-mute); padding: 8px 4px; }
+.cmp-tab-btn.noimg .cmp-tab-label { display: block; font-size: 12px; font-weight: 700; }
+.cmp-tab-btn.noimg:hover { color: var(--text); }
+.cmp-tab-btn.noimg.active { background: var(--accent); border-color: var(--accent);
+  color: #14161a; }
+/* сетка чипов — колонки строго по 72px через auto-fill: при дефолтной
+    ширине панели (435) в ряд встают ровно 4 квадрата 72px без остатка
+    справа (4*72+3*2=294 = весь контент 304-10 хрома); панель шире/уже —
+    колонок больше/меньше, тоже без остатка. Широкие иконки занимают
+    2 колонки (.cmp-span ставит cmpSpanChip по факту пропорций).
+    Только кампания, Uprising не трогаем */
+.cmp-panel-body .upr-cat-body { display: grid;
+  grid-template-columns: repeat(auto-fill, 72px);
+  gap: 2px; padding: 4px; align-items: start; }
+/* чип впритык к иконке (без паддингов/рамки ширина чипа = ширине иконки) */
+#campaign-tab .upr-cat-body .upr-chip.upr-card { padding: 0; border: none; }
+#campaign-tab .upr-cat-body .upr-chip.cmp-span { grid-column: span 2; }
+#campaign-tab .upr-cat-body .upr-chip.cmp-span .upr-chip-icon {
+  width: 100%; height: auto; display: block; }
+/* плюс-кнопка — тоже строго 72px (свой паддинг 3px убираем) */
+#campaign-tab .upr-cat-body .upr-chip-add { padding: 0; }
+/* иконки кампании — в родных размерах файлов (техника 136x72/148x72,
+    предметы 72x72/148x72, пехота 60x60): без масштаба, как .upr-card базы */
+/* шильдик цены: монетка goodwill + сумма, правый нижний угол иконки.
+   База — .upr-chip-badge (шрифт 10px, паддинги 1px 5px), здесь +20% */
+.cmp-price-badge {
+  position: absolute; right: 4%; bottom: 2px;
+  display: flex; align-items: center; gap: 4px;
+  background: rgba(0,0,0,.55); padding: 2px 7px 2px 3px;
+  font-size: 12px; font-weight: 700; color: #fff;
+  pointer-events: none; z-index: 2; line-height: 1.4;
+}
+.cmp-price-coin { width: 16px; height: 16px; display: block; }
+/* ассортимент: заголовок поселения + секции категорий. Чипы — голые
+   .upr-chip.upr-card из uprising.css (иконка + шильдик цены .cmp-price-badge),
+   без подписей под иконкой; зазоры — свои, вдвое теснее базы.
+   Заголовок — флекс под иконки особенностей 28px (res_sup_base_0):
+   имя слева с обрезкой, иконки прижаты к правому краю */
+.cmp-panel-head { font-size: 20px; font-weight: 700; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cmp-panel-name { flex: 1; min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+/* подсказка поселения под заголовком: wrapped-ряд шапки на всю ширину
+   (панель не раздвигается — текст переносится внутри); значок ? —
+   акцентный кружок в стиле программы; text-transform сбрасываем, иначе
+   у базы (cmp-head-base) описание тоже ушло бы в верхний регистр */
+.cmp-desc { flex: 1 1 100%; min-width: 0; display: flex; gap: 8px;
+  align-items: flex-start; margin: 2px 0 0;
+  font-size: 13px; font-weight: 400; line-height: 1.5; text-transform: none;
+  color: var(--text-mute); }
+.cmp-desc-q { flex: none; width: 18px; height: 18px; margin-top: 1px;
+  border-radius: 50%; background: var(--accent); color: #14161a;
+  font-size: 12px; font-weight: 700; line-height: 18px;
+  display: inline-flex; align-items: center; justify-content: center; }
+.cmp-desc-t { flex: 1 1 auto; min-width: 0; }
+/* иконки особенностей живут в шапке плитки базы (см. ниже): справа,
+   высотой 28px */
+.cmp-head-icons { flex: none; margin-left: auto; display: flex; gap: 3px;
+  align-items: center; }
+.cmp-head-icons img { width: var(--cmp-head-icon, 28px);
+  height: var(--cmp-head-icon, 28px); display: block; }
+/* база res_sup_base_0: имя заглавными везде (плитка + заголовок панели),
+   шапка плитки — высотой под иконки (та же переменная + 6px) */
+.cmp-tile-base .cmp-tile-name { text-transform: uppercase; font-weight: 700; }
+.cmp-tile-base .cmp-tile-head { min-height: calc(var(--cmp-head-icon, 28px) + 6px); }
+.cmp-panel-head.cmp-head-base { text-transform: uppercase; }
+/* выбранный юнит набора (Ctrl+клик): акцентная рамка, как у плитки .sel */
+#campaign-tab .upr-cat-body .upr-chip.sel { outline: 2px solid var(--accent);
+  outline-offset: -2px; }
+/* заголовки секций крупнее базовых .upr-cat-title (11px) на 30%;
+    только кампания, Uprising не трогаем */
+.cmp-sec .upr-cat-title { font-size: 14px; line-height: 18px; }
+/* заголовок секции — иконка UnitSet вместо текста (52x28 в родном
+    размере 1:1, без масштаба): squads=infantry, cars=light_vehicle,
+    tanks=tank, helicopters=heli, inventory_items=supply_vehicle.
+    Текст остаётся в title/alt, при битой картинке JS откатывает на подпись */
+.cmp-sec .upr-cat-title .cmp-sec-icon { height: 28px; width: auto; display: block; }
+/* распорка товаров: невидима, но держит те же 28px иконки + 6px отступа,
+   что видимые шапки найма — высота колонок одинакова на всех вкладках */
+.cmp-sec .upr-cat-title.cmp-sec-spacer { visibility: hidden; }
+.cmp-sec { margin-bottom: 14px; }
+/* пустое состояние: оверлей поверх области карты */
+.cmp-nofile {
+  position: absolute; inset: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(10, 12, 16, .72);
+  padding: 16px; pointer-events: auto;
+}
+.cmp-nofile[hidden] { display: none; }
+.cmp-nofile-card { max-width: 420px; text-align: center; }
+.cmp-nofile .swt-empty { padding: 16px 20px 10px; }
+.cmp-nofile-actions { display: flex; gap: 8px; justify-content: center; padding-bottom: 16px; }
+/* раздвижная боковая панель */
+.cmp-resizer {
+  flex: 0 0 6px; align-self: stretch; padding: 0;
+  border: none; background: transparent; cursor: col-resize;
+}
+.cmp-resizer:hover { background: var(--accent); opacity: .35; }
+body.cmp-resizing { user-select: none; cursor: col-resize; }

@@ -1,0 +1,57 @@
+<!-- partials/page-campaign.html — редактор кампании (магазины поселений) -->
+        <!-- Campaign editor (shop presets of the base game, tiles over GlobalMap) -->
+        <section class="tab-panel" id="campaign-tab" data-tab-id="campaign">
+          <div class="swt-page">
+            <div class="swt-head">
+              <div class="swt-head-main">
+                <h2 class="cm-title" data-i18n="cpg_title">Редактор Компании</h2>
+                <div class="cm-sub" id="cmp-file" data-i18n="cpg_sub">Магазины поселений (shop_presets.xml базовой игры)</div>
+              </div>
+              <button class="btn" id="cmp-reload" data-i18n="upr_reload" hidden>Обновить</button>
+              <button class="btn" id="cmp-analyze" data-i18n="swt_analyze" hidden>Анализ</button>
+              <button class="btn" id="cmp-open-grid" data-i18n="upr_open_grid" hidden>Открыть в таблице</button>
+              <div class="upr-src-wrap">
+                <div class="src-seg" id="cmp-src" data-pos="0" role="tablist">
+                  <span class="src-seg-ind" aria-hidden="true"></span>
+                  <button type="button" class="src-seg-btn" data-src="project" role="tab"><span data-i18n="tree_tab_project">Проект</span></button>
+                  <button type="button" class="src-seg-btn" data-src="game" role="tab"><span data-i18n="tree_tab_game">Игра</span></button>
+                  <button type="button" class="src-seg-btn" data-src="mod" role="tab"><span data-i18n="tree_tab_mod">Мод</span></button>
+                </div>
+              </div>
+              <button class="icon-btn cmp-fs-btn" id="cmp-fs" data-i18n-title="cpg_fullscreen" title="На весь экран" hidden><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+              <div class="upr-conv" id="cmp-conv" hidden>
+                <div class="upr-conv-track"><i id="cmp-conv-fill"></i></div>
+                <span class="upr-conv-txt" id="cmp-conv-txt"></span>
+              </div>
+            </div>
+            <div class="cmp-wrap" id="cmp-wrap" hidden>
+              <div class="cmp-map" id="cmp-map">
+                <div class="cmp-map-box" id="cmp-map-box">
+                  <img class="cmp-map-img" id="cmp-map-img" alt="" draggable="false">
+                  <div class="cmp-tiles" id="cmp-tiles"></div>
+                </div>
+              </div>
+              <div class="cmp-loading" id="cmp-loading" hidden><div class="cmp-loading-spin"></div></div>
+              <div class="cmp-nofile" id="cmp-nofile" hidden>
+                <div class="cmp-nofile-card">
+                  <div class="swt-empty" data-i18n="cpg_nofile">В проекте нет базового файла basis\scripts\species\shop_presets.xml</div>
+                  <div class="cmp-nofile-actions" id="cmp-nofile-actions"></div>
+                </div>
+              </div>
+              <button class="cmp-resizer" id="cmp-resizer" hidden title="Расширить/сузить панель"></button>
+              <div class="cmp-main" id="cmp-main">
+                <div class="cmp-panel-head" id="cmp-panel-head" hidden></div>
+                <div class="cmp-main-row">
+                <div class="cmp-panel-body" id="cmp-panel-body">
+                  <div class="swt-empty" data-i18n="cpg_pick">Выберите поселение</div>
+                </div>
+                <div class="cmp-tabs" id="cmp-tabs" role="tablist">
+                  <button type="button" class="cmp-tab-btn active" data-cmp-tab="shop" role="tab"><img alt=""><span class="cmp-tab-label" data-i18n="cpg_shop">Магазин</span></button>
+                  <button type="button" class="cmp-tab-btn" data-cmp-tab="hire" role="tab"><img alt=""><span class="cmp-tab-label" data-i18n="cpg_hire">Найм</span></button>
+                  <button type="button" class="cmp-tab-btn" data-cmp-tab="supplies" role="tab"><img alt=""><span class="cmp-tab-label" data-i18n="cpg_supplies">Снабжение</span></button>
+                </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
