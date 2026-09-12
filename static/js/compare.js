@@ -98,41 +98,78 @@ async function cmpLoadSide(side, silent) {
   cmpShowPreview();
 }
 
-// which compare file the next undo/redo/history action should target: the
-// side the user last interacted with (both sides are editable), left fallback
+// which compare file the next undo/redo/history action should target:
+// the side the user last interacted with, but a side whose flags say
+// "nothing to undo" never wins over a side that still has something
+// (clicking the right pane after a transfer must not bury the left undo)
 function cmpUndoTarget() {
   const tab = state.tabs.find(tb => tb.id === state.activeTabId);
   if (!tab || tab.type !== "compare") return null;
   const order = state.cmpLastSide
     ? [state.cmpLastSide, state.cmpLastSide === "left" ? "right" : "left"]
     : ["left", "right"];
-  for (const s of order) {
+  const pathOf = s => {
     const d = state.cmpData && state.cmpData[s];
-    if (d && d.path) return { side: s, path: d.path };
+    if (d && d.path) return d.path;
+    const j = state.compare;
+    if (j && !j.preview) return s === "left" ? (j.left || "") : (j.right || "");
+    return "";
+  };
+  const flagOf = s => {
+    const d = state.cmpData && state.cmpData[s];
+    if (d && d.flags) return d.flags;
+    if (state.cmpFlags && state.cmpFlags[s]) return state.cmpFlags[s];
+    return null;
+  };
+  const cands = [];
+  for (const s of order) {
+    const p = pathOf(s);
+    if (p) cands.push({ side: s, path: p });
   }
-  return null;
+  if (!cands.length) return null;
+  if (cands.length > 1) {
+    const f0 = flagOf(cands[0].side), f1 = flagOf(cands[1].side);
+    // первый пуст, второй с историей — отмена идёт туда, где есть что отменять
+    if (f0 && !f0.can_undo && f1 && f1.can_undo) return cands[1];
+  }
+  return cands[0];
 }
 
 // toolbar undo/redo state on the compare page: refresh the per-side flags
 // from the server and show the ones for the side the user last touched
 async function cmpSyncUndoButtons() {
-  const sides = ["left", "right"].filter(s =>
-    state.cmpData && state.cmpData[s] && state.cmpData[s].path);
+  const paths = {};
+  ["left", "right"].forEach(s => {
+    const d = state.cmpData && state.cmpData[s];
+    if (d && d.path) paths[s] = d.path;
+  });
+  const j = state.compare;
+  if (j && !j.preview) {
+    if (!paths.left && j.left) paths.left = j.left;
+    if (!paths.right && j.right) paths.right = j.right;
+  }
+  const sides = Object.keys(paths);
   await Promise.all(sides.map(async s => {
     try {
-      const r = await api("/api/history?path=" + encodeURIComponent(state.cmpData[s].path));
+      const r = await api("/api/history?path=" + encodeURIComponent(paths[s]));
       const j = await r.json();
-      if (j.ok) state.cmpData[s].flags = { can_undo: !!j.can_undo, can_redo: !!j.can_redo };
+      if (j.ok && state.cmpData && state.cmpData[s]) {
+        state.cmpData[s].flags = { can_undo: !!j.can_undo, can_redo: !!j.can_redo };
+      } else if (j.ok) {
+        state.cmpFlags = state.cmpFlags || {};
+        state.cmpFlags[s] = { can_undo: !!j.can_undo, can_redo: !!j.can_redo };
+      }
     } catch (e) { /* keep the cached flags on network errors */ }
   }));
   const tgt = cmpUndoTarget();
-  const fl = tgt && state.cmpData[tgt.side] && state.cmpData[tgt.side].flags;
+  const fl = tgt && ((state.cmpData && state.cmpData[tgt.side] && state.cmpData[tgt.side].flags)
+    || (state.cmpFlags && state.cmpFlags[tgt.side]));
   setUndoRedoButtons(!!(fl && fl.can_undo), !!(fl && fl.can_redo));
 }
 
 // repaint after an undo/redo that touched one compare side's file:
 // the diff re-runs on the server; a preview reloads just that side
-async function cmpRepaintUndo(side, patch) {
+async function compareRepaintUndo(side, patch) {
   if (!side) return;
   if (state.compare) { await runCompare(); return; }
   const d = state.cmpData && state.cmpData[side];
@@ -253,6 +290,7 @@ function cmpFillPreviewPane(side, data) {
   (cols || []).forEach((name, ci) => {
     const th = document.createElement("th");
     th.textContent = name;
+    th.dataset.col = ci;   // навигация поиска к ключу колонки (th[data-col])
     if (ci === 0) th.classList.add("sticky-col"); // sysname: same as the main grid
     const comment = data.comments && data.comments[ci];
     if (comment) {
@@ -346,6 +384,13 @@ function cmpFindCompute(side) {
   f.matches = [];
   if (!src || !f.q) return;
   const q = f.q.toLowerCase();
+  // ключи колонок ищутся тоже (ri:-1) — первыми, как в главной таблице
+  const heads = src.mode === "diff"
+    ? (state.cmpCtx[side] ? state.cmpCtx[side].cols : [])
+    : ((state.cmpData[side] || {}).columns || []);
+  (heads || []).forEach((name, ci) => {
+    if (String(name).toLowerCase().includes(q)) f.matches.push({ ri: -1, ci });
+  });
   for (let i = 0; i < src.n; i++) {
     for (let ci = 0; ci < src.cols; ci++) {
       if (src.val(i, ci).toLowerCase().includes(q)) f.matches.push({ ri: i, ci });
@@ -367,6 +412,15 @@ function cmpFindPaint(side) {
   $$(".find-cur", table).forEach(el => el.classList.remove("find-cur"));
   const m = f.matches[f.idx];
   if (!m) return;
+  // совпадение в шапке (ri:-1): подсвечиваем th, вертикаль не трогаем
+  if (m.ri === -1) {
+    const th = table.querySelector('thead th[data-col="' + m.ci + '"]');
+    if (th) {
+      th.classList.add("find-cur");
+      th.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+    return;
+  }
   const src = cmpFindSource(side);
   if (!src) return;
   if (src.mode === "diff") {
@@ -410,6 +464,7 @@ function cmpFindStep(side, dir) {
 function cmpFindOpen(side) {
   const bar = cmpFindBar[side];
   if (!bar) return;
+  if (!cmpFindState[side].q) cmpFindState[side].q = bar.q || fpLastQ();
   bar.setQ(cmpFindState[side].q || "");
   bar.open(false);
   if (cmpFindState[side].q) cmpFindRefresh(side);
@@ -432,6 +487,7 @@ async function cmpReplaceOne(side, replArg) {
   const f = cmpFindState[side];
   const m = f.matches[f.idx];
   if (!m || !f.q) return;
+  if (m.ri === -1) return;   // ключ колонки не заменяется — только ячейки
   const repl = replArg != null ? replArg : (cmpFindBar[side] ? cmpFindBar[side].replaceText() : "");
   const data = state.cmpData[side];
   const oldVal = String(data.rows[m.ri][m.ci] || "");
@@ -449,7 +505,8 @@ async function cmpReplaceAll(side, replArg) {
   const f = cmpFindState[side];
   if (!f.q) return;
   cmpFindCompute(side);
-  const cells = f.matches.slice();
+  // замена — только ячейки: ключи колонок (ri:-1) отфильтровываем
+  const cells = f.matches.filter(m => m.ri !== -1);
   if (!cells.length) { toast(t("save_success"), "ok"); return; }
   const repl = replArg != null ? replArg : (cmpFindBar[side] ? cmpFindBar[side].replaceText() : "");
   const re = new RegExp(escapeRegExp(f.q), "gi");
@@ -479,21 +536,24 @@ function setupCmpSearch() {
       id: "cmp-find-" + side,
       host: pane,
       sticky: true,
-      autoClose: false,
       withReplace: true,
       canReplace: () => cmpFindRepAvailable(side),
       onQuery: q => { const f = cmpFindState[side]; f.q = q; cmpFindRefresh(side); },
       onStep: d => cmpFindStep(side, d),
       onReplaceOne: repl => cmpReplaceOne(side, repl),
       onReplaceAll: repl => cmpReplaceAll(side, repl),
-      onClose: () => {
-        const f = cmpFindState[side];
-        f.q = ""; f.idx = 0; f.matches = [];
-        const table = cmpFindTable(side);
-        if (table) $$(".find-cur", table).forEach(el => el.classList.remove("find-cur"));
-      },
     });
   });
+}
+
+// ---------- подсказка сравнения (? рядом со «Слить всё») ----------
+// Модалка статическая (тексты через data-i18n), закрытие — общее:
+// data-close, клик по фону и Esc уже висят глобально в init.js
+function setupCmpHelp() {
+  const btn = $("#cmp-help");
+  if (!btn || btn.dataset.wired) return;
+  btn.dataset.wired = "1";
+  btn.onclick = () => { $("#cmp-help-modal").hidden = false; };
 }
 
 // ---------- полноэкранный режим панели сравнения ----------
@@ -636,15 +696,12 @@ async function cmpSetSideSrc(side, v) {
   paintCmpSrc();
   const root = srcRoot(v) || (v === "project" ? (state.config.last_project || "") : "");
   const els = cmpSide(side);
-  const prevRel = els.list.dataset.value || "";
+  const prevRel = els.list.dataset.value || cmpRelOf(side) || "";
   els.path.value = root;
   await cmpFillFolderList(side);
   if (prevRel) {
-    const item = [...els.list.children].find(x => {
-      const rest = x.querySelector(".cmp-list-rest");
-      return rest && rest.textContent === prevRel;
-    });
-    if (item) cmpSelectFile(side, prevRel, item, true);
+    const item = cmpFindListItem(side, prevRel);
+    if (item) cmpSelectFile(side, cmpItemRel(item) || prevRel, item, true);
   }
   cmpPaintMirror();
 }
@@ -929,6 +986,12 @@ function cmpBeginEdit(side, tr, ri, ci, initVal) {
   input.value = initVal != null ? String(initVal) : val;
   td.textContent = "";
   td.appendChild(input);
+  // unit_set / unit_class в cars/tanks: стильный комбобокс классов + свободный ручной ввод
+  if (typeof unitComboFor === "function" && typeof makeUnitSetCombo === "function") {
+    const combo = unitComboFor(data.path, data.columns, ci,
+      data.rows.map(r => r[ci]));
+    if (combo) makeUnitSetCombo(td, input, combo.choices, combo.title);
+  }
   // фокус через хелпер: голый focus() докручивает панель сам и прячет
   // ячейку под липкую колонку sysname (см. focusCellInput в grid.js)
   focusCellInput(input, td);
@@ -945,7 +1008,9 @@ function cmpBeginEdit(side, tr, ri, ci, initVal) {
         data.rows[ri][ci] = newVal;
         data.flags = { can_undo: !!j.can_undo, can_redo: !!j.can_redo };
         setUndoRedoButtons(!!j.can_undo, !!j.can_redo);
+        markCompareDirty();
         if (j.saved) noteSaved(data.path);
+        try { syncFileTabsCells(data.path, [{ row: ri, col: ci, value: newVal }]); } catch (e) {}
       } else {
         toast(j.error || "edit error", "err");
       }
@@ -981,6 +1046,13 @@ function cmpBeginDiffEdit(side, td, i, ci) {
   input.value = val;
   td.textContent = "";
   td.appendChild(input);
+  // unit_set / unit_class в cars/tanks: стильный комбобокс классов + свободный ручной ввод
+  // (ctx.src идёт в порядке ctx.cols — distinct берём по видимому индексу ci)
+  if (typeof unitComboFor === "function" && typeof makeUnitSetCombo === "function") {
+    const combo = unitComboFor(filePath, fileCols, fci,
+      (ctx.src || []).map(r => r[ci]));
+    if (combo) makeUnitSetCombo(td, input, combo.choices, combo.title);
+  }
   // фокус через хелпер: голый focus() докручивает панель сам и прячет
   // ячейку под липкую колонку sysname (см. focusCellInput в grid.js)
   focusCellInput(input, td);
@@ -996,6 +1068,8 @@ function cmpBeginDiffEdit(side, td, i, ci) {
     if (!res.ok) { toast(res.error || "edit error", "err"); return; }
     if (res.saved) noteSaved(filePath);
     state.cmpLastSide = side;
+    markCompareDirty();
+    try { syncFileTabsCells(filePath, [{ row: ri, col: fci, value: nv }]); } catch (e) {}
     await runCompare();
     cmpSyncUndoButtons();
   };
@@ -1017,7 +1091,9 @@ async function cmpSetCell(side, ri, ci, newVal) {
     data.rows[ri][ci] = newVal;
     data.flags = { can_undo: !!j.can_undo, can_redo: !!j.can_redo };
     setUndoRedoButtons(!!j.can_undo, !!j.can_redo);
+    markCompareDirty();
     if (j.saved) noteSaved(data.path);
+    try { syncFileTabsCells(data.path, [{ row: ri, col: ci, value: newVal }]); } catch (e) {}
     const table = $(side === "left" ? "#cmp-table-left" : "#cmp-table-right");
     const tr = table && table.querySelector(`tbody tr[data-row-index="${ri}"]`);
     if (tr && tr.children[ci]) cmpRenderCell(side, data, tr.children[ci], ri, ci, newVal);
@@ -1046,6 +1122,8 @@ async function cmpTransferCell(side, i, ci) {
   if (!res.ok) { toast(res.error || "edit error", "err"); return; }
   toast(t("cmp_moved_ok") || "Перенесено", "ok");
   state.cmpLastSide = "left"; // перенос значения пишет в основу
+  markCompareDirty();
+  try { syncFileTabsCells(j.left, [{ row: d.left_index, col: lci, value: String(val ?? "") }]); } catch (e) {}
   await runCompare();
   cmpSyncUndoButtons();
 }
@@ -1076,6 +1154,9 @@ async function cmpStructOp(side, op, extra) {
   if (j.saved) noteSaved(path);
   toast(t("save_success"), "ok");
   state.cmpLastSide = side;
+  markCompareDirty();
+  // структура файла поменялась: открытые таблицы перечитаются при возврате
+  try { markFileTabsStale(path); } catch (e) {}
   if (state.compare && !state.compare.preview) await runCompare();
   else { state.cmpData[side] = null; await cmpLoadSide(side); }
   cmpSyncUndoButtons();
@@ -1096,6 +1177,8 @@ async function cmpTransferCol(srcCi) {
   const res = await r.json();
   if (!res.ok) { toast(res.error || "error", "err"); return; }
   toast(t("cmp_moved_ok") || "Перенесено", "ok");
+  markCompareDirty();
+  try { markFileTabsStale(j.left); } catch (e) {}
   await runCompare();
 }
 
@@ -1105,6 +1188,10 @@ async function handleCmpCtxAction(act, c, cellValue) {
   const side = c && c.side;
   if (!side) return;
   if (act === "copy-cell") {
+    // выделенный мышью кусок — только его, иначе всё поле целиком
+    // (живое выделение к клику схлопнуто — gridCopyFragment берёт запомненное)
+    const frag = (typeof gridCopyFragment === "function") ? gridCopyFragment() : "";
+    if (frag) { state.clipboard = frag; copyText(state.clipboard); return; }
     const v = cellValue();
     if (v != null) { state.clipboard = String(v); copyText(state.clipboard); }
   } else if (act === "copy-row") {
@@ -1138,6 +1225,9 @@ async function handleCmpCtxAction(act, c, cellValue) {
     }
     copyText(out.join("\n"));
   } else if (act === "cut-cell") {
+    // при выделенном куске всё поле не чистим — только копируем кусок
+    const frag = (typeof gridCopyFragment === "function") ? gridCopyFragment() : "";
+    if (frag) { state.clipboard = frag; copyText(state.clipboard); return; }
     const v = cellValue();
     if (v != null) {
       state.clipboard = String(v);
@@ -1171,14 +1261,36 @@ async function cmpPick(side, kind) {
     if (!dir) return;
     els.path.value = dir;
     await cmpFillFolderList(side);
+    cmpPaintMirror();
   } else {
     const f = await pickFile();
     if (!f) return;
     els.path.value = f;
     els.dd.hidden = true;
     delete els.list.dataset.value;
-    cmpLoadSide(side);
+    await cmpLoadSide(side);
+    // прямой выбор файла тоже тянет аналог (по имени, не по пути)
+    await cmpMirrorPick(side, cmpRelOf(side));
+    cmpPaintMirror();
   }
+}
+
+// путь стороны введён/вставлен вручную: папка — раскрыть список,
+// файл — открыть и потянуть аналог на вторую сторону
+async function cmpPathChanged(side) {
+  const els = cmpSide(side);
+  const p = String(els.path.value || "").trim();
+  if (!p) return;
+  const last = p.replace(/\//g, "\\").replace(/\\+$/, "").split("\\").pop() || "";
+  if (/\.[a-z0-9]{1,5}$/i.test(last)) {
+    els.dd.hidden = true;
+    delete els.list.dataset.value;
+    await cmpLoadSide(side);
+    await cmpMirrorPick(side, cmpRelOf(side));
+  } else {
+    await cmpFillFolderList(side);
+  }
+  cmpPaintMirror();
 }
 
 async function cmpFillFolderList(side, silent) {
@@ -1334,28 +1446,83 @@ function cmpSideRel(side) {
   const els = cmpSide(side);
   return (els.list.dataset && els.list.dataset.value) || "";
 }
+// --- зеркало «Аналогичный файл»: путь значения не имеет ---
+// Одна сторона может стоять на basis\scripts\species, другая — на
+// scripts\species: совпадать должно только ИМЯ файла (без учёта регистра),
+// а не весь относительный путь
+function cmpBase(rel) {
+  return String(rel || "").split(/[\\/]/).pop().toLowerCase();
+}
+function cmpItemRel(item) {
+  const rest = item && item.querySelector(".cmp-list-rest");
+  return rest ? rest.textContent : "";
+}
 function cmpFindListItem(side, rel) {
   const els = cmpSide(side);
-  return [...els.list.children].find(x => {
-    const rest = x.querySelector(".cmp-list-rest");
-    return rest && rest.textContent === rel;
-  }) || null;
+  const items = [...els.list.children].filter(x => x.querySelector(".cmp-list-rest"));
+  const want = String(rel || "");
+  if (!want) return null;
+  // сначала точный путь (списки с одинаковой структурой), затем —
+  // только имя файла (basis\scripts\species <-> scripts\species)
+  return items.find(x => String(cmpItemRel(x) || "").toLowerCase() === want.toLowerCase())
+    || items.find(x => cmpBase(cmpItemRel(x)) === cmpBase(want))
+    || null;
+}
+// rel текущего файла стороны: выбор из списка — как есть, прямой путь
+// к файлу — сам путь (имя для совпадения выделяет cmpBase)
+function cmpRelOf(side) {
+  const picked = cmpSideRel(side);
+  if (picked) return picked;
+  const els = cmpSide(side);
+  const p = String(els.path.value || "").trim();
+  if (!p) return "";
+  const last = p.replace(/\//g, "\\").replace(/\\+$/, "").split("\\").pop() || "";
+  if (!/\.[a-z0-9]{1,5}$/i.test(last)) return ""; // папка, файла нет
+  return p;
+}
+// папка стороны для раскрытия списка: открытая папка — как есть,
+// прямой путь к файлу — его папка, пусто — корень выбранного источника
+function cmpSideFolder(side) {
+  const els = cmpSide(side);
+  const p = String(els.path.value || "").trim();
+  if (els.dd && !els.dd.hidden && p) return p.replace(/[\\/]+$/, "");
+  if (p) {
+    const n = p.replace(/\//g, "\\").replace(/\\+$/, "");
+    const last = n.split("\\").pop() || "";
+    if (/\.[a-z0-9]{1,5}$/i.test(last)) return n.replace(/[\\/][^\\/]+$/, "");
+    return n;
+  }
+  return srcRoot(state.cmpSrc[side]) || "";
 }
 function cmpMirrorOn() {
   const box = $("#cmp-mirror");
   if (!box) return false;
-  return !box.disabled && box.checked;
+  // только checked: disabled — лишь визуальная подсказка (красит
+  // cmpPaintMirror). Раньше disabled глушил зеркало, и первый выбор файла
+  // при погашенной галке ничего не тянул — курица-и-яйцо: галка включается
+  // только когда аналог уже найден, а находится он только зеркалом
+  // (cmpMirrorPick сам раскрывает вторую сторону в папку)
+  return !!box.checked;
 }
-// серая (неактивна), если вторая сторона без папки или аналога в ней нет
+// серая (неактивна), только если зеркалить нечего или некуда:
+// файл не выбран ни с одной стороны, а второй нет ни пути, ни источника
+// (проект/игра/мод) — включая автоподхват свободного источника
 function cmpPaintMirror() {
   const box = $("#cmp-mirror");
   if (!box) return;
-  const l = cmpSideRel("left"), r = cmpSideRel("right");
-  let hasMirror = false;
-  if (l || r) {
-    const other = l ? "right" : "left";
-    const els = cmpSide(other);
-    if (els.dd && !els.dd.hidden) hasMirror = !!cmpFindListItem(other, l || r);
+  const canPull = (from, to) => {
+    if (!cmpRelOf(from)) return false;
+    const els = cmpSide(to);
+    if (String(els.path.value || "").trim()) return true;
+    if (srcRoot(state.cmpSrc[to])) return true;
+    return !!(srcFirst(state.cmpSrc[from] || null) || srcFirst(null));
+  };
+  let hasMirror = canPull("left", "right") || canPull("right", "left");
+  if (!hasMirror) {
+    // файлы ещё не выбраны, но обе папки уже раскрыты: галку можно
+    // включить заранее — первый же выбор потянет аналог
+    const ld = cmpSide("left"), rd = cmpSide("right");
+    hasMirror = !!(ld.dd && !ld.dd.hidden && rd.dd && !rd.dd.hidden);
   }
   box.disabled = !hasMirror;
   const lab = $("#cmp-mirror-label");
@@ -1368,23 +1535,45 @@ function cmpPaintMirror() {
 // молчит, когда вторая сторона ещё не раскрыта.
 async function cmpMirrorPick(side, rel) {
   try {
+    rel = rel || cmpRelOf(side);
     if (!rel || !cmpMirrorOn()) return;
     const other = side === "left" ? "right" : "left";
-    if (cmpSideRel(other) === rel) return;
-    let item = cmpFindListItem(other, rel);
+    // уже один и тот же файл с обеих сторон — нечего тянуть.
+    // Сравнение по ИМЕНИ, не по пути: basis\...\cars.xml и
+    // scripts\...\cars.xml — один файл
+    if (cmpBase(cmpRelOf(other)) && cmpBase(cmpRelOf(other)) === cmpBase(rel)) {
+      cmpPaintMirror();
+      return;
+    }
+    const oResolved = cmpResolved(other), sResolved = cmpResolved(side);
+    if (oResolved && sResolved && oResolved.toLowerCase() === sResolved.toLowerCase()) {
+      cmpPaintMirror();
+      return;
+    }
+    const els = cmpSide(other);
+    let item = (els.dd && !els.dd.hidden) ? cmpFindListItem(other, rel) : null;
     if (!item) {
-      const els = cmpSide(other);
-      let root = els.path.value.trim();
-      if (root && els.dd && els.dd.hidden) {
-        root = root.replace(/[\\/][^\\/]+$/, ""); // был файл — берём его папку
-      }
+      let root = cmpSideFolder(other);
       if (!root) root = srcRoot(state.cmpSrc[other]) || "";
+      if (!root) {
+        // вторая сторона пустая: подхватить первый свободный источник
+        // (проект/игра/мод), чтобы зеркало работало первым кликом
+        // с любой стороны
+        const v = srcFirst(state.cmpSrc[side]) || srcFirst(null);
+        if (!v || !srcAvail(v)) return;
+        state.cmpSrc[other] = v;
+        try { localStorage.setItem("tsh_cmp_" + other, v); } catch (e) { /* noop */ }
+        paintCmpSrc();
+        root = srcRoot(state.cmpSrc[other]) || "";
+      }
       if (!root) return;
       els.path.value = root;
       await cmpFillFolderList(other, true);
       item = cmpFindListItem(other, rel);
     }
-    if (item) cmpSelectFile(other, rel, item, true);
+    // в dataset класть путь ЭТОЙ стороны из её списка (не искомый):
+    // иначе cmpResolved соберёт несуществующий путь
+    if (item) cmpSelectFile(other, cmpItemRel(item) || rel, item, true);
   } catch (e) { /* зеркало — best effort, молча */ }
 }
 
@@ -1446,6 +1635,9 @@ async function runCompare() {
     state.cmpMovedFor = movedFor;
     state.cmpMoved = {};
     state.cmpMovedUndone = {};
+    // новая пара — снимок журнала сторон: отмена сравнения откатит
+    // все правки этого сравнения к состоянию на его старте
+    await cmpSnapshotBaseline(left, right, movedFor);
   }
   // per-pane loading animation while the files are read on the server
   $("#cmp-loading-left").classList.remove("hidden");
@@ -1478,10 +1670,51 @@ async function runCompare() {
 }
 
 // переключатель кнопки запуска: вне дифа — «Сравнить», в дифе —
-// красная «Отмена сравнения» (выход из режима + сброс всех изменений)
-function cmpRunToggle() {
-  if (state.compare && state.compare.diff) cancelCompare();
+// красная «Отмена сравнения» (откат всех правок сравнения + выход)
+async function cmpRunToggle() {
+  if (state.compare && state.compare.diff) await cmpCancelAll();
   else runCompare();
+}
+
+// отмена сравнения: все правки текущего сравнения (переносы, merge,
+// правка ячеек обеих сторон) откатываются к снимку на его старте,
+// затем выход в превью. Уже сохранённое не трогаем — сейв сам выходит
+// из дифа и гасит снимок через cancelCompare.
+async function cmpCancelAll() {
+  const b = state.cmpBaseline;
+  state.cmpBaseline = null;
+  if (b && b.for === state.cmpMovedFor) {
+    for (const s of [b.left, b.right]) {
+      if (!s || !s.path) continue;
+      try {
+        const r = await api(s.hid ? "/api/restore" : "/api/reset_beginning", { method: "POST",
+          body: JSON.stringify(s.hid ? { path: s.path, backup_id: s.hid } : { path: s.path }) });
+        const j = await r.json();
+        if (!j.ok) toast(j.error || "error", "err");
+      } catch (e) { toast(String((e && e.message) || e), "err"); }
+    }
+    clearCompareDirty();
+    try { if (b.left && b.left.path) markFileTabsStale(b.left.path); } catch (e) {}
+    try { if (b.right && b.right.path) markFileTabsStale(b.right.path); } catch (e) {}
+  }
+  cancelCompare();
+}
+
+// снимок журнала сторон на старте пары: новейшая применённая запись
+// каждой стороны (null — журнал пуст/всё отменено). Отмена сравнения
+// вернётся к этим записям — все правки сравнения откатятся, redo живёт.
+async function cmpSnapshotBaseline(left, right, movedFor) {
+  const snap = async p => {
+    try {
+      const r = await api("/api/history?path=" + encodeURIComponent(p));
+      const j = await r.json();
+      if (!j || !j.ok) return { path: p, hid: null };
+      const last = (j.records || []).find(x => !x.undone);
+      return { path: p, hid: last ? last.id : null };
+    } catch (e) { return { path: p, hid: null }; }
+  };
+  state.cmpBaseline = { for: movedFor,
+    left: await snap(left), right: await snap(right) };
 }
 
 // выход из diff-режима: сбросить сравнение и все его метки,
@@ -1493,6 +1726,8 @@ function cancelCompare() {
   state.cmpMoved = {};
   state.cmpMovedFor = "";
   state.cmpMovedUndone = {};
+  state.cmpBaseline = null;
+  state.cmpFlags = {};
   cmpClearPin();
   cmpShowPreview(); // перерисует панели в превью и вернёт кнопку «Сравнить»
 }
@@ -1587,6 +1822,9 @@ function renderCompare() {
   }
   empty.hidden = true;
   fl.hidden = false;
+  // метки сверяются ДО отрисовки: отмена переноса гасит подсветку
+  // и убирает строку из основы на той же перерисовке, повтор зажигает
+  cmpReconcileMoved();
   const lcols = j.left_columns || [], rcols = j.right_columns || [];
   const lnames = new Set(lcols), rnames = new Set(rcols);
   const rows = (j.diff || []).map(d => ({
@@ -1666,7 +1904,6 @@ function renderCompare() {
       tb.appendChild(tr);
     });
   }
-  cmpReconcileMoved();
   cmpSetupPairHL();
   cmpPaintRun();
 }
@@ -1700,9 +1937,10 @@ function buildCmpHead(table, side) {
   thSt.className = "td-st";
   thSt.textContent = side === "right" ? "\u27F5" : "";
   hr.appendChild(thSt);
-  ctx.cols.forEach(name => {
+  ctx.cols.forEach((name, ci) => {
     const th = document.createElement("th");
     th.textContent = name;
+    th.dataset.col = ci;   // навигация поиска к ключу колонки (th[data-col])
     th.title = name;
     if (!ctx.other.has(name)) th.classList.add("col-extra");
     hr.appendChild(th);
@@ -1766,6 +2004,18 @@ function appendCmpRows(side, count) {
   tbody.insertAdjacentHTML("beforeend", parts.join(""));
 }
 
+// грязность вкладки сравнения: красная дискета, пока стороны не сохранены
+// (бейдж таб-бара общий для всех типов вкладок; правки сравнения живут
+// в сессиях файлов и на диск не пишутся до сейва)
+function markCompareDirty() {
+  const tab = state.tabs.find(tb => tb.id === "compare");
+  if (tab && !tab.dirty) { tab.dirty = true; renderTabBar(); }
+}
+function clearCompareDirty() {
+  const tab = state.tabs.find(tb => tb.id === "compare");
+  if (tab && tab.dirty) { tab.dirty = false; renderTabBar(); }
+}
+
 async function transferRow(d) {
   // copy one row FROM the source (right) INTO the base (left)
   const j = state.compare;
@@ -1778,10 +2028,28 @@ async function transferRow(d) {
     // пометить перенесённое, чтобы после пересчёта было явно видно:
     // новые — зелёным, изменённые — жёлтым
     state.cmpMoved[d.key] = d.status === "right_only" ? "new" : "changed";
+    markCompareDirty();
+    try { markFileTabsStale(j.left); } catch (e) {}
   } else toast(res.error, "err");
   state.cmpLastSide = "left"; // перенос пишет в основу
   await runCompare();
   cmpSyncUndoButtons();
+}
+
+// после сейва стороны из сравнения: открытые таблицы того же файла больше
+// не грязные (сессия общая, она уже на диске), но память у них старая —
+// перечитают сессию при возврате
+function cmpSyncFileTabsAfterSave(path) {
+  let any = false;
+  state.tabs.forEach(tb => {
+    if (tb.type !== "file" || !tb.fileData) return;
+    if (normPath(tb.path || "") !== normPath(path)) return;
+    tb.dirty = false;
+    if (tb.id === state.activeTabId) { refreshFileTabFromServer(tab, { clean: true }); }
+    else if (!tb.staleGrid) tb.staleGrid = "reload";
+    any = true;
+  });
+  if (any) renderTabBar();
 }
 
 // ---------- сохранение сторон сравнения (кнопка шапки / Ctrl+S) ----------
@@ -1809,6 +2077,10 @@ async function saveCompareGuarded(popup) {
     }
   }
   if (!queue.length) { toast(t("no_file"), "err"); return; }
+  // сейв в режиме сравнения закрывает диф (как отмена сравнения, но без
+  // отката: правки уже на диске) — только если всё сохранилось прямо
+  const inDiff = !!(state.compare && !state.compare.preview);
+  let failed = false;
   for (const { path } of queue) {
     // проект обязателен для защищённых: тот же попап, но без проекта —
     // сразу уведомление, а не пустое меню
@@ -1816,6 +2088,7 @@ async function saveCompareGuarded(popup) {
     try { chk = await guardCheck(path); } catch (e) { chk = null; }
     if (chk && chk.ok && chk.guarded && !chk.project) {
       toast(t("ctx_no_project_path") || "Укажите путь к проекту в настройках", "err");
+      failed = true;
       continue;
     }
     await guardedSave("file", path, async target => {
@@ -1826,6 +2099,8 @@ async function saveCompareGuarded(popup) {
           await noteExternalTreeChange(target);
           toast((t("save_success") || "Сохранено") + " → " + j.dst, "ok");
         } else toast((j.error || t("save_failed")), "err");
+        // копия ушла в другой путь — исходная сессия осталась грязной
+        failed = true;
       } else {
         const r = await api("/api/save", { method: "POST",
           body: JSON.stringify({ path }) });
@@ -1833,10 +2108,20 @@ async function saveCompareGuarded(popup) {
         if (j.ok) {
           if (j.saved) noteSaved(path);
           toast(t("save_success"), "ok");
+          cmpSyncFileTabsAfterSave(path);
           cmpSyncUndoButtons();
-        } else toast((j.error || t("save_failed")), "err");
+        } else { toast((j.error || t("save_failed")), "err"); failed = true; }
       }
     }, popup);
+  }
+  if (inDiff && !failed) {
+    // всё на диске: гасим дискету, перечитываем стороны свежими
+    // и выходим из дифа в превью (метки переносов сброшены отменой)
+    clearCompareDirty();
+    if (state.cmpData) { state.cmpData.left = null; state.cmpData.right = null; }
+    await cmpLoadSide("left");
+    await cmpLoadSide("right");
+    cancelCompare();
   }
 }
 // подпись кнопки слияния следует за активным фильтром: merge(filter) —
@@ -1879,6 +2164,8 @@ async function mergeAll() {
   const res = await r.json();
   if (!res.ok) { toast(res.error, "err"); return; }
   toast(t("cmp_created") + ": " + res.created + " · " + t("cmp_updated") + ": " + res.updated, "ok");
+  markCompareDirty();
+  try { markFileTabsStale(j.left); } catch (e) {}
   // пометить всё перенесённое по активному режиму: новые — зелёным,
   // изменённые — жёлтым; видно сразу после пересчёта
   const wantNew = mode !== "edited", wantChg = mode !== "new";

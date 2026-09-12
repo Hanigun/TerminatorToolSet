@@ -21,8 +21,23 @@
 /* find highlights in the grid */
 .grid td.find-hit { background: rgba(232, 184, 75, .28); }
 .grid td.find-cur { background: var(--accent) !important; color: #1a1a1a !important; }
+/* поиск находит и ключи колонок: совпавшие заголовки подсвечиваем так же */
+.grid th.find-hit { background: rgba(232, 184, 75, .28); }
+.grid th.find-cur { background: var(--accent) !important; color: #1a1a1a !important; }
+.grid th.find-cur .th-sub { color: #1a1a1a !important; }
 
 .toolbar-hint { color: var(--text-mute); font-size: 12px; }
+
+/* галочка «⇄ DLC»: только на вкладках species-таблиц (basis/scripts/species) */
+.toolbar-sync {
+  display: inline-flex; align-items: center; gap: 5px;
+  color: var(--text-mute); font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 3px 8px; white-space: nowrap;
+}
+.toolbar-sync[hidden] { display: none; }
+.toolbar-sync input { accent-color: var(--accent); cursor: pointer; }
+.toolbar-sync.on { color: var(--accent); border-color: var(--accent); }
 
 /* Hotkeys info (settings) */
 .hotkeys-info {
@@ -40,10 +55,13 @@
   color: var(--text); white-space: nowrap;
 }
 
-/* tooltip for column comments */
+/* tooltip for column comments (+ ховер плиток кампании): в стиле программы —
+   приподнятая карточка без обводки, акцентная планка слева вместо рамки,
+   глубокая тень отделяет от фона */
 .tip {
-  position: fixed; z-index: 300; max-width: 320px; background: var(--bg-card);
-  border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px;
-  font-size: 12px; line-height: 1.45; white-space: pre-wrap; box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  position: fixed; z-index: 300; max-width: 320px; background: var(--bg-elev);
+  border: none; border-left: 3px solid var(--accent); border-radius: var(--radius);
+  padding: 9px 12px; font-size: 12px; line-height: 1.5; color: var(--text);
+  white-space: pre-wrap; pointer-events: none; box-shadow: 0 12px 32px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.4);
 }
 

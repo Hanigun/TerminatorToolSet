@@ -59,7 +59,7 @@ async function runUndoRedo(endpoint, okMsg, noneMsg) {
   // compare page undoes/redoes the side the user last interacted with,
   // the map page (XML under the hood) undoes/redoes its own file pre-save
   const tab = state.tabs.find(tb => tb.id === state.activeTabId);
-  let path = null, isCompare = false, cmpSide = null, isUprising = false;
+  let path = null, isCompare = false, cmpSide = null, isUprising = false, isCampaign = false;
   if (tab && tab.type === "file") path = tab.path;
   else if (tab && tab.type === "compare") {
     const tgt = cmpUndoTarget();
@@ -68,6 +68,10 @@ async function runUndoRedo(endpoint, okMsg, noneMsg) {
   else if (state.activeTabId === "uprising" && state.uprising.path) {
     path = state.uprising.path;
     isUprising = true;
+  }
+  else if (state.activeTabId === "campaign" && state.campaign.path) {
+    path = state.campaign.path;
+    isCampaign = true;
   }
   if (!path) { toast(t("no_file")); return; }
   if (state.histBusy) return;   // one request at a time (no repeat pile-up)
@@ -87,9 +91,22 @@ async function runUndoRedo(endpoint, okMsg, noneMsg) {
     if (isCompare) {
       const d = state.cmpData && state.cmpData[cmpSide];
       if (d) d.flags = { can_undo: !!j.can_undo, can_redo: !!j.can_redo };
-      await cmpRepaintUndo(cmpSide, j.patch);
+      // правка на сервере уже отменена/возвращена: экран обязан показать
+      // новое состояние даже если штатная перерисовка упадёт (иначе строка
+      // визуально остаётся, а кнопки врут) — кнопки и тост ниже идут всегда
+      try {
+        await compareRepaintUndo(cmpSide, j.patch);
+      } catch (e) {
+        try {
+          if (state.compare) { state.compare = null; await runCompare(); }
+          else if (d) { state.cmpData[cmpSide] = null; await cmpLoadSide(cmpSide); }
+        } catch (e2) {
+          toast(String((e2 && e2.message) || e2), "err");
+        }
+      }
     }
     else if (isUprising) await uprRepaintUndo();
+    else if (isCampaign) await cmpRepaintUndo();
     else await applyUndoPatch(j.patch);
     setUndoRedoButtons(!!j.can_undo, !!j.can_redo);
     toast(okMsg, "ok");
@@ -116,6 +133,9 @@ async function redoCurrent() {
 function histTargets() {
   if (state.activeTabId === "uprising" && state.uprising.path) {
     return [{ side: null, path: state.uprising.path }];
+  }
+  if (state.activeTabId === "campaign" && state.campaign.path) {
+    return [{ side: null, path: state.campaign.path }];
   }
   if (state.activeTabId === "swt" && state.swt.path) {
     return [{ side: null, path: state.swt.path }];
@@ -144,6 +164,11 @@ async function histRepaintContext(path, side) {
     // restore из журнала пишет файл на диск: память перечитана = чисто
     await uprRepaintUndo();
     uprMarkClean();
+    return;
+  }
+  if (state.activeTabId === "campaign" && path) {
+    await cmpRepaintUndo();
+    cmpMarkClean();
     return;
   }
   if (state.activeTabId === "swt" && path) {
@@ -192,6 +217,7 @@ const HIST_ACTION_KEYS = {
   del_col: "hist_del_col",
   row_set: "hist_row_set",
   col_set: "hist_col_set",
+  merge_rows: "hist_merge_rows",
 };
 
 function fmtDate(ts) {

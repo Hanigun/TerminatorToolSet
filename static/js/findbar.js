@@ -2,11 +2,30 @@
    Вырезано из app.js без изменений логики. Классические скрипты,
    общий глобальный скоуп, порядок загрузки — FILES в templates/index.html. */
 // ---------- Общий попап поиска/замены (ядро) ----------
-// Один и тот же механизм для вкладок файлов (XML), SWT-редактора и обеих
+ // Один и тот же механизм для вкладок файлов (XML), SWT-редактора и обеих
 // панелей сравнения. Внешний вид и поведение взяты с поиска XML-вкладок:
 // ввод с задержкой 150 мс, Enter/Shift+Enter — вниз/вверх, Esc — закрыть,
 // опциональная строка замены. Логика конкретной вкладки подключается хуками
 // onQuery/onStep/onReplaceOne/onReplaceAll/onClose/onOpen.
+// Память запроса общая на всё приложение: переживает закрытие попапа,
+// смену файлов и рестарт программы (localStorage tsh_find_q). Попап сам
+// по клику мимо больше не закрывается — только по ✕/Esc. Закрытие ничего
+// не трогает: текст, подсветка и скролл остаются,
+// найденное остаётся в поле зрения; сброс подсветки — только ручной очисткой
+// поля (пустой запрос).
+function fpSaveQ(q) {
+  try {
+    fpSaveQ.val = q || "";
+    localStorage.setItem("tsh_find_q", fpSaveQ.val);
+  } catch (e) { fpSaveQ.val = q || ""; }
+}
+function fpLastQ() {
+  if (fpLastQ.val === undefined) {
+    try { fpLastQ.val = localStorage.getItem("tsh_find_q") || ""; }
+    catch (e) { fpLastQ.val = ""; }
+  }
+  return fpLastQ.val;
+}
 const FP_SVG = {
   prev: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6"/></svg>',
   next: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>',
@@ -55,7 +74,10 @@ function mkFindBar(opts) {
   let timer = null;
   inp.addEventListener("input", () => {
     clearTimeout(timer);
-    timer = setTimeout(() => { if (opts.onQuery) opts.onQuery(inp.value); }, 150);
+    timer = setTimeout(() => {
+      fpSaveQ(inp.value);
+      if (opts.onQuery) opts.onQuery(inp.value);
+    }, 150);
   });
   inp.addEventListener("keydown", e => {
     if (e.key === "Enter") { e.preventDefault(); opts.onStep && opts.onStep(e.shiftKey ? -1 : 1); }
@@ -76,29 +98,30 @@ function mkFindBar(opts) {
   };
   pop.querySelector(".fp-rep-one").onclick = () => opts.onReplaceOne && opts.onReplaceOne(repInp.value);
   pop.querySelector(".fp-rep-all").onclick = () => opts.onReplaceAll && opts.onReplaceAll(repInp.value);
-  // клик мимо попапа закрывает его (autoClose: false — закрывается только
-  // по ✕/Esc, так два поиска сравнения живут одновременно)
-  if (opts.autoClose !== false) {
-    document.addEventListener("mousedown", e => {
-      if (pop.hidden || pop.contains(e.target)) return;
-      if (e.target.closest && e.target.closest(".cmp-find-pop")) return;
-      bar.close();
-    });
-  }
+  // самозакрытия по клику мимо больше нет вообще: все поиски живут
+  // до ручного закрытия (крестик/Esc) — клик по любому полю таблицы
+  // попап не трогает (наружный mousedown-обработчик удалён полностью)
   const bar = {
     el: pop,
     open(showRep) {
       pop.hidden = false;
       repRow.hidden = !(withRep && showRep && (!opts.canReplace || opts.canReplace()));
+      // пустой ввод после рестарта/первого открытия — подтягиваем общий
+      // запомненный запрос и сразу ищем (файловый openFind свой рефреш
+      // делает сам, потому здесь — только когда текст восстановили мы)
+      let restored = false;
+      if (!inp.value && fpLastQ()) { inp.value = fpLastQ(); restored = true; }
       inp.focus();
       inp.select();
       if (opts.onOpen) opts.onOpen();
+      if (restored && inp.value && opts.onQuery) opts.onQuery(inp.value);
     },
     close() {
       if (pop.hidden) return;
       pop.hidden = true;
-      inp.value = ""; repInp.value = ""; repRow.hidden = true;
-      count.textContent = "0/0";
+      repRow.hidden = true;
+      // текст, счётчик, подсветку и скролл НЕ трогаем: запрос переживает
+      // закрытие, найденное остаётся подсвеченным и в поле зрения
       if (opts.onClose) opts.onClose();
     },
     isOpen: () => !pop.hidden,
@@ -125,6 +148,15 @@ function computeFindMatches() {
   state.find.matches = [];
   state.find.keySet = new Set();
   if (!f || !q) return;
+  // ключи колонок ищутся тоже (ri:-1): sysname/cost/cp_cost живут в шапке,
+  // в значениях их может не быть вообще. Заголовки — первыми, чтобы навигация
+  // с "cost" сразу вставала на колонку, а не на её сотое вхождение в ячейках
+  (f.columns || []).forEach((name, ci) => {
+    if (String(name).toLowerCase().includes(q)) {
+      state.find.matches.push({ ri: -1, ci });
+      state.find.keySet.add("h:" + ci);
+    }
+  });
   f.rows.forEach((row, ri) => {
     row.values.forEach((v, ci) => {
       if (String(v).toLowerCase().includes(q)) {
@@ -153,6 +185,16 @@ function paintCurrentMatch() {
   $$(".find-cur", table).forEach(el => el.classList.remove("find-cur"));
   const m = state.find.matches[state.find.idx];
   if (!m) return;
+  // совпадение в шапке (ri:-1): подсвечиваем th и докручиваем по горизонтали;
+  // вертикаль не трогаем — шапка и так сверху (centerCellVert её бы угнал вниз)
+  if (m.ri === -1) {
+    const th = table.querySelector(`thead th[data-col="${m.ci}"]`);
+    if (th) {
+      th.classList.add("find-cur");
+      ensureCellVisible(th);
+    }
+    return;
+  }
   let td = table.querySelector(`td[data-row="${m.ri}"][data-col="${m.ci}"]`);
   if (!td && state.visRows.length) {
     // virtualized row not rendered yet - append up to it, then scroll both axes
@@ -167,6 +209,7 @@ function paintCurrentMatch() {
   if (td) {
     td.classList.add("find-cur");
     ensureCellVisible(td);
+    centerCellVert(td);
   }
 }
 
@@ -180,31 +223,36 @@ function findStep(dir) {
 
 function openFind(showReplace) {
   if (!fileFind) return;
+  // текст пережил закрытие в поле или в общей памяти (рестарт) —
+  // подхватываем, иначе повторное открытие было бы пустым
+  if (!state.find.q) state.find.q = fileFind.q || fpLastQ();
   fileFind.setQ(state.find.q || "");
   fileFind.open(showReplace);
   if (state.find.q) refreshFind();
 }
 
+// закрытие — только прячем попап: запрос, подсветка и скролл живут дальше
+// (найденное остаётся в поле зрения); сброс — ручной очисткой поля
 function closeFind() {
   if (fileFind) fileFind.close();
-  state.find.active = false;
-  state.find.q = "";
-  renderGrid();
 }
 
 async function replaceCurrent() {
   const f = state.currentFile;
   const m = state.find.matches[state.find.idx];
   if (!f || !m) return;
+  if (m.ri === -1) return;   // ключ колонки не заменяется — только ячейки
   const q = state.find.q;
   const repl = fileFind ? fileFind.replaceText() : "";
   const oldVal = String(f.rows[m.ri].values[m.ci] || "");
   const re = new RegExp(escapeRegExp(q), "gi");
   const newVal = oldVal.replace(re, repl);
   const r = await api("/api/edit", { method: "POST",
-    body: JSON.stringify({ path: f.path, row: m.ri, col: m.ci, value: newVal, save: false }) });
+    body: JSON.stringify({ path: f.path, row: m.ri, col: m.ci, value: newVal, save: false,
+      ...syncFlags() }) });
   const j = await r.json();
   if (!j.ok) { toast(j.error || "edit error", "err"); return; }
+  await handleSyncResult(j, f.path);
   f.rows[m.ri].values[m.ci] = newVal;
   state.dirty = true;
   const activeTab = state.tabs.find(tb => tb.id === state.activeTabId);
@@ -221,7 +269,10 @@ async function replaceAll() {
   const repl = fileFind ? fileFind.replaceText() : "";
   if (!q) return;
   computeFindMatches();
-  const hits = [...state.find.keySet].map(k => k.split(":").map(Number));
+  // замена — только ячейки: ключи колонок ("h:ci") отфильтровываем
+  const hits = [...state.find.keySet]
+    .filter(k => k[0] !== "h")
+    .map(k => k.split(":").map(Number));
   if (!hits.length) { toast(t("save_success"), "ok"); return; }
   const re = new RegExp(escapeRegExp(q), "gi");
   // вся замена — одна пачка: один запрос, одна запись истории, один undo-шаг
@@ -237,24 +288,33 @@ async function replaceAll() {
     const chunk = cells.slice(i, i + 2000);
     const r = await api("/api/edit_cells", { method: "POST",
       body: JSON.stringify({ path: f.path, cells: chunk, save: false,
+        ...syncFlags(),
         summary: `${t("replace_all") || "Замена"} '${q}' → '${repl}' (${cells.length})` }) });
     const j = await r.json();
     if (j.ok && j.changed) {
+      await handleSyncResult(j, f.path);
       for (const c of chunk) f.rows[c.row].values[c.col] = c.value;
       changed += (j.n || chunk.length);
     }
   }
   // one save for the whole batch
-  const sr = await api("/api/save", { method: "POST", body: JSON.stringify({ path: f.path }) });
+  const sr = await api("/api/save", { method: "POST",
+    body: JSON.stringify({ path: f.path, ...syncFlags() }) });
   const sj = await sr.json();
   if (sj.saved) noteSaved(f.path);
+  if (typeof markSyncTabsSaved === "function") markSyncTabsSaved(sj.sync_saved);
   state.dirty = false;
   const activeTab = state.tabs.find(tb => tb.id === state.activeTabId);
   if (activeTab) activeTab.dirty = false;
   updateDirty();
   renderTabBar();
   refreshFind();
-  toast(`${t("replace_all")}: ${changed}`, "ok");
+  let doneMsg = `${t("replace_all")}: ${changed}`;
+  if (typeof syncSavedLines === "function") {
+    const lines = syncSavedLines(sj.sync_saved);
+    if (lines.length) doneMsg += "\n" + lines.join("\n");
+  }
+  toast(doneMsg, "ok");
 }
 
 function setupFindBars() {
@@ -266,7 +326,6 @@ function setupFindBars() {
     onStep: d => findStep(d),
     onReplaceOne: () => replaceCurrent(),
     onReplaceAll: () => replaceAll(),
-    onClose: () => { state.find.active = false; state.find.q = ""; renderGrid(); },
   });
 }
 

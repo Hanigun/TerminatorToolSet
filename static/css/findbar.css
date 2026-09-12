@@ -16,6 +16,8 @@
 .cmp-grid td.cmp-search-none { color: var(--text-mute); text-align: center; padding: 16px; height: auto; }
 /* текущее совпадение поиска в панелях сравнения — как в главной таблице */
 .cmp-grid td.find-cur { background: var(--accent) !important; color: #1a1a1a !important; }
+/* поиск находит и ключи колонок: совпавший заголовок подсвечиваем так же */
+.cmp-grid th.find-cur { background: var(--accent) !important; color: #1a1a1a !important; }
 /* sticky sysname column in the preview panes: same look as the main grid */
 .cmp-grid thead th.sticky-col { position: sticky; left: 0; z-index: 3; background: #31353f;
   box-shadow: 1px 0 0 var(--border);

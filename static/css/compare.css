@@ -14,7 +14,7 @@
 .cmp-dd { position: relative; min-width: 0; }
 .cmp-dd-btn { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0;
   background: var(--bg-elev); border: 1px solid var(--border); border-radius: 6px;
-  color: var(--text); font-size: 11px; padding: 4px 8px; cursor: pointer; font-family: var(--font); }
+  color: var(--text); font-size: 13px; padding: 4px 8px; cursor: pointer; font-family: var(--font); }
 .cmp-dd-btn:hover { border-color: var(--accent); }
 .cmp-dd-face { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
   overflow: hidden; text-align: left; }
@@ -22,27 +22,27 @@
 .cmp-dd-pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 60;
   width: max-content; min-width: 100%; max-width: 160%; max-height: 240px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, .5); }
-.cmp-list { font-size: 11px; background: var(--bg-elev); border: 1px solid var(--border);
+.cmp-list { font-size: 13px; background: var(--bg-elev); border: 1px solid var(--border);
   border-radius: 6px; color: var(--text); padding: 2px; font-family: var(--font);
   overflow: auto; }
-.cmp-list-item { display: flex; align-items: center; gap: 6px; padding: 2px 6px 2px 14px;
-  font-size: 11px; cursor: pointer; white-space: nowrap; border-radius: 4px; }
+.cmp-list-item { display: flex; align-items: center; gap: 6px; padding: 3px 8px 3px 14px;
+  font-size: 13px; cursor: pointer; white-space: nowrap; border-radius: 4px; }
 .cmp-list-item:hover { background: var(--bg-card); }
 .cmp-list-item.selected { background: rgba(232,184,75,.15); }
 /* нескроллящаяся строка поиска в дропдауне файлов (sticky, как у ключа) */
 .cmp-list-search { position: sticky; top: 0; z-index: 2; margin: 3px; padding: 3px 8px;
   width: calc(100% - 6px); box-sizing: border-box; background: var(--bg-elev);
   border: 1px solid var(--border); border-radius: 5px; color: var(--text);
-  font-size: 11px; font-family: var(--font); }
+  font-size: 13px; font-family: var(--font); }
 /* компактные заголовки групп дерева в дропдауне файлов */
-.cmp-list-dir { font-size: 10px; font-weight: 700; text-transform: uppercase;
+.cmp-list-dir { font-size: 12px; font-weight: 700; text-transform: uppercase;
   letter-spacing: .5px; color: var(--text-mute); padding: 5px 8px 1px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cmp-list-rest { overflow: hidden; text-overflow: ellipsis; }
 /* подсветка найденного фрагмента в поиске дропдауна файлов */
 .cmp-list-mark { background: rgba(232, 184, 75, .45); color: inherit;
   border-radius: 2px; padding: 0 1px; }
-.cmp-chip { font-size: 9.5px; font-weight: 700; padding: 1px 8px; border-radius: 0; flex-shrink: 0; }
+.cmp-chip { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 0; flex-shrink: 0; }
 .cmp-chip.chip-base { background: var(--yellow); color: #1a1a1a; }
 .cmp-chip.chip-res { background: #9d6df2; color: #fff; }
 .cmp-chip.chip-legion { background: var(--red); color: #fff; }
@@ -57,9 +57,9 @@
 .cmp-btns { display: flex; align-items: center; gap: 6px; }
 /* крестики сторон — глобальный .icon-btn.danger в chrome.css */
 .cmp-keyrow { display: flex; align-items: center; gap: 12px; }
-.cmp-key-label { display: flex; flex-direction: row; gap: 6px; font-size: 11px;
+.cmp-key-label { display: flex; flex-direction: row; gap: 6px; font-size: 13px;
   color: var(--text-mute); align-items: center; }
-.cmp-key-label select { font-size: 11px; background: var(--bg-elev); border: 1px solid var(--border);
+.cmp-key-label select { font-size: 13px; background: var(--bg-elev); border: 1px solid var(--border);
   border-radius: 6px; color: var(--text); max-width: 140px; font-family: var(--font); }
 .cmp-filters { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
 .cmp-filter { font-size: 12.5px; padding: 5px 14px; border-radius: 0; border: 1px solid var(--border);
@@ -153,6 +153,23 @@
 .cmp-find-pop[hidden] { display: none; }
 .cmp-find-pop .find-row input[type=text] { flex: 1; min-width: 0; }
 /* старый двухкнопочный переключтель заменён общим .src-seg (см. выше) */
+/* подсказка сравнения (? рядом со «Слить всё»): легенда кнопок и цветов.
+   Образцы строк/точек красятся теми же классами, что живой диф,
+   поэтому легенда всегда один в один с таблицей */
+.cmp-help-body { padding: 10px 16px 16px; overflow: auto; max-height: 70vh;
+  display: flex; flex-direction: column; gap: 6px; }
+.cmp-help-title { font-size: 14px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--accent); margin-top: 8px; }
+.cmp-help-title:first-child { margin-top: 0; }
+.cmp-help-row { display: flex; gap: 10px; align-items: baseline;
+  font-size: 15px; line-height: 1.5; color: var(--text); }
+.cmp-help-row b { flex: 0 0 190px; font-weight: 700; }
+.cmp-help-demo { table-layout: fixed; width: 100%; }
+.cmp-grid.cmp-help-demo td { width: auto; min-width: 0; max-width: none;
+  white-space: normal; height: auto; font-size: 15px; line-height: 1.5; }
+.cmp-grid.cmp-help-demo td.td-st { width: 30px; min-width: 30px; max-width: 30px;
+  white-space: nowrap; }
+.cmp-help-hdrsample { color: rgba(232,184,75,.75); font-weight: 700; }
 /* галка синхронной прокрутки панелей сравнения */
 .cmp-sync {
   display: inline-flex; align-items: center; gap: 5px;

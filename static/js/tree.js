@@ -39,6 +39,8 @@ const TREE_CATEGORIES = [
   { key: "tank_upgrades", icon: "renovate.svg", match: n => n.startsWith("tank_") },
   { key: "helicopters", icon: "velocity.svg", match: n => n === "helicopters.xml" },
   { key: "heli_upgrades", icon: "renovate.svg", match: n => n.startsWith("heli_") },
+  // авиация: сами самолёты и вызовы авиаударов одним разделом
+  { key: "airplanes", icon: "velocity.svg", match: n => n === "airplanes.xml" || n === "airstrikes.xml" },
   // «Вооружение»: стволы, крепления, слоты, ракеты и боеприпасы одним разделом
   { key: "guns", icon: "dart.svg", match: n => n === "guns.xml" || n === "gun_mounts.xml" || n === "weapon_slots.xml" || n === "missiles.xml" || n === "ammunition.xml" },
   { key: "modules", icon: "lib.svg", match: n => n === "modules.xml" },
@@ -47,6 +49,11 @@ const TREE_CATEGORIES = [
   { key: "exp", icon: "chart.svg", match: n => n === "exp.xml" },
   { key: "reinforcements", icon: "nest.svg", match: n => n === "reinforcements.xml" },
   { key: "spawns_sheet", icon: "spreadsheet.svg", match: n => n === "spawns_sheet.xml" },
+  // shop_presets.xml делится ПО РАСПОЛОЖЕНИЮ: базовый файл (магазины
+  // кампании) и dlc-файл (награды Uprising) — разные подразделы.
+  // match получает вторым аргументом путь папки (см. categorizeNodeFiles).
+  { key: "shop_campaign", icon: "database.svg", match: (n, p) => n === "shop_presets.xml" && !/(^|[\\/])dlc([\\/]|$)/i.test(p || "") },
+  { key: "shop_uprising", icon: "database.svg", match: (n, p) => n === "shop_presets.xml" && /(^|[\\/])dlc([\\/]|$)/i.test(p || "") },
   // сценарии миссий: свой раздел в дереве, открываются в SWT-редакторе
   { key: "swt_scripts", icon: "xml.svg", match: n => n.endsWith(".swt") },
 ];
@@ -111,9 +118,19 @@ function treeExtAllowed(fname) {
   return state.treeExtFilter.has(fileExt(fname));
 }
 
-function setTreeLoading(on) {
+// спиннер древа — ПОИСТОЧНИКОВО: project/game/mod грузятся параллельно,
+// общий счётчик зажигал спиннер игры поверх чужого древа. Виден только
+// если грузится ТЕКУЩИЙ источник; остальные догружаются молча в фоне.
+const treeLoading = new Set();
+function setTreeLoading(src, on) {
+  if (!src) return;
+  if (on) treeLoading.add(src);
+  else treeLoading.delete(src);
+  paintTreeSpinner();
+}
+function paintTreeSpinner() {
   const el = $("#tree-loading");
-  if (el) el.hidden = !on;
+  if (el) el.hidden = !treeLoading.has(state.treeView);
 }
 
 async function loadFullTree() {
@@ -121,7 +138,7 @@ async function loadFullTree() {
   state.fullTreeExpanded = new Set();
   state.fullTreeCollapsed = new Set();
   state.treeCounts = null;
-  setTreeLoading(true);
+  setTreeLoading("project", true);
   try {
     const r = await api("/api/project_tree", { timeout: API_TIMEOUT_OPEN });
     const j = await r.json();
@@ -136,7 +153,7 @@ async function loadFullTree() {
       return;
     }
   } catch (e) { /* fall through to the empty tree */ }
-  finally { setTreeLoading(false); }
+  finally { setTreeLoading("project", false); }
   state.fullTree = { n: "", d: [], f: [] };
   updateToolButtons();
 }
@@ -157,15 +174,15 @@ function treeHasFile(tree, test) {
 }
 
 // кнопки инструментов активны только когда есть с чем работать:
-// Uprising Map Editor — когда хоть в одном источнике есть shop_presets.xml,
-// SWT Editor — когда есть .swt файлы. Иначе серые и неактивные.
+// Uprising Map Editor и Редактор Компании — когда хоть в одном источнике
+// есть shop_presets.xml, SWT Editor — когда есть .swt файлы.
 function updateToolButtons() {
   const trees = [state.fullTree, state.gameTree, state.modTree];
   const hasUpr = trees.some(tr => treeHasFile(tr,
     fn => fn.toLowerCase() === "shop_presets.xml"));
   const hasSwt = trees.some(tr => treeHasFile(tr,
     fn => fn.toLowerCase().endsWith(".swt")));
-  for (const id of ["#btn-uprising", "#landing-uprising"]) {
+  for (const id of ["#btn-uprising", "#landing-uprising", "#btn-campaign", "#landing-campaign"]) {
     const b = $(id);
     if (b) b.disabled = !hasUpr;
   }
@@ -193,12 +210,14 @@ function sanitizeTreeFiltersToProject() {
   if (changed) saveTreeFilters();
 }
 
-function categorizeNodeFiles(files) {
+function categorizeNodeFiles(files, dirPath) {
   // returns category groups for a folder's file list, or null when nothing
-  // matches a known unit-sheet file (random dirs stay ungrouped)
+  // matches a known unit-sheet file (random dirs stay ungrouped).
+  // dirPath lets some categories split by location (shop_presets:
+  // base file = Campaign Shop, dlc file = Uprising Shop).
   if (!files || !files.length) return null;
   const lower = files.map(f => f.toLowerCase());
-  const hit = i => TREE_CATEGORIES.find(c => c.match(lower[i]));
+  const hit = i => TREE_CATEGORIES.find(c => c.match(lower[i], dirPath));
   const groups = [];
   let matched = false;
   for (const c of TREE_CATEGORIES) {
@@ -380,7 +399,7 @@ function collectOverlayRows(sections, capFiles) {
       rows.push({ kind: "dir", node: d, depth, path: p, expanded });
       if (expanded) visit(d, depth + 1, p);
     }
-    const cats = state.treeFilter ? null : categorizeNodeFiles(node._fl || []);
+    const cats = state.treeFilter ? null : categorizeNodeFiles(node._fl || [], path);
     if (cats) {
       for (const g of cats) {
         const ck = "cat::" + path + "::" + g.key;
@@ -553,6 +572,13 @@ function buildTreeFileRow(fname, depth, path) {
     row.classList.add("edited");
     row.title = (t("edited_hint") || "Файл редактировался в Terminator Sheet") + "\n" + path;
   }
+  // несохранённые правки — зелёная метка сразу, не после сохранения:
+  // все редакторы (таблица, карта, кампания, SWT) идут через tab.dirty /
+  // state.*.dirty, paintTreeDirty обновляет без ререндера
+  if (treeFileDirty(path)) {
+    row.classList.add("dirty");
+    row.title = (t("unsaved") || "Есть несохранённые изменения") + "\n" + path;
+  }
   row.draggable = true;
   row.innerHTML = `<img class="file-icon" src="${getFileIcon(fname)}" alt="">
     <span class="file-name"></span>`;
@@ -609,7 +635,13 @@ function buildTreeFileRow(fname, depth, path) {
 const SRC_ORDER = ["project", "game", "mod"];
 
 function srcAvail(v) {
-  if (v === "project") return !!((state.project && state.project.root) || "");
+  // «Проект» доступен и до конца фоновой загрузки (init/loadProject):
+  // путь прошлого запуска уже в конфиге, state.project.root приедет позже.
+  // Без этого сегмент «Проект» на сравнении нельзя выбрать, а сохранённые
+  // стороны и зеркало («Аналогичный файл») молча отваливаются именно для
+  // проекта, хотя для игры (путь из конфига сразу) всё работает.
+  if (v === "project") return !!((state.project && state.project.root)
+    || (state.config && (state.config.project_path || state.config.last_project)) || "");
   if (v === "game") return !!((state.config && state.config.unpacked_path) || "");
   if (v === "mod") return !!((state.config && state.config.mod_path) || "");
   return false;
@@ -618,7 +650,8 @@ function srcAvail(v) {
 function srcRoot(v) {
   if (v === "game") return ((state.config && state.config.unpacked_path) || "");
   if (v === "mod") return ((state.config && state.config.mod_path) || "");
-  return ((state.project && state.project.root) || "");
+  return ((state.project && state.project.root)
+    || (state.config && (state.config.project_path || state.config.last_project)) || "");
 }
 
 // первый доступный источник, кроме except (для сторон сравнения)
@@ -646,28 +679,28 @@ function treeRoot() {
   return state.fullTree;
 }
 
-async function loadGameTree() {
-  if (state.gameTree) return;
+async function loadGameTree(force) {
+  if (state.gameTree && !force) return;
   state.gameTree = { n: "", d: [], f: [] };
-  setTreeLoading(true);
+  setTreeLoading("game", true);
   try {
     const r = await api("/api/game_tree", { timeout: API_TIMEOUT_OPEN });
     const j = await r.json();
     if (j.ok && j.tree) state.gameTree = j.tree;
   } catch (e) { /* остаётся пустое дерево */ }
-  finally { setTreeLoading(false); updateToolButtons(); }
+  finally { setTreeLoading("game", false); updateToolButtons(); }
 }
 
-async function loadModTree() {
-  if (state.modTree) return;
+async function loadModTree(force) {
+  if (state.modTree && !force) return;
   state.modTree = { n: "", d: [], f: [] };
-  setTreeLoading(true);
+  setTreeLoading("mod", true);
   try {
     const r = await api("/api/mod_tree", { timeout: API_TIMEOUT_OPEN });
     const j = await r.json();
     if (j.ok && j.tree) state.modTree = j.tree;
   } catch (e) { /* остаётся пустое дерево */ }
-  finally { setTreeLoading(false); updateToolButtons(); }
+  finally { setTreeLoading("mod", false); updateToolButtons(); }
 }
 
 // дерево не знает о файлах, созданных мимо скана (save_as из игры в
@@ -684,6 +717,81 @@ async function noteExternalTreeChange(target) {
     }
   } catch (e) { /* дерево не критично для сейва */ }
   try { renderTree(); } catch (e) { /* noop */ }
+  // свои же изменения — в базу вотчера, чтобы его тик не перечитывал
+  // то же дерево повторно
+  try { await syncTreeWatch(); } catch (e) { /* noop */ }
+}
+
+// ---------- внешний вотчер деревьев (бэкенд TreeWatch) ----------
+// Фронт опрашивает /api/tree_watch и перечитывает ТОЛЬКО изменившееся
+// дерево; чужие поколения гасят кэш, чтобы переключение вида не показывало
+// протухшее. Первый тик — только синхронизация базы (без перезагрузок).
+// Развёртки папок/секций сохраняем — фоновая подтяжка не должна схлопывать
+// дерево, которое пользователь только что раскрыл.
+let treeWatchTimer = null;
+async function treeWatchTick() {
+  try {
+    if (document.hidden) return;
+    const r = await api("/api/tree_watch");
+    const j = await r.json();
+    if (!j || !j.ok) return;
+    state.treeWatch = state.treeWatch || { gens: {}, synced: false };
+    const tw = state.treeWatch;
+    if (!tw.synced) { tw.gens = Object.assign({}, j.roots); tw.synced = true; return; }
+    for (const role of ["project", "game", "mod"]) {
+      const gen = (j.roots && j.roots[role]) || 0;
+      if ((tw.gens[role] || 0) >= gen) continue;
+      tw.gens[role] = gen;
+      if (state.treeView === role) {
+        const keepE = state.fullTreeExpanded, keepC = state.fullTreeCollapsed,
+          keepT = state.treeCollapsed;
+        if (role === "project") await loadFullTree();
+        else if (role === "game") await loadGameTree(true);
+        else await loadModTree(true);
+        if (keepE) state.fullTreeExpanded = keepE;
+        if (keepC) state.fullTreeCollapsed = keepC;
+        if (keepT) state.treeCollapsed = keepT;
+        renderTree();
+      } else if (role === "game") state.gameTree = null;
+      else if (role === "mod") state.modTree = null;
+    }
+  } catch (e) { /* следующий тик */ }
+}
+// точечная синхронизация базы вотчера без перезагрузок
+async function syncTreeWatch() {
+  try {
+    const r = await api("/api/tree_watch");
+    const j = await r.json();
+    if (j && j.ok) {
+      state.treeWatch = state.treeWatch || { gens: {}, synced: false };
+      state.treeWatch.gens = Object.assign({}, j.roots);
+      state.treeWatch.synced = true;
+    }
+  } catch (e) { /* noop */ }
+}
+function ensureTreeWatch() {
+  if (treeWatchTimer) return;
+  treeWatchTimer = setInterval(treeWatchTick, 4000);
+}
+// «Пересканировать»: бэкенд роняет базы и поднимает все поколения,
+// фронт принудительно перечитывает все три дерева
+async function rescanAllTrees(btn) {
+  if (rescanAllTrees.busy) return;
+  rescanAllTrees.busy = true;
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api("/api/tree_rescan", { method: "POST" });
+    const j = await r.json();
+    if (j && j.ok) {
+      state.treeWatch = { gens: Object.assign({}, j.roots), synced: true };
+      await loadFullTree().catch(() => {});
+      if (srcAvail("game")) await loadGameTree(true).catch(() => {});
+      if (srcAvail("mod")) await loadModTree(true).catch(() => {});
+      renderTree();
+      toast(t("tree_rescanned") || "Деревья пересканированы", "ok");
+    } else toast((j && j.error) || "error", "err");
+  } catch (e) { toast(String((e && e.message) || e), "err"); }
+  finally { rescanAllTrees.busy = false; if (btn) btn.disabled = false; }
 }
 
 // фоновый обход дерева завершился: если этот источник активен — пересчитать
@@ -728,10 +836,20 @@ function openSettingsPaths(inputId) {
   try { inp.focus({ preventScroll: true }); } catch (e) { /* noop */ }
 }
 
+// персист глобального источника: localStorage живёт один запуск
+// (origin включает случайный порт сервера), межзапусковое —
+// config.json (tree_view) через /api/config; пишем в оба сразу
+function persistSrc(v) {
+  try { localStorage.setItem("tsh_src", v); } catch (e) { /* приватный режим */ }
+  try {
+    api("/api/config", { method: "POST", body: JSON.stringify({ tree_view: v }) })
+      .catch(() => {});
+  } catch (e) { /* оффлайн */ }
+}
 // смена глобального источника: древо + переключатели + карта (с confirm при грязной карте)
 async function setSrc(v) {
   if (!srcAvail(v)) return;
-  if (state.treeView === v) { paintSrcSwitches(); return; }
+  if (state.treeView === v) { paintSrcSwitches(); paintTreeSpinner(); return; }
   if (state.uprising.path && state.uprising.rows && state.uprising.dirty) {
     const choice = await askConfirm({
       title: t("upr_src_change") || "Сменить источник",
@@ -745,7 +863,10 @@ async function setSrc(v) {
     if (choice !== "ok") { paintSrcSwitches(); return; }
   }
   state.treeView = v;
-  try { localStorage.setItem("tsh_src", v); } catch (e) { /* приватный режим */ }
+  persistSrc(v);
+  // спиннер — только своего источника: переключение сразу перекрашивает,
+  // фоновая догрузка чужого древа видна не будет
+  paintTreeSpinner();
   if (v === "game") await loadGameTree();
   if (v === "mod") await loadModTree();
   // счётчики для меню фильтров следуют за активным деревом; сами фильтры общие
@@ -759,12 +880,37 @@ async function setSrc(v) {
   if (state.tabs.some(tb => tb.id === "uprising")) {
     state.uprising.dirty = false;
     uprMarkClean();
+    // stale-оверлей («открыть проект» от прошлого источника) гаснет в тот же
+    // тик: дальше find+load могут ждать GIL десятки секунд, и висеть должен
+    // спиннер загрузки, а не старый текст
+    try { uprSetLoading(true); } catch (e) { /* карта ещё не строилась */ }
     const path = await uprFindFile();
     state.uprising.path = "";
     state.uprising.rows = null;
     if (path) await openUprising(path, { activate: false });
-    else uprPaintNofile();
+    else { try { uprSetLoading(false); } catch (e) {} uprPaintNofile(); }
     uprLoadSysnames();
+  }
+  // редактор кампании — так же фоном из нового корня
+  if (state.tabs.some(tb => tb.id === "campaign")) {
+    if (state.campaign.path && state.campaign.rows && state.campaign.dirty) {
+      const choice = await askConfirm({
+        title: t("upr_src_change") || "Сменить источник",
+        message: t("cpg_src_dirty") ||
+          "Несохранённые изменения кампании будут потеряны. Продолжить?",
+        buttons: [
+          { id: "ok", label: t("continue") || "Продолжить", kind: "danger" },
+          { id: "cancel", label: t("cancel"), kind: "ghost" },
+        ],
+      });
+      if (choice !== "ok") { paintSrcSwitches(); return; }
+    }
+    state.campaign.dirty = false;
+    const path = await cmpFindFile();
+    state.campaign.path = "";
+    state.campaign.rows = null;
+    if (path) await openCampaign(path, { activate: false });
+    else cmpPaintNofile();
   }
 }
 
@@ -805,13 +951,15 @@ function paintSrcSwitches() {
       b.title = srcRoot(s);
     }
   }
-  // сегмент карты: недоступные пункты темнеют (кнопка is-off), индикатор едет.
+  // сегменты Проект|Игра|Мод на страницах (карта #upr-src + кампания
+  // #cmp-src): недоступные пункты темнеют (кнопка is-off), индикатор едет.
   // is-off вместо disabled: серая кнопка кликабельна и ведёт в настройки
   // (нативный disabled гасит клики — до настроек было не добраться).
   // unavailable current source -> no active button and no yellow pill
   // (иначе «Проект» подсвечен по умолчанию даже без пути)
-  const seg = $("#upr-src");
-  if (seg) {
+  const paintSeg = (sel) => {
+    const seg = $(sel);
+    if (!seg) return;
     const ok = srcAvail(v);
     seg.dataset.pos = ok ? String(Math.max(0, SRC_ORDER.indexOf(v))) : "-1";
     $$(".src-seg-btn", seg).forEach(b => {
@@ -823,7 +971,9 @@ function paintSrcSwitches() {
       b.setAttribute("aria-disabled", String(!sok));
       b.title = srcRoot(s) || "";
     });
-  }
+  };
+  paintSeg("#upr-src");
+  paintSeg("#cmp-src");
   paintCmpSrc();
 }
 
@@ -841,6 +991,7 @@ function renderTree() {
   const keepScroll = sidebar ? sidebar.scrollTop : 0;
   const renderDone = (msg) => {
     if (sidebar) sidebar.scrollTop = keepScroll;
+    paintTreeDirty();
     if (msg) {
       const el = document.createElement("div");
       el.className = "tree-empty";
@@ -947,6 +1098,45 @@ function markActiveTreeFile(path) {
   });
 }
 
+// Глобальная зелёная метка несохранённых правок на узле древа: собирает
+// dirty-пути из ВСЕХ редакторов (таблица/карта/кампания/SWT через табы +
+// state-флаги) и переключает класс без ререндера древа
+function treeDirtyPaths() {
+  const out = new Set();
+  const add = p => {
+    if (!p) return;
+    try { out.add(normPath(p)); } catch (e) { /* noop */ }
+  };
+  (state.tabs || []).forEach(tb => { if (tb.dirty && tb.path) add(tb.path); });
+  if (state.uprising && state.uprising.dirty) add(state.uprising.path);
+  if (state.campaign && state.campaign.dirty) add(state.campaign.path);
+  if (state.swt && state.swt.dirty) add(state.swt.path);
+  if (state.dirty && state.currentFile) add(state.currentFile.path);
+  return out;
+}
+
+function treeFileDirty(path) {
+  if (!path) return false;
+  try { return treeDirtyPaths().has(normPath(path)); }
+  catch (e) { return false; }
+}
+
+function paintTreeDirty() {
+  const tree = $("#project-tree");
+  if (!tree) return;
+  const dirty = treeDirtyPaths();
+  $$("#project-tree .tree-file").forEach(r => {
+    const p = r.dataset.path || "";
+    let is = false;
+    try { is = dirty.has(normPath(p)); } catch (e) { /* noop */ }
+    r.classList.toggle("dirty", is);
+    if (is) r.title = (t("unsaved") || "Есть несохранённые изменения") + "\n" + p;
+    else if (state.editedFiles && state.editedFiles.has(String(p).toLowerCase()))
+      r.title = (t("edited_hint") || "Файл редактировался в Terminator Sheet") + "\n" + p;
+    else r.title = p;
+  });
+}
+
 // ---------- project ----------
 async function openProjectDialog() {
   const path = await pickFolder();
@@ -961,7 +1151,7 @@ function projectFolderName(proj) {
   return parts.pop() || proj.root;
 }
 
-async function loadProject(path) {
+async function loadProject(path, opts) {
   showTabLoading("welcome", true);
   try {
     const r = await api("/api/open_project", { method: "POST", body: JSON.stringify({ path }), timeout: API_TIMEOUT_OPEN });
@@ -972,10 +1162,18 @@ async function loadProject(path) {
     // имена из locale-XML — отдельным фоновым запросом (см. loadDisplayNames)
     state.nameMap = {};
     loadDisplayNames(j.project.root);
-    await loadEditedMarks(j.project.root);
+    await loadEditedMarks();
     await loadFullTree();
-    state.treeView = "project";
-    try { localStorage.setItem("tsh_src", "project"); } catch (e) { /* приватный режим */ }
+    // смена проекта вручную — показываем его дерево; фоновый старт
+    // (keepSrc) — оставляем сохранённый источник: иначе каждый запуск
+    // сносил бы game/mod в project и затирал localStorage следом
+    if (opts && opts.keepSrc) {
+      if (!srcAvail(state.treeView)) state.treeView = srcFirst(null) || "project";
+    } else {
+      state.treeView = "project";
+    }
+    persistSrc(state.treeView);
+    paintTreeSpinner();
     renderTree();
     updateSidebarTabs();
     // проект мог приехать фоном (старт) или вручную при открытой странице
@@ -1001,17 +1199,61 @@ async function openFileDialog() {
 
 // локализованные имена (sysname -> имя) отдельным фоновым запросом: парсинг
 // всех locale-XML на холодном HDD держит ответ минутами, open_project его
-// больше не ждёт — имена дотягиваются после старта, грид перерисовывается
-async function loadDisplayNames(root) {
+// больше не ждёт — имена дотягиваются после старта, грид перерисовывается.
+// Слои — сначала корень ОТКРЫТОЙ КАРТЫ (путь карты лежит внутри своего
+// источника: проект/мод/игра), дальше остальные по порядку проект/мод/игра
+// (побеждает первый, остальные лишь добивают недостающее; GameAssets
+// докладывает бэкенд сам, если скачаны).
+async function loadDisplayNames(root, mapPath) {
   if (!root) return;
   try {
-    const r = await api("/api/display_names?root=" + encodeURIComponent(root)
-      + "&lang=" + encodeURIComponent(state.config.language || "ru"),
+    const mod = (state.config && state.config.mod_path) || "";
+    const game = (state.config && state.config.unpacked_path) || "";
+    const all = [String(root || ""), String(mod || ""), String(game || "")];
+    // путь карты задан явно (открытие/смена источника) либо берём карту
+    // активной вкладки — её источник первый
+    let mp = String(mapPath || "");
+    if (!mp) {
+      try {
+        mp = state.activeTabId === "campaign"
+          ? (state.campaign && state.campaign.path) || ""
+          : state.activeTabId === "uprising"
+            ? (state.uprising && state.uprising.path) || ""
+            : "";
+      } catch (e) { mp = ""; }
+    }
+    // источник карты первый: не нашлось там — ищем дальше по порядку
+    let first = "";
+    try {
+      const m = String(mp || "").toLowerCase().replace(/\//g, "\\");
+      if (m) {
+        first = all.map(r => String(r || ""))
+          .filter(r => r)
+          .find(r => {
+            const rl = r.toLowerCase().replace(/\//g, "\\");
+            return m === rl || m.startsWith(rl + "\\");
+          }) || "";
+      }
+    } catch (e) { first = ""; }
+    const ordered = first ? [first].concat(all.filter(r => r !== first)) : all;
+    const p = new URLSearchParams();
+    const seen = new Set();
+    ordered.forEach(r => {
+      r = String(r || "");
+      if (!r || seen.has(r.toLowerCase())) return;
+      seen.add(r.toLowerCase());
+      p.append("root", r);
+    });
+    p.set("lang", (state.config && state.config.language) || "ru");
+    const r = await api("/api/display_names?" + p.toString(),
       { timeout: API_TIMEOUT_OPEN });
     const j = await r.json();
     if (j && j.ok && j.names) {
       state.nameMap = j.names;
       if (state.currentFile && state.currentFile.rows) renderGrid();
+      // имена запечены в чипах при рендере — перерисовать открытые кампании
+      try { if (state.uprising.rows) renderUprising(); } catch (e) {}
+      try { if (typeof cmpPaintPanel === "function") cmpPaintPanel(); } catch (e) {}
     }
   } catch (e) { /* имена не критичны: грид работает на sysname */ }
 }
@@ -1072,6 +1314,12 @@ function beginEdit(tr, ri, ci, initVal) {
   input.value = initVal != null ? String(initVal) : val;
   td.textContent = "";
   td.appendChild(input);
+  // unit_set / unit_class в cars/tanks: стильный комбобокс классов + свободный ручной ввод
+  if (typeof unitComboFor === "function" && typeof makeUnitSetCombo === "function") {
+    const combo = unitComboFor(state.currentFile.path, state.currentFile.columns, ci,
+      state.currentFile.rows.map(r => r.values[ci]));
+    if (combo) makeUnitSetCombo(td, input, combo.choices, combo.title);
+  }
   // фокус через хелпер: голый focus() докручивает контейнер сам и прячет
   // ячейку под липкую колонку sysname (см. focusCellInput в grid.js)
   focusCellInput(input, td);
@@ -1085,9 +1333,11 @@ function beginEdit(tr, ri, ci, initVal) {
     if (newVal !== val) {
       const activeTab = state.tabs.find(t => t.id === state.activeTabId);
       const r = await api("/api/edit", { method: "POST",
-        body: JSON.stringify({ path: state.currentFile.path, row: ri, col: ci, value: newVal }) });
+        body: JSON.stringify({ path: state.currentFile.path, row: ri, col: ci, value: newVal,
+          ...syncFlags() }) });
       const j = await r.json();
       if (j.ok) {
+        await handleSyncResult(j, state.currentFile.path);
         state.currentFile.rows[ri].values[ci] = newVal;
         setUndoRedoButtons(!!j.can_undo, !!j.can_redo);
         if (activeTab) activeTab.dirty = j.saved ? false : true;

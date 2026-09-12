@@ -49,7 +49,7 @@ function swtCmdText(c) {
 function swtFreshState() {  return { path: null, doc: null, fixed: 0, cmds: [], cmdMap: {},
            sel: -1, dirty: false, condOpen: true, actOpen: true, mtime: 0,
            _undo: [], _redo: [],
-           _docSrc: {}, _analyzed: false, _srcPromise: null };
+           _docSrc: {}, _analyzed: false, _srcPromise: null, _srcLoading: null };
 }
 
 // следующий свободный guid: max+1 по всему файлу В СВОЁМ типе (нумерации
@@ -179,6 +179,14 @@ function swtAutocomplete(inp, items, onPick, opts) {
     active = -1;
     swtAcOpenEl = panel;
     render();
+    // словарей ещё нет (фоновая загрузка при открытии не успела/упала) —
+    // догружаем и перерисовываем список, когда придут; фокус ещё в поле —
+    // открываемся заново (маркер уже стоит, петли нет)
+    swtEnsureSources().then(ok => {
+      if (!ok) return;
+      if (panel && panel.isConnected) render();
+      else if (document.activeElement === inp) open();
+    });
   };
 
   inp.addEventListener("focus", () => { if (openOnFocus) open(); });
@@ -410,18 +418,27 @@ function swtSuggestFor(spec, unitType) {
   if (!spec || spec.startsWith("select:")) return null;
   const out = new Set();
   const src = state.swtSources || {};
-  if (spec === "upgrade_sysname") {
+  // тип юнита из того же блока (car|tank|squad|helicopter): sysname и
+  // пресет улучшения фильтруются СТРОГО по нему (car — только cars.xml
+  // и car_upgrade_presets.xml и т.д.). Тип не выбран — общий словарь
+  // (как раньше) + значения из самого файла (они добавляются всегда ниже)
+  const own = (typeof unitType === "function" ? unitType() : unitType) || "";
+  if (spec === "sysname") {
+    const byUnit = { car: src.units_car, tank: src.units_tank,
+                     squad: src.units_squad, helicopter: src.units_heli };
+    (byUnit[own] || (own ? [] : src.units) || []).forEach(v => out.add(v));
+  } else if (spec === "upgrade_sysname") {
     // зависимость от типа: пресет целиком из файла своего типа;
     // тип не выбран - все пресеты; пресетов нет - старые *_upgrades.xml
     const byType = { car: src.car_presets, tank: src.tank_presets,
                      squad: src.squad_presets, helicopter: src.heli_presets };
-    const own = (typeof unitType === "function" ? unitType() : unitType) || "";
-    (byType[own] || []).forEach(v => out.add(v));
-    if (!out.size) {
+    if (own) {
+      (byType[own] || []).forEach(v => out.add(v));
+    } else {
       ["car_presets", "tank_presets", "squad_presets", "heli_presets"]
         .forEach(k => (src[k] || []).forEach(v => out.add(v)));
+      if (!out.size) (src.upgrades || []).forEach(v => out.add(v));
     }
-    if (!out.size) (src.upgrades || []).forEach(v => out.add(v));
   } else {
     const ext = {
       team_name: SWT_TEAMS,
@@ -443,8 +460,11 @@ function swtSuggestFor(spec, unitType) {
 // пустые списки, редактор просто остаётся с текстовым вводом
 async function loadSwtSources(path) {
   const empty = { ok: true, units: [], crew: [], upgrades: [], items: [],
-                  presets: [], teams: [], car_presets: [], tank_presets: [],
-                  squad_presets: [], heli_presets: [] };
+                   presets: [], teams: [], car_presets: [], tank_presets: [],
+                   squad_presets: [], heli_presets: [],
+                   units_car: [], units_tank: [],
+                   units_squad: [], units_heli: [], scope_label: "" };
+  let reached = false;
   try {
     const r = await api("/api/swt_sources", { method: "POST",
       body: JSON.stringify({
@@ -453,10 +473,35 @@ async function loadSwtSources(path) {
         unpacked_path: state.config.unpacked_path || "",
       }) });
     const j = await r.json();
+    reached = true;
     state.swtSources = j && j.ok ? j : empty;
   } catch {
     state.swtSources = empty;
   }
+  // маркер «словари построены для этого файла»: только после ДОШЕДШЕГО
+  // запроса (упавший не маркируем — при следующем обращении
+  // swtEnsureSources попробует снова, а не молчит до кнопки «Анализ»)
+  if (reached) {
+    try { state.swtSources._forPath = path; } catch {}
+  }
+  return state.swtSources;
+}
+
+// ленивая догрузка словарей при первом обращении к подсказкам: фоновая
+// загрузка при открытии могла не успеть/упасть (сервер ещё стартует,
+// корни не готовы) — чиним сами, как sysnames обеих карт, а не только
+// кнопкой «Анализ». Один полёт на файл (флаг _srcLoading).
+function swtEnsureSources() {
+  if (state.swt._srcLoading) return state.swt._srcLoading;
+  const cur = state.swtSources;
+  if (cur && cur._forPath === state.swt.path && state.swt.path)
+    return Promise.resolve(true);
+  if (!state.swt.path) return Promise.resolve(false);
+  state.swt._srcLoading = loadSwtSources(state.swt.path).then(
+    () => true, () => false).finally(() => {
+      try { state.swt._srcLoading = null; } catch {}
+    });
+  return state.swt._srcLoading;
 }
 
 function swtTab() { return state.tabs.find(tb => tb.id === "swt"); }
@@ -1403,7 +1448,6 @@ function setupSwtFind() {
       swtFindJump(swtFindHits[swtFindIdx]);
     },
     onStep: d => swtFindStep(d),
-    onClose: () => { swtFindHits = []; swtFindIdx = 0; },
   });
 }
 
@@ -1518,13 +1562,15 @@ function setupSwt() {
     anBtn.disabled = true;
     anBtn.classList.add("busy");
     try {
-      await loadSwtSources(state.swt.path);
+      const sj = await loadSwtSources(state.swt.path);
       state.swt._srcPromise = Promise.resolve();
       state.swt._docSrc = swtDocSources();
       state.swt._analyzed = true;
       renderSwtTrigger();
       anBtn.classList.add("done");
-      toast(t("swt_analyze_done") || "Анализ завершён: подсказки заполнены", "ok");
+      // скоп словарей виден сразу: DLC Resistance или base
+      const scope = (sj && sj.scope_label) ? " · " + sj.scope_label : "";
+      toast((t("swt_analyze_done") || "Анализ завершён: подсказки заполнены") + scope, "ok");
     } catch (e) {
       toast(String(e), "err");
     } finally {

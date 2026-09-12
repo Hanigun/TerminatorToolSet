@@ -32,6 +32,8 @@ const state = {
   cmpMoved: {},             // key -> "new" | "changed": rows transferred this session
   cmpMovedFor: "",          // fingerprint of the compared pair the marks belong to
   cmpMovedUndone: {},       // marks parked while their transfer is undone (redo returns them)
+  cmpBaseline: null,        // journal snapshot at diff start (cancel reverts to it)
+  cmpFlags: {},             // undo/redo flags per side when preview cache empty
   // UI state
   sidebarCollapsed: false,
   sidebarWidth: 320,
@@ -255,17 +257,38 @@ async function fsCopyTo(src, dstDir) {
   return j.path;
 }
 
+// корень-источник, внутри которого лежит src (проект/игра/мод):
+// «скопировать в мод/проект» обязано сохранять относительный путь, а src
+// может прийти из любого из трёх деревьев — шить project_root вслепую
+// (как раньше) значит ронять структуру в корень мода для файлов из «Игры»
+function copyRootFor(src) {
+  const n = normPath(src).toLowerCase();
+  let best = "";
+  for (const v of ["project", "game", "mod"]) {
+    const r = normPath(srcRoot(v)).toLowerCase().replace(/[\\/]+$/, "");
+    if (r && (n === r || n.startsWith(r + "\\")) && r.length > best.length) best = r;
+  }
+  if (best) {
+    for (const v of ["project", "game", "mod"]) {
+      const r = normPath(srcRoot(v)).toLowerCase().replace(/[\\/]+$/, "");
+      if (r === best) return srcRoot(v);
+    }
+  }
+  return "";
+}
+
 async function copyToMod(src) {
   try {
     const r = await api("/api/copy_to_mod", { method: "POST",
       body: JSON.stringify({ src,
-        project_root: (state.project && state.project.root) || "" }) });
+        project_root: copyRootFor(src) || (state.project && state.project.root) || "" }) });
     const j = await r.json();
     if (j.ok) {
       // копия могла создать новый раздел древа мода — перечитываем,
       // иначе скопированного файла не видно без переподключения
       await noteExternalTreeChange("mod");
-      toast((t("ctx_to_mod_done") || "Скопировано в мод") + ": " + j.path, "ok");
+      toast((j.noop ? (t("ctx_copy_noop") || "Уже на месте: ")
+        : (t("ctx_to_mod_done") || "Скопировано в мод: ")) + j.path, "ok");
       return;
     }
     if (j.error === "no_mod_path") {
@@ -280,13 +303,14 @@ async function copyToProject(src) {
   try {
     const r = await api("/api/copy_to_project", { method: "POST",
       body: JSON.stringify({ src,
-        game_root: (state.config && state.config.unpacked_path) || "" }) });
+        game_root: copyRootFor(src) || (state.config && state.config.unpacked_path) || "" }) });
     const j = await r.json();
     if (j.ok) {
       // копия могла создать новый раздел древа (напр. dlc/) — перечитываем,
       // иначе скопированного файла не видно без переподключения проекта
       await noteExternalTreeChange("project");
-      toast((t("ctx_to_project_done") || "Скопировано в проект") + ": " + j.path, "ok");
+      toast((j.noop ? (t("ctx_copy_noop") || "Уже на месте: ")
+        : (t("ctx_to_project_done") || "Скопировано в проект: ")) + j.path, "ok");
       return;
     }
     if (j.error === "no_project_path") {
@@ -348,11 +372,53 @@ function bindTabCtxMenu() {
       : tab.type === "uprising" ? state.uprising.path : tab.path;
     if (modSrc) {
       if (items.length) items.push({ sep: true });
-      items.push({ label: t("ctx_to_mod") || "Скопировать в мод", icon: "to-mod",
+      // пункты — только при открытых приёмниках: нет мода — нет «в мод»,
+      // нет проекта — нет «в проект»
+      if (srcAvail("mod")) items.push({ label: t("ctx_to_mod") || "Скопировать в мод", icon: "to-mod",
         fn: () => copyToMod(modSrc) });
+      if (srcAvail("project")) items.push({ label: t("ctx_to_project") || "Скопировать в проект", icon: "to-mod",
+        fn: () => copyToProject(modSrc) });
     }
     if (items.length) openCtxMenu(e, items);
   });
+}
+
+// ЭКСПЕРИМЕНТ «слот техники»: в призраке только тень иконки — без фона
+// слота, sysname, полосы мест и цены
+function ghostStrip(g) {
+  if (!g || !g.querySelectorAll) return g;
+  g.classList.remove("veh", "inf");
+  g.querySelectorAll(".upr-chip-veh-sys,.upr-chip-veh-cap,.upr-chip-inf-num,.cmp-price-badge")
+    .forEach(n => { try { n.remove(); } catch (e) {} });
+  return g;
+}
+
+// общий призрак перетаскивания нескольких чипов (кампания + Uprising):
+// клон взятого чипа + до MAXG-1 клонов остальных + бейдж «+N» при
+// переполнении. Классы выделения с клонов сняты. Возвращает элемент
+function mkDragGhost(chipEl, extraEls, total) {
+  const MAXG = 6;
+  const wrap = document.createElement("div");
+  wrap.className = "upr-chip upr-card upr-drag-ghost upr-drag-ghost-multi";
+  const push = src => {
+    if (!src || !src.cloneNode) return;
+    if (wrap.querySelectorAll(":scope > .upr-chip").length >= MAXG) return;
+    const c = ghostStrip(src.cloneNode(true));
+    c.classList.remove("upr-chip-dragging", "picked", "sel");
+    c.removeAttribute("id");
+    wrap.appendChild(c);
+  };
+  push(chipEl);
+  (extraEls || []).forEach(push);
+  const shown = wrap.querySelectorAll(":scope > .upr-chip").length;
+  const over = (total | 0) - shown;
+  if (over > 0) {
+    const b = document.createElement("span");
+    b.className = "upr-ghost-n";
+    b.textContent = "+" + over;
+    wrap.appendChild(b);
+  }
+  return wrap;
 }
 
 // контекстное меню дерева: копировать / вставить / дублировать / в мод
@@ -365,7 +431,7 @@ function bindTreeCtxMenu() {
     const path = row.dataset.path;
     if (!path) return;
     const isDir = row.classList.contains("tree-dir");
-    openCtxMenu(e, [
+    const titems = [
       { label: t("ctx_copy") || "Копировать", icon: "copy",
         fn: () => { state.treeClip = { path }; toast(t("ctx_copied") || "Скопировано"); } },
       { label: t("ctx_paste") || "Вставить", icon: "paste", disabled: !state.treeClip,
@@ -373,9 +439,13 @@ function bindTreeCtxMenu() {
       { sep: true },
       { label: t("ctx_duplicate") || "Дублировать", icon: "duplicate",
         fn: () => fsCopyTo(path, treeParentDir(path)) },
-      { label: t("ctx_to_mod") || "Скопировать в мод", icon: "to-mod", fn: () => copyToMod(path) },
-      { label: t("ctx_to_project") || "Скопировать в проект", icon: "to-mod", fn: () => copyToProject(path) },
-    ]);
+    ];
+    // приёмник закрыт — пункта нет вовсе (не disabled, а скрыт)
+    if (srcAvail("mod")) titems.push(
+      { label: t("ctx_to_mod") || "Скопировать в мод", icon: "to-mod", fn: () => copyToMod(path) });
+    if (srcAvail("project")) titems.push(
+      { label: t("ctx_to_project") || "Скопировать в проект", icon: "to-mod", fn: () => copyToProject(path) });
+    openCtxMenu(e, titems);
   });
 }
 
@@ -404,13 +474,37 @@ function askConfirm(opts) {
 
 // In-app replacement for the browser prompt(): a small modal with a text
 // input. Resolves with the entered string or null on cancel.
+// opts.options: непустой массив строк — вместо текстового поля показывается
+// выпадающий список (возвращается выбранное значение)
 function askPrompt(opts) {
   return new Promise(resolve => {
     const modal = $("#prompt-modal");
     const input = $("#prompt-input");
+    const sel = $("#prompt-select");
     $("#prompt-title").textContent = opts.title || "";
-    input.value = opts.value || "";
-    input.placeholder = opts.placeholder || "";
+    const list = Array.isArray(opts.options)
+      ? opts.options.map(v => String(v)).filter(v => v) : [];
+    const useSel = list.length > 0 && !!sel;
+    input.hidden = useSel;
+    if (sel) {
+      sel.hidden = !useSel;
+      if (useSel) {
+        sel.innerHTML = "";
+        list.forEach(v => {
+          const o = document.createElement("option");
+          o.value = v;
+          o.textContent = v;
+          sel.appendChild(o);
+        });
+        const pre = String(opts.value || "");
+        if (pre && list.indexOf(pre) !== -1) sel.value = pre;
+      }
+    }
+    if (!useSel) {
+      input.value = opts.value || "";
+      input.placeholder = opts.placeholder || "";
+    }
+    const current = () => (useSel ? sel.value : input.value.trim());
     const box = $("#prompt-actions");
     box.innerHTML = "";
     [
@@ -420,7 +514,11 @@ function askPrompt(opts) {
       const btn = document.createElement("button");
       btn.className = "btn " + (b.kind || "");
       btn.textContent = b.label;
-      btn.onclick = () => { modal.hidden = true; resolve(b.id === "ok" ? input.value.trim() : null); };
+      btn.onclick = () => {
+        modal.hidden = true;
+        document.removeEventListener("keydown", submit);
+        resolve(b.id === "ok" ? current() : null);
+      };
       box.appendChild(btn);
     });
     modal.hidden = false;
@@ -430,10 +528,10 @@ function askPrompt(opts) {
       e.preventDefault();
       modal.hidden = true;
       document.removeEventListener("keydown", submit);
-      resolve(input.value.trim());
+      resolve(current());
     };
     document.addEventListener("keydown", submit);
-    setTimeout(() => input.focus(), 30);
+    setTimeout(() => { try { (useSel ? sel : input).focus(); } catch (e) {} }, 30);
   });
 }
 

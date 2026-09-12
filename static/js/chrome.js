@@ -90,6 +90,28 @@ function setupHotkeys() {
       const tgt = e.target;
       if (tgt && tgt.closest && tgt.closest("input, textarea, select") &&
           !(tgt.classList && tgt.classList.contains("cell-input"))) return;
+      // Кусок текста, выделенный мышью внутри ячейки: отдать его нативному
+      // копированию, а не затирать целым полем (вставку это не касается —
+      // нативный Ctrl+V в нередактируемой ячейке ничего не вставит).
+      if (c !== "KeyV" && typeof gridTextSelection === "function" &&
+          gridTextSelection()) return;
+      // Провал ВНУТРЬ ячейки (открыт редактор .cell-input): выделение живёт
+      // в самом input (window.getSelection его не видит) — частичное берём
+      // нативно, без preventDefault. Целое поле — как раньше, через перехват.
+      if (c !== "KeyV" && tgt && tgt.classList &&
+          tgt.classList.contains("cell-input")) {
+        let selS = null, selE = null;
+        try { selS = tgt.selectionStart; selE = tgt.selectionEnd; } catch (err) {}
+        if (selS != null && selE != null && selE > selS) {
+          const iv = String(tgt.value ?? "");
+          if (!(selS === 0 && selE === iv.length)) {
+            state.clipboard = iv.slice(selS, selE);
+            if (c === "KeyC") copyText(state.clipboard);
+            else toast(t("cut_buffer") || "Вырезано в буфер", "ok");
+            return;
+          }
+        }
+      }
       const f = state.currentFile;
       if (c === "KeyV") {
         if (state.selCell && f && state.clipboard != null) {
@@ -628,7 +650,7 @@ function openUnpacker() {
   }).catch(() => {});
 }
 
-function upPlanGroup(title, paks, groupCls, copies) {
+function upPlanGroup(title, paks, groupCls, copies, skipped, loc) {
   const card = document.createElement("div");
   card.className = "up-group";
   const head = document.createElement("div");
@@ -644,7 +666,9 @@ function upPlanGroup(title, paks, groupCls, copies) {
     const row = document.createElement("div");
     row.className = "up-pak up-copy" + (groupCls ? " " + groupCls : "");
     const ckey = c.path || c.name;
+    if (state.upDone && state.upDone.has(ckey)) row.classList.add("done");
     if (state.upOff && state.upOff.has(ckey)) row.classList.add("off");
+    row.dataset.pak = ckey;
     row.title = (c.path || c.name) + "\n" + title + "\n" + (t("up_off_hint") || "Клик — исключить из распаковки");
     row.tabIndex = 0;
     row.onclick = () => {
@@ -670,21 +694,60 @@ function upPlanGroup(title, paks, groupCls, copies) {
     row.append(n, name);
     list.appendChild(row);
   }
-  if (!items.length && !list.children.length) {
+  if (!items.length && !(loc || []).length && !(skipped || []).length && !list.children.length) {
     const none = document.createElement("div");
     none.className = "up-pak-none";
     none.textContent = t("up_no_paks") || ".pak архивы не найдены";
     list.appendChild(none);
   }
+  // локализация — ОДИН чип на группу (внутри все языки): клик выключает
+  // сразу все паки языков, в прогоне идут вторыми после loose-папки
+  if ((loc || []).length) {
+    const row = document.createElement("div");
+    row.className = "up-pak up-loc" + (groupCls ? " " + groupCls : "");
+    const keys = loc.map(p => p.path || p.name).filter(Boolean);
+    row._locPaths = keys;
+    const langs = [...new Set(loc.map(p => p.lang).filter(Boolean))].join(", ");
+    if (keys.every(k => state.upDone && (state.upDone.has(k)))) row.classList.add("done");
+    if (keys.some(k => state.upOff && state.upOff.has(k))) row.classList.add("off");
+    row.dataset.loc = "1";
+    row.title = keys.join("\n") + "\n→ localization\\\n" + (t("up_off_hint") || "Клик — исключить из распаковки");
+    row.tabIndex = 0;
+    const toggle = () => {
+      if (!state.upOff) state.upOff = new Set();
+      if (keys.some(k => state.upOff.has(k))) {
+        keys.forEach(k => state.upOff.delete(k));
+        row.classList.remove("off");
+      } else {
+        keys.forEach(k => state.upOff.add(k));
+        row.classList.remove("done");
+        row.classList.add("off");
+      }
+    };
+    row.onclick = toggle;
+    row.onkeydown = e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+    };
+    const n = document.createElement("span");
+    n.className = "up-pak-n";
+    n.textContent = "🌐";
+    const name = document.createElement("span");
+    name.className = "up-pak-name";
+    name.textContent = "localization\\" + (langs ? " (" + langs + ")" : "") + " — " + loc.length;
+    row.append(n, name);
+    list.appendChild(row);
+  }
   items.forEach((p, i) => {
     const row = document.createElement("div");
     row.className = "up-pak" + (groupCls ? " " + groupCls : "");
-    // зелёная метка уже распакованного пака (переживает пересканирование)
-    if (state.upDone && state.upDone.has(p.name)) row.classList.add("done");
     const key = p.path || p.name;
+    // зелёная метка уже распакованного пака (переживает пересканирование);
+    // ключ — полный путь: basename дублируются между группами
+    if (state.upDone && (state.upDone.has(key) || state.upDone.has(p.name))) row.classList.add("done");
     // клик по чипу исключает пак из распаковки (серый); повторный клик возвращает
     if (state.upOff && state.upOff.has(key)) row.classList.add("off");
-    row.dataset.pak = p.name;
+    row.dataset.pak = key;
+    row.dataset.pakname = p.name;
     row.title = p.path + "\n" + title + "\n" + (t("up_off_hint") || "Клик — исключить из распаковки");
     row.tabIndex = 0;
     const toggle = () => {
@@ -711,6 +774,20 @@ function upPlanGroup(title, paks, groupCls, copies) {
     row.append(n, name);
     list.appendChild(row);
   });
+  // пропущенные очередью .pak (не basis.pak и не patch_*): в прогон не идут,
+  // чипы некликабельные, с предупреждением — молча их больше не теряем
+  for (const s of (skipped || [])) {    const row = document.createElement("div");
+    row.className = "up-pak up-skipped" + (groupCls ? " " + groupCls : "");
+    row.title = (s.path || s.name) + "\n" + (t("up_skipped") || "Не входит в очередь распаковки");
+    const n = document.createElement("span");
+    n.className = "up-pak-n";
+    n.textContent = "⚠";
+    const name = document.createElement("span");
+    name.className = "up-pak-name";
+    name.textContent = s.name;
+    row.append(n, name);
+    list.appendChild(row);
+  }
   card.appendChild(list);
   return card;
 }
@@ -732,12 +809,16 @@ async function upScan() {
   const plan = $("#up-plan");
   plan.hidden = false;
   plan.innerHTML = "";
-  plan.appendChild(upPlanGroup(t("up_grp_base") || "Основа → basis\\", j.base, "g-base", (j.copy || {}).base));
-  plan.appendChild(upPlanGroup(t("up_grp_legion") || "DLC Legion → dlc\\legion\\basis", j.legion, "g-legion", (j.copy || {}).legion));
-  plan.appendChild(upPlanGroup(t("up_grp_res") || "DLC Resistance → dlc\\resistance\\basis", j.resistance, "g-res", (j.copy || {}).resistance));
-  plan.appendChild(upPlanGroup(t("up_grp_evo") || "DLC Evolution → dlc\\evolution\\basis", j.evolution, "g-evo", (j.copy || {}).evolution));
+  const sk = j.skipped || {};
+  const lc = j.loc || {};
+  plan.appendChild(upPlanGroup(t("up_grp_base") || "Основа → basis\\", j.base, "g-base", (j.copy || {}).base, sk.base, lc.base));
+  plan.appendChild(upPlanGroup(t("up_grp_legion") || "DLC Legion → dlc\\legion\\basis", j.legion, "g-legion", (j.copy || {}).legion, sk.legion, lc.legion));
+  plan.appendChild(upPlanGroup(t("up_grp_res") || "DLC Resistance → dlc\\resistance\\basis", j.resistance, "g-res", (j.copy || {}).resistance, sk.resistance, lc.resistance));
+  plan.appendChild(upPlanGroup(t("up_grp_evo") || "DLC Evolution → dlc\\evolution\\basis", j.evolution, "g-evo", (j.copy || {}).evolution, sk.evolution, lc.evolution));
+  const locN = ["base", "legion", "resistance", "evolution"]
+    .reduce((n, k) => n + (((j.loc || {})[k] || []).length), 0);
   const total = (j.base || []).length + (j.legion || []).length + (j.resistance || []).length
-    + (j.evolution || []).length;
+    + (j.evolution || []).length + locN;
   $("#up-run").disabled = !total;
   $("#up-abort").disabled = true;
   const prog = $("#up-progress");
@@ -747,6 +828,9 @@ async function upScan() {
   if (scanBtn && scanBtn.blur) scanBtn.blur();
   if (!j.sevenz) toast(t("up_no_7z") || "7-Zip не найден", "err");
   if (!total) toast(t("up_no_paks") || ".pak архивы не найдены", "err");
+  const skN = ["base", "legion", "resistance", "evolution"]
+    .reduce((n, k) => n + (((j.skipped || {})[k] || []).length), 0);
+  if (skN) toast((t("up_skipped_warn") || "Пропущено архивов вне очереди") + ": " + skN, "err");
 }
 
 let upPollTimer = null;
@@ -766,13 +850,16 @@ function upPoll() {
         ptext.textContent = j.current ? j.current + " — " + (j.pct || 0) + "%" : "";
       }
       // готовые паки зеленеют по очереди, прямо во время распаковки
-      // (выключенные кликом чипы не красим — их пропускает бэкенд)
+      // (выключенные кликом чипы не красим — их пропускает бэкенд).
+      // Ключ — полный путь пака (basename дублируются между группами);
+      // сравниваем в JS, а не CSS-селектором: бэкслэши пути ломали бы селектор
       if (j.done_files && j.done_files.length) {
         if (!state.upDone) state.upDone = new Set();
-        j.done_files.forEach(nm => {
-          if (!nm || state.upDone.has(nm)) return;
-          state.upDone.add(nm);
-          $$('#up-plan .up-pak[data-pak="' + nm + '"]:not(.off)').forEach(x => x.classList.add("done"));
+        const doneSet = new Set(j.done_files.filter(Boolean));
+        doneSet.forEach(nm => state.upDone.add(nm));
+        $$("#up-plan .up-pak:not(.off)").forEach(x => {
+          if (x.dataset.pak && (doneSet.has(x.dataset.pak) || doneSet.has(x.dataset.pakname))) x.classList.add("done");
+          if (x._locPaths && x._locPaths.length && x._locPaths.every(k => doneSet.has(k))) x.classList.add("done");
         });
       }
       upPollTimer = setTimeout(upPoll, 900);
@@ -798,7 +885,13 @@ function upPoll() {
           if (!state.upDone) state.upDone = new Set();
           ["base", "legion", "resistance", "evolution"].forEach(k => {
             ((state.upPlan || {})[k] || []).forEach(p => {
-              if (p && p.name) state.upDone.add(p.name);
+              if (p && (p.path || p.name)) state.upDone.add(p.path || p.name);
+            });
+            ((((state.upPlan || {}).loc || {})[k]) || []).forEach(p => {
+              if (p && (p.path || p.name)) state.upDone.add(p.path || p.name);
+            });
+            ((((state.upPlan || {}).copy || {})[k]) || []).forEach(p => {
+              if (p && (p.path || p.name)) state.upDone.add(p.path || p.name);
             });
           });
           $$("#up-plan .up-pak:not(.off)").forEach(x => x.classList.add("done"));
@@ -843,10 +936,13 @@ async function upRun() {
   const left = arr => (arr || []).filter(p => !off.has(p.path || p.name));
   const base = left(state.upPlan.base), legion = left(state.upPlan.legion),
     res = left(state.upPlan.resistance), evo = left(state.upPlan.evolution);
+  const lc = state.upPlan.loc || {};
+  const locLeft = k => left(lc[k]);
+  const locAll = [...locLeft("base"), ...locLeft("legion"), ...locLeft("resistance"), ...locLeft("evolution")];
   const cp = state.upPlan.copy || {};
   const cpLeft = k => left(cp[k]);
   const copies = [...cpLeft("base"), ...cpLeft("legion"), ...cpLeft("resistance"), ...cpLeft("evolution")];
-  const total = base.length + legion.length + res.length + evo.length;
+  const total = base.length + legion.length + res.length + evo.length + locAll.length;
   if (!total && !copies.length) {
     const skipped = off.size > 0;
     toast(skipped
@@ -860,10 +956,12 @@ async function upRun() {
   // что именно распакуем/скопируем: группы и количество .pak + папки
   const parts = [];
   const grp = (key, fb, arr) => { if ((arr || []).length) parts.push((t(key) || fb) + ": " + arr.length); };
-  grp("up_grp_base", "Основа", base);
-  grp("up_grp_legion", "DLC Legion", legion);
-  grp("up_grp_res", "DLC Resistance", res);
-  grp("up_grp_evo", "DLC Evolution", evo);
+  if (locAll.length) parts.push("🌐 " + (t("up_loc") || "Локализация") + ": " +
+    locAll.map(p => (p.lang ? p.lang + "\\" : "") + p.name).join(", "));
+  grp("up_grp_base", "Основа", [...base, ...locLeft("base")]);
+  grp("up_grp_legion", "DLC Legion", [...legion, ...locLeft("legion")]);
+  grp("up_grp_res", "DLC Resistance", [...res, ...locLeft("resistance")]);
+  grp("up_grp_evo", "DLC Evolution", [...evo, ...locLeft("evolution")]);
   const cpgrp = (key, fb) => {
     const l = cpLeft(key);
     if (l.length) parts.push("📁 " + (t(key) || fb) + ": " + l.map(c => c.name).join(", "));
@@ -872,6 +970,13 @@ async function upRun() {
   cpgrp("up_grp_legion", "DLC Legion");
   cpgrp("up_grp_res", "DLC Resistance");
   cpgrp("up_grp_evo", "DLC Evolution");
+  const skNames = [];
+  ["base", "legion", "resistance", "evolution"].forEach(k => {
+    ((((state.upPlan || {}).skipped || {})[k]) || []).forEach(p => {
+      if (p && p.name) skNames.push(p.name);
+    });
+  });
+  if (skNames.length) parts.push("⚠ " + (t("up_skipped") || "Не входят в очередь") + ": " + skNames.join(", "));
   const totalTxt = total
     ? total + " " + (t("files_n") || "files")
     : copies.length + " " + (t("up_folders_n") || "папки");
@@ -905,21 +1010,52 @@ async function upRun() {
 }
 
 // ---------- tooltip ----------
+// Стандартная задержка всплывашки, как у системных (~полсекунды): показ
+// по таймеру, отмена по mouseleave. Позицию берём живую (трекинг курсора),
+// а не точку входа — за полсекунды мышь успевает уйти. Тот же текст уже
+// висит — только подтягиваем позицию, без перемигивания.
+var TIP_DELAY = 500;
 let tipEl = null;
 let tipRaf = null;
-let tipX = 0, tipY = 0;function showTip(e, text) {
+let tipX = 0, tipY = 0;
+let tipTimer = null;
+let tipMX = 0, tipMY = 0;
+try {
+  document.addEventListener("mousemove", e => {
+    tipMX = e.clientX; tipMY = e.clientY;
+    // показанная подсказка следует за курсором (иначе, ведя мышь вдоль
+    // ряда чипов, уходишь от застывшего tip'а — он остаётся левее);
+    // ожидание показа — по-прежнему только живой позицией в таймере
+    if (tipEl) moveTip(e);
+  }, { passive: true });
+} catch (e) {}
+function showTip(e, text) {
+  if (tipEl && tipEl.textContent === text) { moveTip(e); return; }
   hideTip();
-  tipEl = document.createElement("div");
-  tipEl.className = "tip";
-  tipEl.textContent = text;
-  document.body.appendChild(tipEl);
-  moveTip(e);
+  tipTimer = setTimeout(() => {
+    tipTimer = null;
+    tipEl = document.createElement("div");
+    tipEl.className = "tip";
+    tipEl.textContent = text;
+    document.body.appendChild(tipEl);
+    moveTip({ clientX: tipMX, clientY: tipMY });
+  }, TIP_DELAY);
 }
 function moveTip(e) {
   if (!tipEl) return;
-  const pad = 14;
+  // позиция — по реальному размеру всплывашки: не влезла справа —
+  // флип вплотную слева от курсора (а не прыжок на -330), не влезла
+  // снизу — вверх; в крайнем случае прижать к краю вьюпорта
+  const pad = 14, m = 8;
+  let w = 0, h = 0;
+  try { w = tipEl.offsetWidth || 0; h = tipEl.offsetHeight || 0; } catch (err) {}
   let x = e.clientX + pad, y = e.clientY + pad;
-  if (x + 320 > window.innerWidth) x = e.clientX - 330;
+  try {
+    if (w && x + w > window.innerWidth - m) x = e.clientX - w - pad;
+    if (h && y + h > window.innerHeight - m) y = e.clientY - h - pad;
+  } catch (err) {}
+  if (x < m) x = m;
+  if (y < m) y = m;
   tipX = x; tipY = y;
   // одно перемещение на кадр: коалесим пачку mouseover'ов в один layout/repaint
   if (tipRaf !== null) return;
@@ -929,9 +1065,54 @@ function moveTip(e) {
   });
 }
 function hideTip() {
+  if (tipTimer) { clearTimeout(tipTimer); tipTimer = null; }
   if (tipEl) { tipEl.remove(); tipEl = null; }
   if (tipRaf !== null) { cancelAnimationFrame(tipRaf); tipRaf = null; }
 }
+// ---------- единый стиль подсказок по всей программе ----------
+// Любой нативный title показываем кастомным .tip (та же задержка
+// TIP_DELAY): на время показа атрибут снимаем, чтобы поверх не всплывала
+// системная подсказка, при уходе мыши — возвращаем. Прямые вызовы
+// showTip (плитки кампании) не затрагиваются: у них нет title.
+// Отказ — data-tip-native (оставить системную подсказку).
+let tipTitleEl = null;
+let tipTitleText = "";
+function tipTitleRestore() {
+  if (!tipTitleEl) return;
+  try {
+    // title уже вернули (например, applyI18n при смене языка) — не затираем
+    if (!tipTitleEl.hasAttribute("title")) tipTitleEl.setAttribute("title", tipTitleText);
+  } catch (e) {}
+  tipTitleEl = null;
+}
+try {
+  document.addEventListener("mouseover", e => {
+    const t = e.target;
+    // курсор всё ещё внутри захваченного элемента (его дочки, чей title
+    // снят, или предки с собственным title вроде заголовка секции) —
+    // держим его подсказку, без перезахвата и дрожания
+    if (tipTitleEl) {
+      try { if (tipTitleEl.contains(t)) return; } catch (err) {}
+    }
+    const el = t && t.closest ? t.closest("[title]") : null;
+    if (el === tipTitleEl) return;
+    tipTitleRestore();
+    hideTip();
+    if (!el) return;
+    if (el.closest && el.closest("[data-tip-native]")) return;
+    const tx = el.getAttribute("title");
+    if (!tx) return;
+    tipTitleEl = el; tipTitleText = tx;
+    try { el.removeAttribute("title"); } catch (err) {}
+    showTip(e, tx);
+  });
+  document.addEventListener("mouseout", e => {
+    if (!tipTitleEl) return;
+    try { if (tipTitleEl.contains(e.relatedTarget)) return; } catch (err) {}
+    tipTitleRestore();
+    hideTip();
+  });
+} catch (e) {}
 
 // ---------- settings ----------
 // window_size presets: normal (as-is), +20% width, +20% width & height
@@ -978,7 +1159,7 @@ function openSettings(tab) {
     if (btn) btn.click();
     // вкладка обновлений: состояние с сервера свежее, чем в памяти —
     // кнопки скачать/установить видны только при реальном обновлении
-    if (tab === "updates") updStateLoad();
+    if (tab === "updates") { updStateLoad(); gaStateLoad(); }
   }
 }
 
@@ -1222,6 +1403,12 @@ async function applyLang(lang) {
   // обновляем словарь и перерисовываем всё, где строки запечены при рендере
   state.lang = lang || state.lang;
   await loadI18n();
+  // имена юнитов — на новом языке (проект+мод+игра+GameAssets), до
+  // перерисовки грида: ячейки и чипы показывают их из state.nameMap
+  try {
+    if (state.project && state.project.root)
+      await loadDisplayNames(state.project.root);
+  } catch (e) { /* имена не критичны */ }
   await renderGrid();
   renderTree();
   populateTreeFilterMenu();
@@ -1233,6 +1420,9 @@ async function applyLang(lang) {
   }
   if (state.tabs.some(tb => tb.id === "uprising") && state.uprising.rows) {
     renderUprising();
+  }
+  if (state.tabs.some(tb => tb.id === "campaign")) {
+    renderCampaign();
   }
   // редактор горячих клавиш строится динамически — перерисовать под словарь
   // (модалка настроек со сменой языка открыта прямо сейчас)
@@ -1247,13 +1437,14 @@ async function applyLang(lang) {
 async function refreshSrcPaths() {
   state.gameTree = null;
   state.modTree = null;
+  try { syncInfoReset(); } catch (e) { /* грид ещё не готов */ }
   if (srcAvail("game")) await loadGameTree();
   if (srcAvail("mod")) await loadModTree();
   if (!srcAvail(state.treeView)) {
     const fb = srcFirst(null);
     if (fb) {
       state.treeView = fb;
-      try { localStorage.setItem("tsh_src", fb); } catch (e) { /* noop */ }
+      persistSrc(fb);
     }
   }
   state.treeCounts = null;
@@ -1266,6 +1457,11 @@ async function refreshSrcPaths() {
   // иначе остаются активными по протухшему состоянию («файлов нет, а горят»)
   updateToolButtons();
   updateSidebarVisibility();
+  // корни локализации сменились — имена перезапросить фоном (проект+мод+игра)
+  try {
+    const pr = (state.project && state.project.root) || "";
+    if (pr) loadDisplayNames(pr);
+  } catch (e) { /* имена не критичны */ }
 }
 
 // пути настроек: [поле, крестик, источник closeTreeSource].
@@ -1318,7 +1514,7 @@ async function closeTreeSource(v) {
   const fb = srcFirst(null);
   if (fb) {
     state.treeView = fb;
-    try { localStorage.setItem("tsh_src", fb); } catch (e) { /* приватный режим */ }
+    persistSrc(fb);
     if (fb === "game") await loadGameTree();
     if (fb === "mod") await loadModTree();
     state.treeCounts = null;
@@ -1331,12 +1527,20 @@ async function closeTreeSource(v) {
   paintSrcSwitches();
   renderTree();
   updateToolButtons();
+  try { syncInfoReset(); } catch (e) { /* грид ещё не готов */ }
   // карта жила внутри закрытого корня — снести, иначе фантом
   if (closedRoot && state.tabs.some(tb => tb.id === "uprising")
       && state.uprising.path) {
     const np = normPath(state.uprising.path).toLowerCase();
     const nr = normPath(closedRoot).toLowerCase();
     if (np === nr || np.startsWith(nr + "\\")) uprInvalidateSource();
+  }
+  // кампания — так же
+  if (closedRoot && state.tabs.some(tb => tb.id === "campaign")
+      && state.campaign.path) {
+    const np = normPath(state.campaign.path).toLowerCase();
+    const nr = normPath(closedRoot).toLowerCase();
+    if (np === nr || np.startsWith(nr + "\\")) cmpInvalidateSource();
   }
   const tf = $("#tree-filter");
   if (tf) tf.value = "";
@@ -2053,5 +2257,130 @@ async function updAutoTick() {
     if (await updDoRestart()) return;
     updRestarted = false;
   }
+}
+
+// ---------- GameAssets: архив скриптов/локализации из релиза ----------
+// Кнопка в шапке видна, пока архив не скачан; клик ведёт в настройки.
+let gaState = null;
+let gaPollTimer = null;
+
+async function gaStateLoad() {
+  try {
+    const r = await api("/api/game_assets_state");
+    const j = await r.json();
+    if (j && j.ok) gaState = j;
+  } catch (e) { /* офлайн на старте: молча */ }
+  gaPaint();
+  return gaState;
+}
+
+function gaPaint() {
+  const done = !!(gaState && gaState.downloaded == 1);
+  const b = $("#btn-gameassets");
+  if (b) b.hidden = done;
+  const st = $("#ga-state");
+  const dl = $("#ga-download");
+  const redl = $("#ga-redownload");
+  if (st) {
+    if (done) {
+      st.textContent = (t("ga_downloaded") || "Downloaded")
+        + (gaState.version ? " " + gaState.version : "");
+    } else if (gaState && !gaState.has_dir
+        && (gaState.progress || {}).state !== "downloading") {
+      st.textContent = "";
+    }
+  }
+  if (dl) {
+    dl.hidden = done;
+    dl.disabled = false;
+    dl.textContent = t("ga_download") || "Download";
+  }
+  if (redl) {
+    redl.hidden = !done;
+    redl.disabled = false;
+    redl.textContent = t("ga_redownload") || "Re-download";
+  }
+}
+
+async function gaDownload() {
+  const dl = $("#ga-download");
+  const redl = $("#ga-redownload");
+  if (dl) dl.disabled = true;
+  if (redl) redl.disabled = true;
+  const st = $("#ga-state");
+  if (st) st.textContent = t("ga_checking") || "Checking…";
+  let j = null;
+  try {
+    const r = await api("/api/game_assets_download", { method: "POST",
+      body: JSON.stringify({}) });
+    j = await r.json();
+  } catch (e) { j = null; }
+  if (!j || !j.ok) {
+    toast((j && j.error) || (t("ga_not_found") || "download failed"), "err");
+    if (st) st.textContent = (j && j.error) || "";
+    gaPaint();
+    return;
+  }
+  gaPollStart();
+}
+
+function gaPollStart() {
+  gaPollStop();
+  gaPollTick();
+  gaPollTimer = setInterval(gaPollTick, 600);
+}
+
+function gaPollStop() {
+  if (gaPollTimer) { clearInterval(gaPollTimer); gaPollTimer = null; }
+}
+
+async function gaPollTick() {
+  let j = null;
+  try {
+    const r = await api("/api/game_assets_progress");
+    j = await r.json();
+  } catch (e) { return; }
+  const p = j && j.progress;
+  if (!p) return;
+  const bar = $("#ga-progress"), fill = $("#ga-fill"), pct = $("#ga-pct");
+  const st = $("#ga-state");
+  if (p.state === "downloading" || p.state === "extracting") {
+    if (bar) bar.hidden = false;
+    const total = p.total || 0, done = p.done || 0;
+    const pc = total > 0 ? Math.min(99, Math.floor(done * 100 / total)) : 0;
+    if (fill) fill.style.width = (p.state === "extracting" ? 100 : pc) + "%";
+    if (pct) pct.textContent = p.state === "extracting"
+      ? (t("ga_extracting") || "Extracting…")
+      : (t("ga_downloading") || "Downloading…") + " " + pc + "%";
+    if (st && p.state === "downloading")
+      st.textContent = (t("ga_downloading") || "Downloading…") + " " + pc + "%";
+    else if (st && p.state === "extracting")
+      st.textContent = t("ga_extracting") || "Extracting…";
+  } else if (p.state === "done") {
+    gaPollStop();
+    if (bar) bar.hidden = true;
+    await gaStateLoad();
+  } else if (p.state === "error") {
+    gaPollStop();
+    if (bar) bar.hidden = true;
+    toast(p.error || "download failed", "err");
+    if (st) st.textContent = p.error || "";
+    gaPaint();
+  }
+}
+
+function gaSetup() {
+  const b = $("#btn-gameassets");
+  if (b) b.onclick = () => {
+    openSettings("updates");
+    const sec = $("#ga-section");
+    if (sec && sec.scrollIntoView) {
+      setTimeout(() => sec.scrollIntoView({ block: "nearest" }), 50);
+    }
+  };
+  const dl = $("#ga-download");
+  if (dl) dl.onclick = gaDownload;
+  const redl = $("#ga-redownload");
+  if (redl) redl.onclick = gaDownload;
 }
 

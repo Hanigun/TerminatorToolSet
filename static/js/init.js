@@ -6,14 +6,15 @@ async function init() {
   // свежие состояния фич: их фабрики в swt.js/uprising.js, state стартует с null
   state.swt = swtFreshState();
   state.uprising = uprFreshState();
+  state.campaign = cmpFreshState();
   document.body.classList.add("dark");
-  bootPing(25, ""); // скрипты встали, дальше этапы с подписями
+  bootPing(78, ""); // скрипты встали (таблица boot_stages), дальше этапы с подписями
   await loadConfig();
   await loadI18n();
   // страница прошла критичную фазу: watchdog не должен её перезагружать
   window.__tshBooted = true;
   try { sessionStorage.removeItem("tsh_boot_reload"); } catch (e) { /* приватный режим */ }
-  bootPing(40, t("boot_config"));
+  bootPing(82, t("boot_config"));
   setupDnD();
   setupSidebar();
   setupTabBar();
@@ -23,6 +24,7 @@ async function init() {
   setupSwtFind();
   setupSwt();
   setupUprising();
+  setupCampaign();
   // иконки темы — одним запросом в память, фоном (дерево/вкладки больше
   // не открывают по коннекту на каждую иконку)
   preloadIcons();
@@ -46,10 +48,12 @@ async function init() {
   $("#btn-create-mod").onclick = openCreateMod;
   $("#btn-unpacker").onclick = openUnpacker;
   $("#btn-uprising").onclick = () => openUprising();
+  $("#btn-campaign").onclick = () => openCampaign();
   $("#btn-swt").onclick = openSwtEditor;
   $("#landing-create-mod").onclick = openCreateMod;
   $("#landing-unpacker").onclick = openUnpacker;
   $("#landing-uprising").onclick = () => openUprising();
+  $("#landing-campaign").onclick = () => openCampaign();
   $("#landing-compare").onclick = openCompare;
   $("#landing-swt").onclick = openSwtEditor;
   $("#cm-pick-dir").onclick = cmPickDir;
@@ -86,7 +90,7 @@ async function init() {
   const upRoot = $("#up-root"), upDest = $("#up-dest");
   if (upRoot && upDest) {
     upRoot.value = localStorage.getItem("tsh_up_root") || "";
-    upDest.value = localStorage.getItem("tsh_up_dest") || "C:\\TDF_Unpacked";
+    upDest.value = localStorage.getItem("tsh_up_dest") || "C:\\TDFD_Unpacked";
     $("#up-pick-root").onclick = async () => {
       const d = await pickFolder();
       if (d) {
@@ -101,7 +105,13 @@ async function init() {
     };
     $("#up-pick-dest").onclick = async () => {
       const d = await pickFolder();
-      if (d) { upDest.value = d; localStorage.setItem("tsh_up_dest", d); }
+      if (d) {
+        // выбранная папка — РОДИТЕЛЬ: распаковка всегда идёт в
+        // <выбор>\TDFD_Unpacked (хвост добавляем жёстко; уже есть — не дублируем)
+        const t = String(d).replace(/[\\/]+$/, "");
+        const v = /TDFD_Unpacked$/i.test(t) ? t : t + "\\TDFD_Unpacked";
+        upDest.value = v; localStorage.setItem("tsh_up_dest", v);
+      }
     };
     $("#up-scan").onclick = upScan;
     $("#up-run").onclick = upRun;
@@ -117,6 +127,8 @@ async function init() {
     body: JSON.stringify({ url: DISCORD_URL }) });
   updSetup();
   updStateLoad();
+  gaSetup();
+  gaStateLoad();
   bindTabCtxMenu();
   bindTreeCtxMenu();
   $("#landing-records-btn").onclick = openRecentsModal;
@@ -202,8 +214,10 @@ async function init() {
       if (top.id === "settings-modal") hkCaptureStop();
     }
   });
-  // settings save on change
-  ["auto-save", "fullscreen", "theme", "keycol", "window-size", "tray", "open-browser", "browser-to-tray", "lang"].forEach(id => {
+  // settings save on change (все чекбоксы/селекты без своей кнопки
+  // «Сохранить» — иначе галка слетает при закрытии окна, как было с
+  // auto-update/auto-hide-tree/guard-unpacked)
+  ["auto-save", "fullscreen", "theme", "keycol", "window-size", "tray", "open-browser", "browser-to-tray", "auto-update", "auto-hide-tree", "guard-unpacked", "lang"].forEach(id => {
     $("#set-" + id).addEventListener("change", saveSettings);
   });
   setupSettingsTabs();
@@ -274,6 +288,21 @@ async function init() {
   $("#set-content-zoom").addEventListener("change", e => setZoom("contentZoom", parseFloat(e.target.value)));
   $("#set-ui-zoom").addEventListener("change", e => setZoom("uiZoom", parseFloat(e.target.value)));
   $("#cmp-run").onclick = cmpRunToggle;
+  // галочки «⇄ DLC Legion»/«⇄ DLC Resistance» на вкладке species-таблицы:
+  // зеркало правки basis-файла в DLC того же корня. Живут на вкладке до её закрытия.
+  SYNC_SCOPES.forEach(sc => {
+    $("#sync-" + sc).addEventListener("change", e => {
+      const tb = state.tabs.find(t => t.id === state.activeTabId);
+      if (!tb || tb.type !== "file") return;
+      tb[syncTabFlag(sc)] = !!e.target.checked;
+      paintSyncBoxes();
+      const on = !!e.target.checked && !e.target.disabled;
+      toast((t(on ? "sync_dlc_on" : "sync_dlc_off") || (on
+        ? "Синхронизация включена: {scope}"
+        : "Синхронизация выключена: {scope}"))
+        .replace("{scope}", syncScopeTitle(sc)), "ok");
+    });
+  });
   $("#cmp-merge").onclick = mergeAll;
   ["left", "right"].forEach(side => {
     $("#cmp-" + side + "-fs").onclick = () => cmpFullscreen(side);
@@ -285,6 +314,7 @@ async function init() {
     $("#cmp-" + side + "-path").addEventListener("keydown", e => {
       if (e.key === "Enter") runCompare();
     });
+    $("#cmp-" + side + "-path").addEventListener("change", () => cmpPathChanged(side));
     // compact file dropdown: toggle the floating list
     $("#cmp-" + side + "-dd-btn").addEventListener("click", e => {
       e.stopPropagation();
@@ -342,6 +372,7 @@ async function init() {
   });
   setupCmpSyncScroll();
   setupCmpSrcSwitch();
+  setupCmpHelp();
   updateCmpSrcSwitch();
   $("#set-theme").addEventListener("change", () => {
     document.body.classList.toggle("light", $("#set-theme").value === "light");
@@ -364,8 +395,7 @@ async function init() {
   });
 
   // Tree filter dropdown (extensions + folders)
-  loadTreeFilters();
-  const tfBtn = $("#tree-filter-btn");
+  loadTreeFilters();  const tfBtn = $("#tree-filter-btn");
   const tfMenu = $("#tree-filter-menu");
   if (tfBtn && tfMenu) {
     tfBtn.addEventListener("click", e => {
@@ -391,23 +421,32 @@ async function init() {
     });
   }
 
+  // ручной рескан всех трёх деревьев + фоновый вотчер внешних изменений
+  const rsBtn = $("#tree-rescan-btn");
+  if (rsBtn) rsBtn.addEventListener("click", () => rescanAllTrees(rsBtn));
+  try { ensureTreeWatch(); } catch (e) { /* вотчер не критичен */ }
+
   // проект прошлого запуска (project_path в приоритете) грузится фоном
   // в конце init: лаунчер его не ждёт (см. bootChain ниже)
-  bootPing(50, t("boot_ui"));
+  bootPing(86, t("boot_ui")); // интерфейс собран, деревья запускаются следом
   const lastProj = state.config.project_path || state.config.last_project;
   // тяжёлые обходы игры/мода (секунды на распакованной игре) — фоном, лаунчер
   // не держат: древо показывает «Загрузка…», пока walk не вернулся
   if ((state.config.unpacked_path) || "") loadGameTree().then(() => bgTreeDone("game")).catch(() => {});
   if ((state.config.mod_path) || "") loadModTree().then(() => bgTreeDone("mod")).catch(() => {});
-  // сохранённый глобальный источник (миграция со старого ключа карты)
+  // сохранённый глобальный источник: localStorage (перезагрузка страницы
+  // в том же запуске — origin тот же), иначе config.json (tree_view —
+  // межзапусковый, localStorage умирает со случайным портом), иначе
+  // миграция со старого ключа карты; итог валидируем доступностью
   let want = "project";
   try {
     want = localStorage.getItem("tsh_src") ||
+      ((state.config && state.config.tree_view) || "") ||
       (localStorage.getItem("tsh_upr_src") === "game" ? "game" : "project");
   } catch (e) { /* приватный режим */ }
   if (!SRC_ORDER.includes(want)) want = "project";
   state.treeView = srcAvail(want) ? want : (srcFirst(null) || "project");
-  try { localStorage.setItem("tsh_src", state.treeView); } catch (e) { /* noop */ }
+  persistSrc(state.treeView);
   try {
     const cl = localStorage.getItem("tsh_cmp_left"), cr = localStorage.getItem("tsh_cmp_right");
     if (cl && srcAvail(cl)) state.cmpSrc.left = cl;
@@ -419,7 +458,7 @@ async function init() {
   paintTreeTitle();
   paintSrcSwitches();
   renderTree();
-  bootPing(88, t("boot_tree"));
+  bootPing(88, t("boot_trees"));
 
   renderTabBar();
   activateTab("welcome");
@@ -439,22 +478,24 @@ async function init() {
     // в браузере моста нет и не будет — не крутить вечно (30с с запасом)
     if (++_mrTries < 60) setTimeout(mainReadyPing, 500);
   })();
-  bootPing(88, t("boot_tree"));
   // проект прошлого запуска + вкладки — фоном, порядок сохранён.
   // Флаг bootLoading отличает «проект ещё грузится» от «проекта нет»:
   // клик по вкладке Проект во время загрузки не открывает диалог.
   let bootChain;
   if (lastProj) {
     const parts = String(lastProj).split(/[\\/]/).filter(Boolean);
-    bootPing(60, (t("boot_project") || "") + " " + (parts.pop() || lastProj));
+    bootPing(90, (t("boot_project") || "") + " " + (parts.pop() || lastProj));
     state.bootLoading = true;
-    bootChain = loadProject(lastProj).then(() => bootPing(78, t("boot_tree")));
+    // фон старта: проект прошлого запуска подтягивается молча, выбранный
+    // источник (Проект | Игра | Мод) не трогаем — иначе сохранённый game/mod
+    // слетал бы в project при каждом запуске
+    bootChain = loadProject(lastProj, { keepSrc: true }).then(() => bootPing(92, t("boot_tree")));
   } else {
     bootChain = Promise.resolve();
   }
   // восстановить вкладки, открытые до перезагрузки страницы (watchdog/F5)
   bootChain.then(() => restoreTabs())
-    .then(() => { state.bootLoading = false; bootPing(95, t("boot_tabs")); })
+    .then(() => { state.bootLoading = false; bootPing(96, t("boot_tabs")); })
     .catch(() => { state.bootLoading = false; });
 }
 

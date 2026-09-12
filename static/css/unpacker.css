@@ -63,4 +63,11 @@
   background: rgba(128,128,128,.08); filter: grayscale(1); opacity: .6; }
 .up-pak.off .up-pak-n { color: var(--muted, #9aa3ad); }
 .up-pak.off:hover { background: rgba(128,128,128,.14); border-color: var(--muted, #9aa3ad); }
+/* пропущенный очередью .pak: не кликается, в прогон не идёт */
+.up-pak.up-skipped { color: #e5534b; border-color: rgba(229,83,75,.55);
+  border-style: dashed; background: rgba(229,83,75,.07); cursor: default; }
+.up-pak.up-skipped .up-pak-n { color: #e5534b; }
+.up-pak.up-skipped:hover { background: rgba(229,83,75,.07); border-color: rgba(229,83,75,.55); }
+/* пак локализации: своя папка localization/<lang>/<stem>/, не общая basis */
+.up-pak.up-loc { border-style: dashed; }
 

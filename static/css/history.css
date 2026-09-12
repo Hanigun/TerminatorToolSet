@@ -41,6 +41,8 @@
   outline: none;
 }
 .prompt-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
+select.prompt-input { cursor: pointer; }
+select.prompt-input[hidden], input.prompt-input[hidden] { display: none; }
 
 /* Confirm dialog (replaces browser confirm) */
 .confirm-msg { padding: 16px; line-height: 1.55; color: var(--text); white-space: pre-line; }

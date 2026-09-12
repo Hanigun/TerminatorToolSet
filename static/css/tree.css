@@ -136,4 +136,21 @@
   vertical-align: 2px;
 }
 .tree-file .file-meta { color: var(--text-mute); font-size: 10px; white-space: nowrap; flex-shrink: 0; }
+/* несохранённые правки — та же зелёная точка, но пульсирует (отличие от
+   статичной .edited «сохранён в программе»); класс ставит paintTreeDirty */
+.tree-file.dirty .file-name::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: #3ddc84;
+  box-shadow: 0 0 5px rgba(61, 220, 132, .9);
+  vertical-align: 2px;
+  animation: treeDirtyPulse 1.1s ease-in-out infinite;
+}
+@keyframes treeDirtyPulse {
+  50% { opacity: .35; }
+}
 

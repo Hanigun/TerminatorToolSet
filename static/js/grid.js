@@ -11,10 +11,11 @@ function toggleSidebar() {
 }
 
 function updateSidebarVisibility() {
-  // compare & unpacker & uprising pages: full window width, no sidebar.
+  // compare & unpacker & uprising & campaign pages: full window width, no sidebar.
   // SWT-страница остаётся с сайдбаром: там нужно дерево с фильтром .swt
   const onWide = state.activeTabId === "compare" || state.activeTabId === "unpacker"
-    || state.activeTabId === "uprising" || state.activeTabId === "uprising-rnd";
+    || state.activeTabId === "uprising" || state.activeTabId === "uprising-rnd"
+    || state.activeTabId === "campaign";
   // древо видно и без открытого проекта — по «Игре»/«Моду», если пути заданы
   const hasProject = (!!(state.project && state.project.files && state.project.files.length)
     || srcAvail("game") || srcAvail("mod")) && !onWide;
@@ -246,6 +247,9 @@ function renderTabBar() {
       sessionStorage.setItem("tsh_tabs", JSON.stringify(openPaths));
     } catch (e) { /* noop */ }
   }
+  // все markDirty/markClean идут через таб-бар: заодно обновить зелёные
+  // метки несохранённых правок на узлах древа (таблица/карта/кампания/SWT)
+  if (typeof paintTreeDirty === "function") paintTreeDirty();
 }
 
 // восстановление открытых вкладок после перезагрузки страницы (watchdog/F5)
@@ -311,7 +315,7 @@ function toggleTabsDropdown() {
   dd.hidden = false;
 }
 
-function activateTab(tabId) {
+async function activateTab(tabId) {
   const tab = state.tabs.find(t => t.id === tabId);
   if (!tab) return;
   
@@ -340,33 +344,42 @@ function activateTab(tabId) {
   // Update current file state for the active tab
   if (tab.type === "file" && tab.fileData) {
     state.currentFile = tab.fileData;
-    state.dirty = tab.dirty || false;
-    // Ссылки хранятся на вкладке: повторный клик по вкладке НЕ дёргает
+    state.dirty = tab.dirty || false;    // Ссылки хранятся на вкладке: повторный клик по вкладке НЕ дёргает
     // /api/links и не перерисовывает иконки связей (это и было подлагивание).
     state.links = tab.links != null ? tab.links : [];
     $("#file-path").textContent = tab.path;
     updateDirty();
+    paintSyncBoxes();
     // while the loading overlay is up the panel must stay untouched:
     // no "no file" placeholder row, no "+" header underneath the spinner
     const lo = $(`#loading-${tab.id}`);
     const loading = lo && !lo.classList.contains("hidden");
     if (!loading) {
-      // Сетка перерисовывается только если вкладка ещё не отрисована (или её
-      // осознанно сбросили). Возврат на вкладку сохраняет скролл и выделение -
-      // это дешевле и заметно плавнее в Qt-окне.
-      if (!tab.rendered) {
-        state.selectedRow = null;
-        renderGrid();
+      // Сетка перерисовывается если вкладка ещё не отрисована, осознанно
+      // сброшена — или протухла, пока были в другом месте (staleGrid:
+      // карта/сравнение правили файл мимо грида). Возврат на свежую
+      // вкладку по-прежнему сохраняет скролл и выделение.
+      if (!tab.rendered || tab.staleGrid) {
+        if (tab.staleGrid === "reload") {
+          // структурные правки извне: перечитать сессию, затем рисовать
+          if (!(await refreshFileTabFromServer(tab))) renderGrid();
+        } else {
+          if (!tab.rendered) state.selectedRow = null;
+          renderGrid();
+        }
         tab.rendered = true;
+        tab.staleGrid = false;
       }
       if (!tab.linksLoaded) loadLinks();
     }
   } else if (tab.type === "welcome" || tab.type === "compare"
       || tab.type === "create-mod" || tab.type === "unpacker" || tab.type === "swt"
-      || tab.type === "uprising" || tab.type === "uprising-rnd") {
+      || tab.type === "uprising" || tab.type === "uprising-rnd"
+      || tab.type === "campaign") {
     state.currentFile = null;
     state.dirty = false;
     updateDirty();
+    paintSyncBoxes();
     // SWT живёт на локальном стеке undo (не серверном): кнопки — по нему
     if (tab.type === "swt") swtSyncUndoButtons();
     // no file open -> no path in the header
@@ -376,6 +389,9 @@ function activateTab(tabId) {
   }
 
   if (fileFind && fileFind.isOpen()) refreshFind();
+  // закрытый поиск тоже пересчитываем под новый файл, иначе в нём горели
+  // бы чужие совпадения (запрос и подсветка переживают закрытие)
+  else computeFindMatches();
   // SWT-страница: фильтр «только .swt»; уход со страницы возвращает прежний
   if (tabId === "swt") swtApplyTreeFilter();
   else swtRestoreTreeFilter();
@@ -400,6 +416,7 @@ function createTab(type, data) {
       origin: fileOrigin(data.path),
       fileData: data,
       dirty: false,
+      syncLegion: false, syncResistance: false, // галочки «⇄ DLC Legion»/«⇄ DLC Resistance»
       sheetIndex: data.sheet_index || 0,
       links: [],
       icon: getFileIcon(data.path)
@@ -452,6 +469,14 @@ function createTab(type, data) {
       sub: "shop_presets",
       icon: "/assets/icons/dark/icons/xml.svg"
     };
+  } else if (type === "campaign") {
+    tab = {
+      id: "campaign",
+      type: "campaign",
+      title: t("cpg_title") || "Редактор Компании",
+      sub: "shop_presets",
+      icon: "/assets/icons/dark/icons/xml.svg"
+    };
   } else if (type === "uprising-rnd") {
     tab = {
       id: "uprising-rnd",
@@ -493,12 +518,13 @@ function closeTab(tabId) {
     // rebuilding)
     if (tab.type !== "compare" && tab.type !== "create-mod"
         && tab.type !== "unpacker" && tab.type !== "swt" && tab.type !== "uprising"
-        && tab.type !== "uprising-rnd") {
+        && tab.type !== "uprising-rnd" && tab.type !== "campaign") {
       const panel = $(`.tab-panel[data-tab-id="${tabId}"]`);
       if (panel) panel.remove();
     }
     if (tab.type === "swt") state.swt = swtFreshState();
     if (tab.type === "uprising") state.uprising = uprFreshState();
+    if (tab.type === "campaign") state.campaign = cmpFreshState();
 
     updateSidebarVisibility();
   };
@@ -516,11 +542,26 @@ function closeTab(tabId) {
     }).then(async choice => {
       if (choice === "cancel") return;
       if (choice === "save") {
-        if (state.activeTabId === tabId) await saveCurrent();
+        // saveActive, а не saveCurrent: у карты/SWT нет currentFile —
+        // прямое сохранение молча ничего не писало
+        if (state.activeTabId === tabId) await saveActive();
         else {
-          const sr = await api("/api/save", { method: "POST", body: JSON.stringify({ path: tab.path }) });
+          const sr = await api("/api/save", { method: "POST",
+            body: JSON.stringify({ path: tab.path, ...syncFlagsFor(tab) }) });
           const sj = await sr.json();
           if (sj.saved) noteSaved(tab.path);
+          markSyncTabsSaved(sj.sync_saved);
+          if (sj.ok) toastSaveWithSync(sj);
+          else toast((sj.error || t("save_failed")), "err");
+        }
+      } else if (choice === "discard") {
+        // «без сохранения» — откатить по-настоящему: сбросить сессию
+        // к диску, иначе правки переживут закрытие
+        await discardTabBackend(tab);
+        if (tab.type === "compare") {
+          // сессии сброшены — вид тоже: stale-превью/диф больше невалидны
+          if (state.cmpData) { state.cmpData.left = null; state.cmpData.right = null; }
+          cancelCompare();
         }
       }
       doClose();
@@ -529,6 +570,66 @@ function closeTab(tabId) {
   }
 
   doClose();
+}
+
+// Пути бэкенд-сессий, задетые вкладкой (файл/карта; у SWT свой локальный
+// doc — серверную сессию он не трогает, сброс не нужен)
+function tabSessionPaths(tab) {
+  const out = [];
+  if (!tab) return out;
+  if (tab.type === "file" && tab.path) out.push(tab.path);
+  else if (tab.type === "uprising" && state.uprising && state.uprising.path) out.push(state.uprising.path);
+  else if (tab.type === "campaign" && state.campaign && state.campaign.path) out.push(state.campaign.path);
+  else if (tab.type === "compare") {
+    // стороны сравнения правят сессии файлов напрямую: «закрыть без
+    // сохранения» обязано откатить их тоже, иначе правки переживут закрытие
+    if (state.compare && !state.compare.preview) out.push(state.compare.left, state.compare.right);
+    if (state.cmpData) {
+      if (state.cmpData.left && state.cmpData.left.path) out.push(state.cmpData.left.path);
+      if (state.cmpData.right && state.cmpData.right.path) out.push(state.cmpData.right.path);
+    }
+  }
+  return out;
+}
+
+// Путь используется где-то ещё (другая вкладка/сторона сравнения)?
+function pathInUseElsewhere(path, excludeId) {
+  const np = normPath(path || "");
+  if (!np) return false;
+  for (const tb of state.tabs) {
+    if (tb.id === excludeId) continue;
+    if (tb.type === "file" && normPath(tb.path || "") === np) return true;
+    if (tb.id === "uprising" && state.uprising && normPath(state.uprising.path || "") === np) return true;
+    if (tb.id === "campaign" && state.campaign && normPath(state.campaign.path || "") === np) return true;
+    if (tb.type === "compare") {
+      const sides = [];
+      if (state.compare && !state.compare.preview) sides.push(state.compare.left, state.compare.right);
+      if (state.cmpData) {
+        if (state.cmpData.left) sides.push(state.cmpData.left.path);
+        if (state.cmpData.right) sides.push(state.cmpData.right.path);
+      }
+      if (sides.some(p => normPath(p || "") === np)) return true;
+    }
+  }
+  return false;
+}
+
+// «Закрыть без сохранения» — честный откат: сбросить серверную сессию к
+// диску и вычистить журнал, иначе правки переживают закрытие (видны при
+// повторном открытии и пишутся следующим сейвом). Если тот же файл открыт
+// ещё где-то — сессия чужая, не трогаем (там правки ещё на виду и грязные).
+async function discardTabBackend(tab) {
+  for (const p of tabSessionPaths(tab)) {
+    if (pathInUseElsewhere(p, tab.id)) continue;
+    try {
+      await api("/api/open_file", { method: "POST",
+        body: JSON.stringify({ path: p, reset: true }) });
+    } catch (e) { /* закрываемся в любом случае */ }
+    try {
+      await api("/api/clear_history", { method: "POST",
+        body: JSON.stringify({ path: p }) });
+    } catch (e) { /* журнал — второстепенно */ }
+  }
 }
 
 function getOrCreateFileTab(path) {
@@ -863,6 +964,7 @@ function setupGridScroll(table) {
 function renderGrid() {
   const f = state.currentFile;
   if (!f) return;
+  paintSyncBoxes();
   const table = getActiveGridTable();
   if (!table) return;
   state.selCell = null;   // grid is rebuilt; cell focus restarts on click
@@ -883,6 +985,9 @@ function renderGrid() {
     th.textContent = name;
     th.className = (ci === 0 ? "sticky-col col-head " : "col-head ");
     th.dataset.col = ci;
+    // поиск бьёт и по ключам колонок: совпавший заголовок подсвечиваем,
+    // как ячейки (find-hit), текущее совпадение докрасит paintCurrentMatch
+    if (state.find.active && state.find.keySet.has("h:" + ci)) th.classList.add("find-hit");
     const comment = f.comments[ci];
     if (comment) th.classList.add("has-comment");
     // built-in RU glossary for column names (the game files don't localize them)
@@ -1115,6 +1220,223 @@ function ensureCellVisible(td) {
       wrap.scrollLeft += (cr.left - (wr.left + stickyW));
     }
   }
+}
+
+// Поиск доводит ячейку в центр кадра по вертикали: минимальный скролл
+// ensureCellVisible оставлял совпадение на самом краю/под шапкой
+// («недоскролл» — результат не видно). Горизонталь не трогаем — её уже
+// выставил ensureCellVisible (к левому краю за липкой колонкой)
+function centerCellVert(td) {
+  const wrap = td.closest(".grid-scroll");
+  if (!wrap) return;
+  const wr = wrap.getBoundingClientRect();
+  const cr = td.getBoundingClientRect();
+  const thead = wrap.querySelector(".grid thead");
+  const headH = thead ? thead.offsetHeight : 0;
+  const viewH = wr.bottom - (wr.top + headH);
+  const target = wr.top + headH + (viewH - cr.height) / 2;
+  wrap.scrollTop += (cr.top - target);
+}
+
+// Текст, выделенный пользователем мышью внутри ячейки таблицы:
+// Ctrl+C / пункт «Копировать» должны отдать его, а не всё поле целиком.
+// Возвращает "" когда выделения нет или оно вне таблиц (.grid/.cmp-grid).
+function gridTextSelection() {
+  try {
+    const sel = window.getSelection && window.getSelection();
+    if (!sel || sel.isCollapsed) return "";
+    const s = String((sel.toString && sel.toString()) || "");
+    if (!s) return "";
+    const node = sel.anchorNode;
+    const el = node && (node.nodeType === 1 ? node : node.parentElement);
+    if (el && el.closest && el.closest(".grid, .cmp-grid")) return s;
+  } catch (e) { /* noop */ }
+  return "";
+}
+
+// ---------- unit_set / unit_class: классы техники в cars.xml / tanks.xml ----------
+// Известные игре значения (проверено по basis+dlc распакованной игры и мода).
+// Свой стильный попап вместо нативного datalist: datalist в Chrome фильтрует
+// пункты по текущему значению поля и показывает только уже выбранное.
+// Ввод при этом свободный: input остаётся текстовым.
+const UNIT_SET_OPTIONS = ["armored_transport", "artillery", "combat_vehicle",
+  "light_vehicle", "supply", "tank"];
+// Соседняя колонка unit_class — свой набор (тоже проверен по basis+dlc и моду).
+const UNIT_CLASS_OPTIONS = ["aircraft", "heavy_vehicle", "light_vehicle",
+  "medium_vehicle", "tank"];
+function isSpeciesCarTank(path) {
+  const p = String(path || "");
+  return /species[\\/]cars\.xml$/i.test(p) || /species[\\/]tanks\.xml$/i.test(p);
+}
+function isUnitSetCell(path, columns, ci) {
+  if (ci == null || ci < 0 || !columns ||
+      String(columns[ci] || "") !== "unit_set") return false;
+  return isSpeciesCarTank(path);
+}
+// Соседняя колонка unit_class — та же логика комбобокса, свой набор классов.
+function isUnitClassCell(path, columns, ci) {
+  if (ci == null || ci < 0 || !columns ||
+      String(columns[ci] || "") !== "unit_class") return false;
+  return isSpeciesCarTank(path);
+}
+// Все известные + встреченные в текущем файле (мод может ввести свой класс).
+function unitSetChoices(extraVals) {
+  const seen = new Set(UNIT_SET_OPTIONS);
+  try {
+    (extraVals || []).forEach(v => {
+      v = String(v ?? "").trim();
+      if (v) seen.add(v);
+    });
+  } catch (e) { /* noop */ }
+  return [...seen].sort();
+}
+// То же для unit_class: известные + встреченные в файле.
+function unitClassChoices(extraVals) {
+  const seen = new Set(UNIT_CLASS_OPTIONS);
+  try {
+    (extraVals || []).forEach(v => {
+      v = String(v ?? "").trim();
+      if (v) seen.add(v);
+    });
+  } catch (e) { /* noop */ }
+  return [...seen].sort();
+}
+// Один выбор для всех трёх редакторов (основная сетка, превью и диф сравнения):
+// какая колонка — такой набор. Возвращает {choices, title} либо null.
+function unitComboFor(path, columns, ci, extraVals) {
+  try {
+    if (typeof isUnitSetCell === "function" &&
+        isUnitSetCell(path, columns, ci))
+      return { choices: unitSetChoices(extraVals), title: "unit_set" };
+    if (typeof isUnitClassCell === "function" &&
+        isUnitClassCell(path, columns, ci))
+      return { choices: unitClassChoices(extraVals), title: "unit_class" };
+  } catch (e) { /* noop */ }
+  return null;
+}
+// Фрагмент, выделенный в ячейке на момент ОТКРЫТИЯ контекстного меню.
+// Левый клик по пункту меню схлопывает живое выделение раньше click-хендлера,
+// поэтому живое gridTextSelection() в меню уже пусто — берём запомненное.
+// Перезаписывается при каждом открытии меню, stale не живёт.
+let gridCtxSelText = "";
+// Живое выделение прямо сейчас либо запомненное при открытии меню.
+function gridCopyFragment() {
+  try {
+    const live = (typeof gridTextSelection === "function") ? gridTextSelection() : "";
+    if (live) return live;
+  } catch (e) { /* noop */ }
+  return gridCtxSelText || "";
+}
+// Один глобальный хук: клик/скролл мимо открытого попапа закрывает его.
+// Попап живёт в body (position:fixed): пересборка ячейки при commit его
+// не убивает, overflow таблицы его не режет.
+let unitComboHooked = false;
+function ensureUnitComboHook() {
+  if (unitComboHooked) return; unitComboHooked = true;
+  const closeAll = () => {
+    try { (window.$$ ? $$(".unit-combo-pop") : []).forEach(p => p.remove()); }
+    catch (e2) { /* noop */ }
+  };
+  document.addEventListener("mousedown", e => {
+    try {
+      if (e.target && e.target.closest &&
+          e.target.closest(".unit-combo, .unit-combo-pop")) return;
+      closeAll();
+    } catch (e2) { /* noop */ }
+  });
+  // скролл/ресайз — попап привязан к координатам, при сдвиге закрываем
+  document.addEventListener("scroll", closeAll, true);
+  window.addEventListener("resize", closeAll);
+}
+// Комбобокс в ячейке: input (свободный ввод) + кнопка ▾ + стильный попап.
+// Кнопка всегда показывает ВСЕ классы; печать фильтрует; выбор подставляет
+// значение и оставляет правку открытой (коммит — Enter/клик мимо, как обычно).
+// title — подпись кнопки (unit_set / unit_class).
+function makeUnitSetCombo(td, input, choices, title) {
+  try {
+    ensureUnitComboHook();
+    const box = document.createElement("div");
+    box.className = "unit-combo";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "unit-combo-btn";
+    btn.tabIndex = -1;
+    btn.title = title || "unit_set";
+    btn.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+    let pop = null;
+    const closePop = () => { if (pop) { try { pop.remove(); } catch (e) {} pop = null; } };
+    const placePop = () => {
+      if (!pop) return;
+      if (!input.isConnected) { closePop(); return; }
+      const r = input.getBoundingClientRect();
+      pop.style.left = Math.max(4, Math.min(r.left, window.innerWidth - 190)) + "px";
+      pop.style.top = (r.bottom + 3) + "px";
+      pop.style.minWidth = Math.max(r.width + 22, 150) + "px";
+    };
+    const paint = filter => {
+      pop.textContent = "";
+      const q = String(filter ?? "").trim().toLowerCase();
+      (choices || []).forEach(v => {
+        if (q && String(v).toLowerCase().indexOf(q) < 0) return;
+        const o = document.createElement("div");
+        o.className = "unit-combo-opt" + (String(v) === String(input.value) ? " cur" : "");
+        o.textContent = v;
+        // mousedown гасим, чтобы клик не уводил фокус/blur (иначе правка
+        // закоммитится раньше выбора)
+        o.addEventListener("mousedown", e => e.preventDefault());
+        o.addEventListener("click", () => {
+          input.value = v;
+          closePop();
+          try { input.focus(); } catch (e2) { /* noop */ }
+        });
+        pop.appendChild(o);
+      });
+      if (!pop.children.length) {
+        const em = document.createElement("div");
+        em.className = "unit-combo-empty";
+        em.textContent = "—";
+        pop.appendChild(em);
+      }
+    };
+    const openPop = all => {
+      closePop();
+      pop = document.createElement("div");
+      pop.className = "unit-combo-pop";
+      paint(all ? "" : input.value);
+      document.body.appendChild(pop);
+      placePop();
+    };
+    // Кнопка: показать всё (фильтр сбросить), повторный клик — закрыть.
+    btn.addEventListener("mousedown", e => e.preventDefault());
+    btn.addEventListener("click", () => {
+      if (pop) closePop();
+      else {
+        openPop(true);
+        try { input.focus({ preventScroll: true }); } catch (e) { /* noop */ }
+      }
+    });
+    // Печать: фильтровать и показывать.
+    input.addEventListener("input", () => openPop(false));
+    input.addEventListener("keydown", e => {
+      if (e.key === "Escape" && pop) {
+        // первый Esc закрывает меню, а не отменяет правку
+        e.stopImmediatePropagation();
+        closePop();
+      } else if (e.key === "ArrowDown" && !pop) {
+        e.preventDefault();
+        openPop(true);
+      }
+      // Enter с открытым меню: просто закрыть, дальше штатный commit редактора.
+      else if (e.key === "Enter" && pop) closePop();
+    });
+    // Правка закрылась (blur→commit пересобрал ячейку) — попапу не висеть.
+    // Задержка: клик по пункту (mousedown уже погашен) должен успеть раньше.
+    input.addEventListener("blur", () => setTimeout(closePop, 250));
+    td.textContent = "";
+    box.appendChild(input);
+    box.appendChild(btn);
+    td.appendChild(box);
+  } catch (e) { /* noop: правка остаётся обычным input */ }
 }
 
 // Фокус редактора ячейки без самопроизвольного скролла: нативный focus()
@@ -1445,13 +1767,28 @@ const HEADER_GLOSSARY = {
 
 // ---------- edited-files marks (dot in the tree + <project>.json) ----------
 async function loadEditedMarks(root) {
+  // метки грузятся ВСЕ (без фильтра по корню): древо показывает текущий
+  // источник (проект/игра/мод), а правили могли в любом — фильтр по одному
+  // корню прятал зелёные точки после рестарта. Бэкенд без path отдаёт всё.
   state.editedFiles = new Set();
-  if (!root) return;
   try {
-    const r = await api("/api/edited_marks?path=" + encodeURIComponent(root), { timeout: API_TIMEOUT_OPEN });
+    const url = root ? "/api/edited_marks?path=" + encodeURIComponent(root)
+      : "/api/edited_marks";
+    const r = await api(url, { timeout: API_TIMEOUT_OPEN });
     const j = await r.json();
     if (j.ok) state.editedFiles = new Set((j.files || []).map(p => String(p).toLowerCase()));
   } catch (e) { /* marks are optional sugar */ }
+  // дерево могли отрисовать до ответа: докрасить метки без ререндера
+  try {
+    $$("#project-tree .tree-file").forEach(row => {
+      const p = row.dataset.path || "";
+      if (state.editedFiles.has(String(p).toLowerCase())) {
+        row.classList.add("edited");
+        row.title = (t("edited_hint") || "Файл редактировался в Terminator Sheet") + "\n" + p;
+      }
+    });
+    if (typeof paintTreeDirty === "function") paintTreeDirty();
+  } catch (e2) { /* noop */ }
 }
 
 function noteSaved(path) {
@@ -1502,7 +1839,299 @@ function treeDragPayload(list, folders) {
   return JSON.stringify(data);
 }
 
+// ---------- синхронизация открытых таблиц с внешними правками ----------
+// Карта/сравнение пишут в сессию файла напрямую, мимо грида: открытые
+// таблицы того же файла подменяют значения в памяти и помечаются stale,
+// а перерисовываются при возврате на вкладку (activateTab). Иначе таблица
+// показывала бы старое до переоткрытия, хотя дискета уже красная.
+function syncFileTabsCells(path, cells, sheetIndex) {
+  const np = normPath(path || "");
+  if (!np || !cells || !cells.length) return false;
+  let any = false, active = false;
+  state.tabs.forEach(tb => {
+    if (tb.type !== "file" || !tb.fileData || !tb.fileData.rows) return;
+    if (normPath(tb.path || "") !== np) return;
+    if (sheetIndex != null && (tb.sheetIndex || 0) !== sheetIndex) return;
+    cells.forEach(c => {
+      const row = tb.fileData.rows[c.row];
+      if (row && row.values && c.col < row.values.length) {
+        row.values[c.col] = c.value;
+        if (c.col === 0) row.key = c.value;
+      }
+    });
+    if (!tb.dirty) tb.dirty = true;
+    if (tb.id === state.activeTabId) active = true;
+    else tb.staleGrid = true;
+    any = true;
+  });
+  if (!any) return false;
+  renderTabBar();
+  if (active && state.currentFile && state.currentFile.rows) renderGrid();
+  return true;
+}
+
+// Структурная правка извне (строки/колонки из сравнения, слияние):
+// точечно значения не подменить — вкладка перечитает сессию с сервера
+// при возврате (staleGrid "reload").
+function markFileTabsStale(path, sheetIndex) {
+  const np = normPath(path || "");
+  if (!np) return false;
+  let any = false, active = false;
+  state.tabs.forEach(tb => {
+    if (tb.type !== "file" || !tb.fileData) return;
+    if (normPath(tb.path || "") !== np) return;
+    if (sheetIndex != null && (tb.sheetIndex || 0) !== sheetIndex) return;
+    if (!tb.dirty) tb.dirty = true;
+    if (tb.id === state.activeTabId) active = true;
+    else if (!tb.staleGrid) tb.staleGrid = "reload";
+    any = true;
+  });
+  if (!any) return false;
+  renderTabBar();
+  if (active) {
+    const tab = state.tabs.find(tb => tb.id === state.activeTabId);
+    refreshFileTabFromServer(tab);
+  }
+  return true;
+}
+
+// Перечитать файловую вкладку из серверной сессии и перерисовать
+// (структурные правки извне, откат к диску). Молча: тосты — у вызывающего.
+async function refreshFileTabFromServer(tab, opts) {
+  opts = opts || {};
+  if (!tab || tab.type !== "file" || !tab.path) return false;
+  try {
+    const r = await api("/api/file?path=" + encodeURIComponent(tab.path));
+    const f = await r.json();
+    if (!f || !f.ok) return false;
+    tab.fileData = {
+      path: tab.path,
+      sheet_index: f.sheet_index, sheet_name: f.sheet_name,
+      sheets: f.sheets, columns: f.columns, comments: f.comments,
+      rows: f.rows, expanded_cols: f.expanded_cols,
+      recovered: !!f.recovered,
+    };
+    tab.sheetIndex = f.sheet_index || 0;
+    if (opts.clean) {
+      tab.dirty = false;
+      tab.staleGrid = false;
+    }
+    if (tab.id === state.activeTabId) {
+      state.currentFile = tab.fileData;
+      if (opts.clean) { state.dirty = false; updateDirty(); }
+      tab.linksLoaded = false;
+      renderGrid();
+      loadLinks();
+    }
+    return true;
+  } catch (e) { return false; }
+}
+
+// ---------- синхронизация basis -> DLC внутри своего корня ----------
+// Две галочки на вкладке обычной таблицы («⇄ DLC Legion», «⇄ DLC Resistance»)
+// зеркалят правку basis-файла в одноимённые species-файлы DLC-оверлеев ТОГО
+// ЖЕ корня, где лежит открытый файл (проект — в проект, мод — в мод).
+// Через корни (проект↔мод, игра→мод) зеркала нет; направление только вниз:
+// правка DLC-файла никуда не зеркалится, для файлов вне проекта/мода
+// галочки скрыты. Живут на вкладке до её закрытия, по умолчанию выключены.
+// Каждая синхронизация пишет СВОЮ запись истории в каждом файле — откат
+// отдельно по файлам.
+const SYNC_SCOPES = ["legion", "resistance"];
+let syncInfoCache = {}; // normPath -> /api/sync_info ответ
+function syncScopeTitle(sc) {
+  return t("sync_" + sc) || ("⇄ DLC " + sc);
+}
+function syncTabFlag(sc) {
+  return "sync" + sc[0].toUpperCase() + sc.slice(1);
+}
+function syncActiveTab() {
+  const tb = state.tabs.find(t => t.id === state.activeTabId);
+  return (tb && tb.type === "file" && tb.path) ? tb : null;
+}
+function syncInfoFor(tb) {
+  if (!tb) return null;
+  return syncInfoCache[normPath(tb.path || "")] || null;
+}
+async function syncInfoLoad(path) {  const key = normPath(path || "");
+  if (!key || syncInfoCache[key]) return syncInfoCache[key] || null;
+  try {
+    const r = await api("/api/sync_info", { method: "POST",
+      body: JSON.stringify({ path }) });
+    const j = await r.json();
+    if (j && j.ok) syncInfoCache[key] = j;
+  } catch (e) { /* без синхронизации, как раньше */ }
+  return syncInfoCache[key] || null;
+}
+// корни разделов сменились (настройки путей, проект, закрытие источника):
+// принадлежность файлов пересчитать
+function syncInfoReset() {
+  syncInfoCache = {};
+  try { paintSyncBoxes(); } catch (e) { /* разметка ещё не готова */ }
+}
+function syncScopesOn() {
+  return syncScopesFor(syncActiveTab());
+}
+// флаги галок произвольной вкладки (не только активной): сохранение при
+// закрытии неактивной идёт мимо syncActiveTab — зеркало терялось
+function syncScopesFor(tb) {
+  const info = syncInfoFor(tb);
+  if (!tb || !info || !info.scopes) return [];
+  return SYNC_SCOPES.filter(sc => {
+    const st = info.scopes[sc];
+    // зеркало только вниз из basis своего корня: DLC-файл и файл вне
+    // проекта/мода (connected false) никуда не зеркалят
+    return tb[syncTabFlag(sc)] && st && st.connected && st.eligible && info.basis;
+  });
+}
+function syncFlags() {
+  return syncFlagsFor(syncActiveTab());
+}
+function syncFlagsFor(tb) {
+  const on = syncScopesFor(tb);
+  return { sync_legion: on.includes("legion"),
+    sync_resistance: on.includes("resistance") };
+}
+function paintSyncBoxes() {
+  const tb = syncActiveTab();
+  const info = syncInfoFor(tb);
+  SYNC_SCOPES.forEach(sc => {
+    const wrap = $("#sync-" + sc + "-wrap"), box = $("#sync-" + sc);
+    if (!wrap || !box) return;
+    const st = info && info.scopes && info.scopes[sc];
+    const show = !!(st && st.connected);
+    wrap.hidden = !show;
+    if (show) {
+      box.checked = !!tb[syncTabFlag(sc)];
+      // серая: исходник не из basis (зеркало только вниз) — или в этом
+      // DLC-оверлее нет одноимённого файла
+      box.disabled = !info.basis || !st.eligible;
+      wrap.classList.toggle("on", box.checked && !box.disabled);
+      if (!info.basis) {
+        wrap.title = info.from_dlc
+          ? (t("sync_dlc_from_dlc") || "Файл уже из DLC — зеркало только из basis")
+          : (t("sync_dlc_na") || "Файл вне проекта/мода — зеркалить некуда");
+      } else if (!st.eligible) {
+        wrap.title = t("sync_dlc_na") || "Нет одноимённого файла в этом DLC";
+      } else {
+        wrap.title = t("sync_dlc_title") || "Зеркалить правку из basis в DLC того же пути";
+      }
+    }
+  });
+  // данные ещё не приезжали — подтянуть и перекрасить (если вкладка та же)
+  if (tb && !info) {
+    const id = tb.id;
+    syncInfoLoad(tb.path).then(() => {
+      if (state.activeTabId === id) paintSyncBoxes();
+    });
+  }
+}
+// общий разбор ответа с синхронизацией: подтянуть открытые вкладки
+// сиблингов, показать итог; missing — спросить «скопировать целиком?».
+async function handleSyncResult(j, srcPath) {
+  if (!j) return;
+  const synced = j.synced || [];
+  const parts = [];
+  for (const s of synced) {
+    const tag = s.label;
+    if (s.applied > 0) {
+      if (s.structural) markFileTabsStale(s.path);
+      else if (s.cells && s.cells.length) syncFileTabsCells(s.path, s.cells);
+      else markFileTabsStale(s.path);
+      parts.push(tag + " +" + s.applied);
+    } else if (s.guarded) {
+      parts.push(tag + " (" + (t("sync_dlc_guarded") || "защита") + ")");
+    }
+    const sk = (s.skipped || []).filter(x => x !== "guarded");
+    if (sk.length && s.applied === 0 && !s.guarded) parts.push(tag + ": " + sk.join("; "));
+  }
+  if (parts.length) {
+    toast((t("sync_dlc_applied") || "⇄ Синхронизировано: {info}")
+      .replace("{info}", parts.join(", ")), "ok");
+  }
+  const miss = j.missing || [];
+  const lines = [];
+  miss.forEach(m => {
+    (m.sysnames || []).forEach(n => lines.push(
+      { scope: m.scope, path: m.path, label: m.label, name: n }));
+  });
+  if (!lines.length) return;
+  const msg = lines.map(l => (t("sync_dlc_missing") || "Нет в {label}: {rows}")
+    .replace("{label}", l.label)
+    .replace("{rows}", l.name)).join("\n");
+  const choice = await askConfirm({
+    title: t("sync_dlc") || "⇄ Синхронизация",
+    message: msg,
+    buttons: [
+      { id: "copy", label: t("sync_dlc_copy") || "Скопировать", kind: "primary" },
+      { id: "skip", label: t("sync_dlc_skip") || "Пропустить", kind: "ghost" },
+    ],
+  });
+  if (choice !== "copy") return;
+  const names = [...new Set(lines.map(l => l.name))];
+  const scopes = [...new Set(lines.map(l => l.scope))];
+  try {
+    const r = await api("/api/sync_copy_rows", { method: "POST",
+      body: JSON.stringify({ path: srcPath, sysnames: names, scopes }) });
+    const c = await r.json();
+    if (!c || !c.ok) { toast((c && c.error) || "error", "err"); return; }
+    (c.synced || []).forEach(s => { if (s.applied > 0) markFileTabsStale(s.path); });
+    const done = (c.synced || []).filter(s => s.applied > 0)
+      .map(s => s.label + " +" + s.applied);
+    if (done.length) {
+      toast((t("sync_dlc_copied") || "⇄ Строки скопированы: {info}")
+        .replace("{info}", done.join(", ")), "ok");
+    }
+  } catch (e) { toast(String((e && e.message) || e), "err"); }
+}
+
 // ---------- toolbar actions ----------
+// тост сохранения с галкой: один тост вместо двух — главный файл плюс
+// каждый дописанный сиблинг строкой «Scope → файл сохранён»
+function syncSavedLines(saved) {
+  return (saved || []).map(e => {
+    const label = String((e && e.label) || e || "").replace(/^DLC\s+/i, "");
+    const p = (e && e.path) || "";
+    const base = String(p).split(/[\\/]/).pop() || String(p);
+    return label + " → " + base + " " + (t("saved") || "сохранён");
+  });
+}
+function toastSaveWithSync(j) {
+  let msg = t("save_success") || "Сохранено";
+  const lines = syncSavedLines(j.sync_saved);
+  if (lines.length) msg += "\n" + lines.join("\n");
+  toast(msg, "ok");
+}
+// дискеты дописанных сиблингов: /api/save пишет сессию как есть (память ==
+// диск), значит открытая вкладка сиблинга тоже чистая — гасим dirty везде,
+// не только на активной. Возвращает, тронуло ли что-то (перекрасить бар).
+function markSyncTabsSaved(saved) {
+  let touched = false;
+  (saved || []).forEach(e => {
+    const p = (e && e.path) || e || "";
+    if (!p) return;
+    try { if (typeof noteSaved === "function") noteSaved(p); } catch (err) {}
+    let np = "";
+    try { np = normPath(p); } catch (err2) { return; }
+    (state.tabs || []).forEach(tb => {
+      if (tb.path && tb.dirty) {
+        try {
+          if (normPath(tb.path) === np) {
+            tb.dirty = false; tb.saved = true; touched = true;
+          }
+        } catch (err3) { /* noop */ }
+      }
+    });
+    ["uprising", "campaign", "swt"].forEach(k => {
+      const st = state[k];
+      if (st && st.path && st.dirty) {
+        try {
+          if (normPath(st.path) === np) { st.dirty = false; touched = true; }
+        } catch (err4) { /* noop */ }
+      }
+    });
+  });
+  return touched;
+}
 function markDirty() {
   state.dirty = true;
   updateDirty();
@@ -1510,6 +2139,7 @@ function markDirty() {
 
 function updateDirty() {
   $("#dirty-dot").classList.toggle("on", state.dirty);
+  if (typeof paintTreeDirty === "function") paintTreeDirty();
   if (state.currentFile) {
     const sheetTag = state.currentFile.sheets && state.currentFile.sheets.length > 1
       ? ` [${state.currentFile.sheet_name}]` : "";
@@ -1527,7 +2157,9 @@ async function fixCurrentFile() {
   // путь с активной вкладки: карта Uprising и SWT живут не в currentFile
   let path = state.currentFile ? state.currentFile.path : "";
   const onUprising = state.activeTabId === "uprising";
+  const onCampaign = state.activeTabId === "campaign";
   if (onUprising) path = state.uprising.path || "";
+  if (onCampaign) path = state.campaign.path || "";
   if (state.activeTabId === "swt") path = (state.swt && state.swt.path) || "";
   if (!path) { toast(t("no_file"), "err"); return; }
   const choice = await askConfirm({
@@ -1558,6 +2190,11 @@ async function fixCurrentFile() {
       state.uprising.dirty = false;
       await openUprising(path);
     }
+    if (onCampaign && j.saved) {
+      state.campaign.rows = null;
+      state.campaign.dirty = false;
+      await openCampaign(path);
+    }
   } catch (e) {
     toast(t("fix_file_failed") + " " + (e && e.message ? e.message : ""), "err");
   }
@@ -1570,6 +2207,7 @@ async function fixCurrentFile() {
 async function saveActive(popup) {
   if (state.activeTabId === "swt") return swtSaveGuarded(!!popup);
   if (state.activeTabId === "uprising") return uprSaveGuarded(!!popup);
+  if (state.activeTabId === "campaign") return cmpSaveGuarded(!!popup);
   if (state.activeTabId === "compare") return saveCompareGuarded(!!popup);
   return saveCurrent(!!popup);
 }
@@ -1857,16 +2495,17 @@ async function saveCurrent(popup) {
 async function saveCurrentDirect() {
   if (!state.currentFile) return;
   const r = await api("/api/save", { method: "POST",
-    body: JSON.stringify({ path: state.currentFile.path }) });
+    body: JSON.stringify({ path: state.currentFile.path, ...syncFlags() }) });
   const j = await r.json();
   if (j.ok) {
     state.dirty = false;
     if (j.saved) noteSaved(state.currentFile.path);
+    markSyncTabsSaved(j.sync_saved);
     const activeTab = state.tabs.find(t => t.id === state.activeTabId);
     if (activeTab) activeTab.dirty = false;
     updateDirty();
     renderTabBar();
-    toast(t("save_success"), "ok");
+    toastSaveWithSync(j);
   }
   else toast((j.error || t("save_failed")), "err");
 }
@@ -1874,9 +2513,11 @@ async function saveCurrentDirect() {
 async function addRow() {
   if (!state.currentFile) return;
   const r = await api("/api/add_row", { method: "POST",
-    body: JSON.stringify({ path: state.currentFile.path, values: null }) });
+    body: JSON.stringify({ path: state.currentFile.path, values: null,
+      ...syncFlags() }) });
   const j = await r.json();
   if (j.ok) {
+    await handleSyncResult(j, state.currentFile.path);
     state.currentFile.rows.push({ values: Array(state.currentFile.columns.length).fill(""), key: "" });
     state.dirty = j.saved ? false : true;
     if (j.saved) noteSaved(state.currentFile && state.currentFile.path);
@@ -1892,9 +2533,11 @@ async function addRow() {
 async function deleteRow() {
   if (!state.currentFile || state.selectedRow == null) { toast(t("no_file")); return; }
   const r = await api("/api/delete_row", { method: "POST",
-    body: JSON.stringify({ path: state.currentFile.path, row: state.selectedRow }) });
+    body: JSON.stringify({ path: state.currentFile.path, row: state.selectedRow,
+      ...syncFlags() }) });
   const j = await r.json();
   if (j.ok) {
+    await handleSyncResult(j, state.currentFile.path);
     state.currentFile.rows.splice(state.selectedRow, 1);
     state.selectedRow = null;
     state.dirty = j.saved ? false : true;
@@ -1916,9 +2559,11 @@ async function addColumn() {
   });
   if (!name) return;
   const r = await api("/api/add_column", { method: "POST",
-    body: JSON.stringify({ path: state.currentFile.path, name }) });
+    body: JSON.stringify({ path: state.currentFile.path, name,
+      ...syncFlags() }) });
   const j = await r.json();
   if (j.ok) {
+    await handleSyncResult(j, state.currentFile.path);
     const f = state.currentFile;
     f.columns.push(name); f.comments.push(null);
     f.rows.forEach(rw => rw.values.push(""));
@@ -1937,9 +2582,11 @@ async function deleteColumnAt(ci) {
   if (!state.currentFile) return;
   if (ci == null || ci < 0 || ci >= state.currentFile.columns.length) return;
   const r = await api("/api/delete_column", { method: "POST",
-    body: JSON.stringify({ path: state.currentFile.path, col: ci }) });
+    body: JSON.stringify({ path: state.currentFile.path, col: ci,
+      ...syncFlags() }) });
   const j = await r.json();
   if (j.ok) {
+    await handleSyncResult(j, state.currentFile.path);
     state.currentFile.columns.splice(ci, 1);
     state.currentFile.comments.splice(ci, 1);
     state.currentFile.rows.forEach(rw => rw.values.splice(ci, 1));
@@ -1974,9 +2621,11 @@ async function duplicateRow(ri) {
   if (!state.currentFile || ri == null) return;
   const values = state.currentFile.rows[ri].values.slice();
   const r = await api("/api/add_row", { method: "POST",
-    body: JSON.stringify({ path: state.currentFile.path, values }) });
+    body: JSON.stringify({ path: state.currentFile.path, values,
+      ...syncFlags() }) });
   const j = await r.json();
   if (j.ok) {
+    await handleSyncResult(j, state.currentFile.path);
     state.currentFile.rows.push({ values, key: "" });
     state.dirty = j.saved ? false : true;
     if (j.saved) noteSaved(state.currentFile && state.currentFile.path);
@@ -1994,9 +2643,11 @@ async function applyCellEdit(ri, ci, newVal) {
   if (!f || ri == null || ci == null) return;
   if (String(f.rows[ri].values[ci]) === String(newVal)) return;
   const r = await api("/api/edit", { method: "POST",
-    body: JSON.stringify({ path: f.path, row: ri, col: ci, value: newVal }) });
+    body: JSON.stringify({ path: f.path, row: ri, col: ci, value: newVal,
+      ...syncFlags() }) });
   const j = await r.json();
-  if (!j.ok) { toast(j.error || "edit error", "err"); return; }
+  if (!j.ok) { toast(j.error || "edit error", "err"); return; };
+  await handleSyncResult(j, f.path)
   f.rows[ri].values[ci] = newVal;
   setUndoRedoButtons(!!j.can_undo, !!j.can_redo);
   const activeTab = state.tabs.find(tb => tb.id === state.activeTabId);
@@ -2030,6 +2681,9 @@ function setupContextMenu() {
   };
 
   document.addEventListener("contextmenu", e => {
+    // Запомнить выделенный фрагмент СРАЗУ: левый клик по пункту меню схлопнет
+    // живое выделение раньше click-хендлера (там уже будет пусто).
+    try { gridCtxSelText = gridTextSelection(); } catch (e2) { gridCtxSelText = ""; }
     // сравнение: своё контекстное меню на ячейках/заголовках обеих панелей
     const cmpGrid = e.target.closest(".cmp-grid");
     if (cmpGrid) {
@@ -2131,14 +2785,23 @@ function setupContextMenu() {
       const link = state.links.find(l => l.row === ctxRow);
       if (link) followLink(link);
     } else if (act === "copy-cell" && ctxRow != null && ctxCol != null) {
-      // copy the value of the clicked cell
-      state.clipboard = String(state.currentFile.rows[ctxRow].values[ctxCol] ?? "");
+      // выделенный мышью кусок текста — только его, иначе всё поле целиком.
+      // Живое выделение к моменту клика уже схлопнуто — берём запомненное.
+      const frag = gridCopyFragment();
+      state.clipboard = frag || String(state.currentFile.rows[ctxRow].values[ctxCol] ?? "");
       copyText(state.clipboard);
     } else if (act === "cut-cell" && ctxRow != null && ctxCol != null) {
-      // cut: copy the value out, then clear the cell (undoable via history)
-      state.clipboard = String(state.currentFile.rows[ctxRow].values[ctxCol] ?? "");
-      copyText(state.clipboard);
-      applyCellEdit(ctxRow, ctxCol, "");
+      // cut: copy the value out, then clear the cell (undoable via history).
+      // Но при выделенном куске чистить всё поле нельзя — только копируем кусок.
+      const frag = gridCopyFragment();
+      if (frag) {
+        state.clipboard = frag;
+        copyText(state.clipboard);
+      } else {
+        state.clipboard = String(state.currentFile.rows[ctxRow].values[ctxCol] ?? "");
+        copyText(state.clipboard);
+        applyCellEdit(ctxRow, ctxCol, "");
+      }
     } else if (act === "paste-cell" && ctxRow != null && ctxCol != null) {
       applyCellEdit(ctxRow, ctxCol, state.clipboard);
     } else if (act === "copy-row" && ctxRow != null) {
