@@ -523,8 +523,8 @@ class Updates:
     # Замена изнутри процесса обречена: запущенный exe и загруженные DLL
     # на Windows не переименовываются, итог — полу-новая установка и
     # «unknown encoding: idna» на следующем старте. Поэтому выходим сами,
-    # а копирует отдельный updater.exe (compiler/updater.py, консольный,
-    # с прогрессом): ждёт нашей смерти, льёт staged поверх программы,
+    # а копирует отдельный updater.exe (compiler/updater.py, оконный
+    # tkinter-лаунчер): ждёт нашей смерти, льёт staged поверх программы,
     # чистит staged/pending, пишет update_applied.json и стартует новый exe.
     _UPDATER_EXE = "updater.exe"
 

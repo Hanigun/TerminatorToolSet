@@ -72,6 +72,8 @@ class Mods:
             else:
                 rel = os.path.basename(src)
             dst = os.path.normpath(os.path.join(mod_root, rel))
+            if os.path.normcase(os.path.abspath(dst)) == os.path.normcase(os.path.abspath(src)):
+                return {"ok": True, "path": dst, "noop": True}
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             if os.path.isdir(src):
                 shutil.copytree(src, dst, dirs_exist_ok=True)
@@ -100,6 +102,8 @@ class Mods:
             else:
                 rel = os.path.basename(src)
             dst = os.path.normpath(os.path.join(proj_root, rel))
+            if os.path.normcase(os.path.abspath(dst)) == os.path.normcase(os.path.abspath(src)):
+                return {"ok": True, "path": dst, "noop": True}
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             if os.path.isdir(src):
                 shutil.copytree(src, dst, dirs_exist_ok=True)

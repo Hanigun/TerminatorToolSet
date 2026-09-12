@@ -18,20 +18,26 @@ _NW = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
 
 
 # -- archive --------------------------------------------------------------------
-# Порядок шагов группы: СНАЧАЛА loose-папки из корня игры (basis, затем
-# localization — если найдены рядом с .pak), ПОТОМ распаковка всех .pak
-# поверх (basis.pak первым, дальше patch_* по номеру). Так перевыпущенные
-# файлы из паков всегда побеждают старые loose-файлы, а не наоборот.
-_LOOSE_COPY_ORDER = ("basis", "localization")
+# Порядок шагов группы: СНАЧАЛА loose-папка basis из корня игры (если найдена
+# рядом с .pak), ПОТОМ распаковка всех .pak поверх (basis.pak первым, дальше
+# patch_* по номеру, затем паки локализации каждый в свою папку). Так
+# перевыпущенные файлы из паков всегда побеждают старые loose-файлы.
+# localization больше НЕ копируется: внутри лежат только паки языков
+# (localization/<lang>/basis_<lang>.pak) — их распаковываем, а не тащим
+# как есть, иначе в распакованной игре лежали бы сами архивы.
+_LOOSE_COPY_ORDER = ("basis",)
 class Archive:
     """Unpacks the game .pak queue in a background thread.
 
-    Per group: loose basis/ then localization/ copies first, then ALL paks
-    extract into ONE folder on top so later patches overwrite earlier files:
+    Per group: loose basis/ copy first, then ALL paks extract on top:
     game base -> <dest>\\basis\\ (basis.pak first, then patch_* by number),
     Legion -> <dest>\\dlc\\legion\\basis\\, Resistance
     -> <dest>\\dlc\\resistance\\basis\\, Evolution ->
-    <dest>\\dlc\\evolution\\basis\\.
+    <dest>\\dlc\\evolution\\basis\\. Localization paks
+    (<src>\\localization\\<lang>\\basis_<lang>.pak) each extract into
+        their OWN folder <dest>\\localization\\<lang>\\<stem>\\ (e.g.
+        localization\\en\\basis_en\\ with locale/ inside) — the loose
+        localization/ folder itself is NOT copied (it holds only the paks).
     """
 
     def __init__(self, log, base_dir):
@@ -76,6 +82,61 @@ class Archive:
         return ([os.path.join(folder, f) for f in base]
                 + [os.path.join(folder, f) for _n, f in patches])
 
+    def pak_skipped(self, folder: str) -> "list[str]":
+        """.pak-файлы, не вошедшие в очередь (не basis.pak и не patch_*):
+        их никто не распаковывает — показываем отдельной секцией,
+        а не молчим."""
+        if not folder or not os.path.isdir(folder):
+            return []
+        out = []
+        for f in os.listdir(folder):
+            lf = f.lower()
+            if not lf.endswith(".pak"):
+                continue
+            if lf == "basis.pak" or lf.startswith("patch_"):
+                continue
+            out.append(os.path.join(folder, f))
+        out.sort()
+        return out
+
+    def loc_plan(self, folder: str) -> "list[dict]":
+        """Паки локализации: <folder>/localization/<lang>/basis_<lang>.pak
+        (en, de, cn, ...) — так у базы и у каждого DLC (dlc/<name>/
+        localization/<lang>/). Каждый пак — со своим путём:
+        распаковывается в СВОЮ папку <dest>/localization/<lang>/<stem>/
+        (например localization/en/basis_en/ с locale/ внутри), поверх
+        ничего чужого не ложится. Порядок внутри языка: basis_* первым,
+        остальное по имени."""
+        if not folder:
+            return []
+        loc = os.path.join(folder, "localization")
+        if not os.path.isdir(loc):
+            return []
+        out = []
+        try:
+            langs = sorted(os.listdir(loc))
+        except OSError:
+            return []
+        for lang in langs:
+            ldir = os.path.join(loc, lang)
+            if not os.path.isdir(ldir):
+                continue
+            try:
+                files = [f for f in os.listdir(ldir)
+                         if f.lower().endswith(".pak")]
+            except OSError:
+                continue
+
+            def key(f):
+                lf = f.lower()
+                return (0 if lf.startswith("basis") else 1, lf)
+
+            for f in sorted(files, key=key):
+                out.append({"lang": lang, "name": f,
+                            "path": os.path.join(ldir, f),
+                            "stem": os.path.splitext(f)[0]})
+        return out
+
     @staticmethod
     def dlc_dir(root: str, name: str) -> str:
         d = os.path.join(root, "dlc")
@@ -89,8 +150,9 @@ class Archive:
     # -- operations ---------------------------------------------------------------
     @staticmethod
     def loose_copies(folder: str) -> "list[dict]":
-        """Loose game folders beside the .paks (basis, then localization):
-        copied BEFORE any .pak extraction, same order."""
+        """Loose game folder beside the .paks (basis): copied BEFORE
+        any .pak extraction. localization сюда НЕ входит — её паки
+        распаковываются (loc_plan), а не копируются."""
         out = []
         if not folder or not os.path.isdir(folder):
             return out
@@ -102,13 +164,30 @@ class Archive:
 
     def scan(self, root: str):
         """Find every .pak of the game root and order the extraction queue.
-        Plus loose folders (basis/localization) copied before the paks."""
+        Plus loose basis/ copied before the paks, localization .paks
+        (loc_plan) extracted each into its own folder, plus skipped .paks
+        (not basis/patch_*) the queue ignores."""
         if not root or not os.path.isdir(root):
             return {"ok": False, "error": "not a folder"}
 
         def grp(folder):
             return [{"name": os.path.basename(x), "path": x}
                     for x in self.pak_plan(folder)]
+
+        def skp(folder):
+            return [{"name": os.path.basename(x), "path": x}
+                    for x in self.pak_skipped(folder)]
+
+        def loc(folder, *rel):
+            """Паки локализации + их папка назначения (своя на каждый пак:
+            localization/<lang>/<stem>/)."""
+            items = []
+            for e in self.loc_plan(folder):
+                o = os.path.join(*rel, "localization",
+                                 e["lang"], e["stem"]) if rel \
+                    else os.path.join("localization", e["lang"], e["stem"])
+                items.append({**e, "out": o})
+            return items
 
         legion = self.dlc_dir(root, "legion")
         resistance = self.dlc_dir(root, "resistance")
@@ -118,6 +197,14 @@ class Archive:
                 "legion": grp(legion),
                 "resistance": grp(resistance),
                 "evolution": grp(evolution),
+                "loc": {"base": loc(root),
+                        "legion": loc(legion, "dlc", "legion"),
+                        "resistance": loc(resistance, "dlc", "resistance"),
+                        "evolution": loc(evolution, "dlc", "evolution")},
+                "skipped": {"base": skp(root),
+                            "legion": skp(legion),
+                            "resistance": skp(resistance),
+                            "evolution": skp(evolution)},
                 "copy": {"base": self.loose_copies(root),
                          "legion": self.loose_copies(legion),
                          "resistance": self.loose_copies(resistance),
@@ -126,10 +213,11 @@ class Archive:
     def run(self, game_root: str, dest: str, skip=()):
         """Unpack the whole found queue in a background thread.
 
-        Per group: loose basis/ -> localization/ copies first, then .pak
-        extraction on top. skip: full .pak AND loose-folder src paths
-        (case-insensitive) excluded by the GUI - the user clicked
-        their chips off."""
+        Per group: loose basis/ copy first, then localization .paks (each
+        into its OWN folder localization/<lang>/<stem>/), then main .paks
+        extract into ONE folder. skip: full .pak AND loose-folder
+        src paths (case-insensitive) excluded by the GUI - the user
+        clicked their chips off."""
         root = (game_root or "").strip()
         dest = (dest or "").strip()
         if not root or not os.path.isdir(root):
@@ -155,35 +243,50 @@ class Archive:
                     for c in self.loose_copies(src)
                     if os.path.normcase(c["path"]) not in skipped]
 
-        plan = [("base", root, "basis", copies(root), kept(root))]
+        def locjobs(src, *rel):
+            """[(pak_path, outdir)] for the group's localization paks —
+            each into its OWN folder, minus clicked-off chips."""
+            base = os.path.join(dest, *rel) if rel else dest
+            return [(e["path"], os.path.join(base, "localization",
+                                             e["lang"], e["stem"]))
+                    for e in self.loc_plan(src)
+                    if os.path.normcase(e["path"]) not in skipped]
+
+        plan = [("base", root, "basis", copies(root), kept(root),
+                 locjobs(root))]
         legion = self.dlc_dir(root, "legion")
         if legion:
             plan.append(("legion", legion,
                          os.path.join("dlc", "legion", "basis"),
-                         copies(legion, "dlc", "legion"), kept(legion)))
+                         copies(legion, "dlc", "legion"), kept(legion),
+                         locjobs(legion, "dlc", "legion")))
         resistance = self.dlc_dir(root, "resistance")
         if resistance:
             plan.append(("resistance", resistance,
                          os.path.join("dlc", "resistance", "basis"),
                          copies(resistance, "dlc", "resistance"),
-                         kept(resistance)))
+                         kept(resistance),
+                         locjobs(resistance, "dlc", "resistance")))
         evolution = self.dlc_dir(root, "evolution")
         if evolution:
             plan.append(("evolution", evolution,
                          os.path.join("dlc", "evolution", "basis"),
-                         copies(evolution, "dlc", "evolution"), kept(evolution)))
-        if not any(paks for _g, _s, _r, _c, paks in plan) \
-                and not any(cp for _g, _s, _r, cp, _p in plan):
+                         copies(evolution, "dlc", "evolution"), kept(evolution),
+                         locjobs(evolution, "dlc", "evolution")))
+        if not any(paks for _g, _s, _r, _c, paks, _l in plan) \
+                and not any(cp for _g, _s, _r, cp, _p, _l in plan) \
+                and not any(lj for _g, _s, _r, _c, _p, lj in plan):
             return {"ok": False, "error": "no paks"}
         # 7z нужен только под паки: копирование-only прогон идёт без него
         sevenz = ""
-        if any(paks for _g, _s, _r, _c, paks in plan):
+        if any(paks for _g, _s, _r, _c, paks, _l in plan) \
+                or any(lj for _g, _s, _r, _c, _p, lj in plan):
             sevenz = self.find_7z()
             if not sevenz:
                 return {"ok": False, "error": "7z not found"}
         self.job.update({"running": True, "done": False, "lines": [], "error": "",
-                         "total": sum(len(paks) + len(cp)
-                                      for _g, _s, _r, cp, paks in plan),
+                         "total": sum(len(paks) + len(cp) + len(lj)
+                                      for _g, _s, _r, cp, paks, lj in plan),
                          "done_n": 0, "done_files": [], "current": "", "pct": 0,
                          "cancel": False, "proc": None})
         threading.Thread(target=self._worker,
@@ -221,6 +324,38 @@ class Archive:
         except OSError:
             pass
         return total
+
+    @staticmethod
+    def _tree_stat(folder: str) -> tuple:
+        """(число файлов, суммарный размер) — снимок до/после пака:
+        доказывает, что пак реально что-то распаковал."""
+        n = 0
+        total = 0
+        try:
+            for root_d, _dirs, files in os.walk(folder):
+                for fn in files:
+                    try:
+                        total += os.path.getsize(os.path.join(root_d, fn))
+                        n += 1
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+        return (n, total)
+
+    @staticmethod
+    def _fmt_size(n: int) -> str:
+        """байты — в читаемый вид для строки итога пака."""
+        try:
+            f = float(n)
+        except (TypeError, ValueError):
+            return "0 B"
+        for unit in ("B", "KB", "MB", "GB"):
+            if f < 1024 or unit == "GB":
+                return ("%d %s" % (round(f), unit)) if unit == "B" \
+                    else ("%.1f %s" % (f, unit))
+            f /= 1024
+        return "%d B" % n
 
     def _pak_total_size(self, pak: str, sevenz: str) -> int:
         """Sum of the uncompressed file sizes inside the pak (0 if unknown).
@@ -318,6 +453,94 @@ class Archive:
         job["pct"] = 100
         job["done_n"] += 1
         job["current"] = ""
+        # фронт красит чип папки зелёным: ключ — src-путь, как у чипа
+        job["done_files"].append(src)
+        return "ok"
+
+    def _extract_pak(self, pak: str, outdir: str, sevenz: str,
+                       dest: str) -> "str | None":
+        """Extract ONE pak into outdir with per-file progress, the 7z
+        marker check and the file/byte delta log line. Returns "ok" |
+        "cancelled"; a 7z failure sets job["error"] and returns None
+        (the worker must stop the whole run). Shared by the main queue
+        (ONE folder per group) and the localization paks (OWN folder
+        per pak)."""
+        job = self.job
+        if job.get("cancel"):
+            return "cancelled"
+        os.makedirs(outdir, exist_ok=True)
+        job["current"] = os.path.basename(pak)
+        job["pct"] = 0
+        job["lines"].append(
+            ">> " + pak + "  ->  " + os.path.relpath(outdir, dest))
+        # per-pak progress: watcher polls freshly extracted bytes
+        # (on top of the snapshot) against the pak's own
+        # uncompressed size (7z -bsp1 gives no pct through a pipe)
+        pak_total = self._pak_total_size(pak, sevenz)
+        snap_n, snap_b = self._tree_stat(outdir)
+        stop = threading.Event()
+        watcher = threading.Thread(target=self._watch,
+                                   args=(outdir, pak_total, stop, snap_b),
+                                   daemon=True)
+        watcher.start()
+        proc = subprocess.Popen(
+            # -aoa: перезаписывать существующие БЕЗ спроса (патчи
+            # поверх базы/ранних патчей); -y — на прочие запросы
+            [sevenz, "x", "-y", "-aoa", "-bd", "-mmt=on",
+             "-p" + PAK_PASSWORD, "-o" + outdir, pak],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, errors="replace", **_NW)
+        job["proc"] = proc
+        # drain 7z output: read in CHUNKS, not char by char.
+        # Was: -bsp1 (progress spam into the pipe) + `for ch`
+        # loop with `buf += ch` (quadratic concat under GIL).
+        # Python couldn't drain fast enough - the pipe buffer
+        # (64KB) filled and 7z BLOCKED on write, i.e. the app
+        # itself slowed unpacking. -bd instead of -bsp1: progress
+        # goes through the watcher, the pipe stays near-empty.
+        # The last-lines tail is for nonzero-exit diagnosis.
+        tail: "collections.deque[str]" = collections.deque(maxlen=5)
+        tail_buf = ""
+        while True:
+            chunk = proc.stdout.read(65536)
+            if not chunk:
+                break
+            tail_buf += chunk
+            if len(tail_buf) > 65536:
+                tail_buf = tail_buf[-65536:]
+        for part in tail_buf.replace("\r", "\n").split("\n"):
+            part = part.strip()
+            if part:
+                tail.append(part)
+        proc.wait()
+        stop.set()
+        job["pct"] = 100
+        if job.get("cancel"):
+            return "cancelled"
+        if proc.returncode != 0:
+            errtxt = " | ".join(tail)[-300:]
+            job["lines"].append("!! 7z exit %d: %s" % (proc.returncode, errtxt))
+            job["error"] = "7z failed on %s" % os.path.basename(pak)
+            return None
+        job["done_n"] += 1
+        # итог пака в лог: маркер 7z + прирост файлов/байт —
+        # видно, что пак реально распаковался и лёг поверх
+        got_n, got_b = self._tree_stat(outdir)
+        ok_mark = any("Everything is Ok" in t for t in tail)
+        job["lines"].append(
+            "<< %s: %s (+%d файлов, +%s)" % (
+                os.path.basename(pak),
+                "OK" if ok_mark else "exit 0 без маркера",
+                max(0, got_n - snap_n),
+                self._fmt_size(max(0, got_b - snap_b))))
+        if not ok_mark:
+            job["lines"].append(
+                "!! %s: нет строки 'Everything is Ok' — проверь итог вручную"
+                % os.path.basename(pak))
+        # фронт красит чип пака зелёным сразу, не дожидаясь конца;
+        # ключ — ПОЛНЫЙ путь (basename дублируются между группами)
+        job["done_files"].append(pak)
+        job["current"] = ""
         return "ok"
 
     def _worker(self, plan, dest: str, sevenz: str):
@@ -325,12 +548,12 @@ class Archive:
         try:
             os.makedirs(dest, exist_ok=True)
             cancelled = False
-            for _group, _src, out_rel, cpies, paks in plan:
+            for _group, _src, out_rel, cpies, paks, locjobs in plan:
                 if job.get("cancel"):
                     cancelled = True
                     break
-                # сначала loose-папки (basis, затем localization), потом паки
-                # поверх: перевыпущенные файлы из паков побеждают старые
+                # сначала loose-папка basis, потом паки поверх:
+                # перевыпущенные файлы из паков побеждают старые
                 for _name, src, dst_rel in cpies:
                     if job.get("cancel"):
                         cancelled = True
@@ -345,71 +568,31 @@ class Archive:
                         return
                 if cancelled:
                     break
-                # ALL paks of a group extract into ONE folder: the game base
-                # paks go to <dest>\basis\ (basis.pak first, then patches
+                # ALL main paks of a group extract into ONE folder: the game
+                # base paks go to <dest>\basis\ (basis.pak first, then patches
                 # overwrite), each DLC -> <dest>\dlc\<name>\basis\
                 outdir = os.path.join(dest, out_rel)
-                os.makedirs(outdir, exist_ok=True)
-                for pak in paks:
-                    if job.get("cancel"):
+                # паки локализации — ВТОРЫМИ, сразу после loose-копии: каждый
+                # в СВОЮ папку <dest>\localization\<lang>\<stem>\ (DLC — под
+                # своей веткой); путей друг друга не касаются
+                for pak, locdir in locjobs:
+                    st = self._extract_pak(pak, locdir, sevenz, dest)
+                    if st == "cancelled":
                         cancelled = True
                         break
-                    job["current"] = os.path.basename(pak)
-                    job["pct"] = 0
-                    job["lines"].append(
-                        ">> " + pak + "  ->  " + os.path.relpath(outdir, dest))
-                    # per-pak progress: watcher polls freshly extracted bytes
-                    # (on top of the snapshot) against the pak's own
-                    # uncompressed size (7z -bsp1 gives no pct through a pipe)
-                    pak_total = self._pak_total_size(pak, sevenz)
-                    snap = self._dir_size(outdir)
-                    stop = threading.Event()
-                    watcher = threading.Thread(target=self._watch,
-                                               args=(outdir, pak_total, stop, snap),
-                                               daemon=True)
-                    watcher.start()
-                    proc = subprocess.Popen(
-                        [sevenz, "x", "-y", "-bd", "-mmt=on",
-                         "-p" + PAK_PASSWORD, "-o" + outdir, pak],
-                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                        text=True, errors="replace", **_NW)
-                    job["proc"] = proc
-                    # drain 7z output: read in CHUNKS, not char by char.
-                    # Was: -bsp1 (progress spam into the pipe) + `for ch`
-                    # loop with `buf += ch` (quadratic concat under GIL).
-                    # Python couldn't drain fast enough - the pipe buffer
-                    # (64KB) filled and 7z BLOCKED on write, i.e. the app
-                    # itself slowed unpacking. -bd instead of -bsp1: progress
-                    # goes through the watcher, the pipe stays near-empty.
-                    # The last-lines tail is for nonzero-exit diagnosis.
-                    tail: "collections.deque[str]" = collections.deque(maxlen=5)
-                    tail_buf = ""
-                    while True:
-                        chunk = proc.stdout.read(65536)
-                        if not chunk:
-                            break
-                        tail_buf += chunk
-                        if len(tail_buf) > 65536:
-                            tail_buf = tail_buf[-65536:]
-                    for part in tail_buf.replace("\r", "\n").split("\n"):
-                        part = part.strip()
-                        if part:
-                            tail.append(part)
-                    proc.wait()
-                    stop.set()
-                    job["pct"] = 100
-                    if job.get("cancel"):
-                        cancelled = True
-                        break
-                    if proc.returncode != 0:
-                        errtxt = " | ".join(tail)[-300:]
-                        job["lines"].append("!! 7z exit %d: %s" % (proc.returncode, errtxt))
-                        job["error"] = "7z failed on %s" % os.path.basename(pak)
+                    if st is None:
                         return
-                    job["done_n"] += 1
-                    # фронт красит чип пака зелёным сразу, не дожидаясь конца
-                    job["done_files"].append(os.path.basename(pak))
-                    job["current"] = ""
+                if cancelled:
+                    break
+                for pak in paks:
+                    st = self._extract_pak(pak, outdir, sevenz, dest)
+                    if st == "cancelled":
+                        cancelled = True
+                        break
+                    if st is None:
+                        return
+                if cancelled:
+                    break
             if cancelled:
                 job["lines"].append("!! Прервано пользователем")
                 job["error"] = "cancelled"

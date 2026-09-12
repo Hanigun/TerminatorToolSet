@@ -92,7 +92,7 @@ class SavePipeline:
         """Per-request save flag wins, else the global auto_save setting."""
         if "save" in data:
             return bool(data.get("save"))
-        return bool(self._config.get("auto_save", True))
+        return bool(self._config.get("auto_save", False))
 
     def autosaved(self, data: dict, session, summary: str = "") -> bool:
         """Save when autosave is on; True on a successful write.

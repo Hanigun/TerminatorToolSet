@@ -28,7 +28,11 @@ class HistoryLog:
         return {"can_undo": bool(applied), "can_redo": bool(undone)}
 
     # -- cursor ---------------------------------------------------------------
-    def undo_once(self, session, save: bool = True):
+    # Операции журнала никогда не пишут на диск сами: правки живут в памяти
+    # (сессия помечается dirty), запись — только явным «Сохранить» / Ctrl+S.
+    # save=True оставлен для редких внутренних вызовов, которым нужен
+    # именно записанный файл.
+    def undo_once(self, session, save: bool = False):
         """Revert the newest applied change (mark undone + inverse diff).
         Returns (client patch, record) or (None, None)."""
         _entries, applied, _undone = self.state(session.path)
@@ -40,10 +44,13 @@ class HistoryLog:
         self._db.set_undone(target["id"], True)
         if save:
             session.save()
-        self._store.dirty.discard(session.path)
+            self._store.dirty.discard(session.path)
+        else:
+            session.dirty = True
+            self._store.dirty.add(session.path)
         return patch, target
 
-    def redo_once(self, session, save: bool = True):
+    def redo_once(self, session, save: bool = False):
         """Re-apply the oldest undone change (redo walks forward).
         Returns (client patch, record)."""
         _entries, _applied, undone = self.state(session.path)
@@ -55,7 +62,10 @@ class HistoryLog:
         self._db.set_undone(rec["id"], False)
         if save:
             session.save()
-        self._store.dirty.discard(session.path)
+            self._store.dirty.discard(session.path)
+        else:
+            session.dirty = True
+            self._store.dirty.add(session.path)
         return patch, rec
 
     # -- payloads -------------------------------------------------------------

@@ -15,6 +15,7 @@ import webbrowser
 from ctypes import wintypes
 
 from ..application.bootstrap import boot_ping as _boot_ping
+from ..application.boot_stages import SEEN_PCT as _SEEN_PCT
 from ..application.state import add_pending_files
 from ..services.update_service import Updates
 from .filesystem import pick_app_dir as _pick_app_dir
@@ -624,9 +625,14 @@ def _install_drop_child_hook(form):
         _log("drop: child hook: %s" % e)
 
 
-def run_pywebview(config, url, app=None, app_dir=None):
+def run_pywebview(url, app_dir=None, build_heavy=None, stager=None):
     """pywebview-окно (WebView2): как в исходном TerminatorSheet. Отсутствие
-    проблем с производительностью/драгом подтверждено эксплуатацией."""
+    проблем с производительностью/драгом подтверждено эксплуатацией.
+
+    Лаунчер показывается ПЕРВЫМ: splash создаётся сразу после .NET-пробы,
+    а тяжёлый билд (Config/Database/services, hot-swap WSGI) крутит
+    build_heavy() в потоке launcher уже при видимом баре. stager(pct, key) —
+    пинги стадий из application.boot_stages."""
     from config import WINDOW_SIZES
     try:
         import webview
@@ -636,6 +642,11 @@ def run_pywebview(config, url, app=None, app_dir=None):
         webbrowser.open(url)
         keep_alive()
         return
+
+    def _noop_stage(_pct, _key):
+        return None
+
+    _stage = stager if callable(stager) else _noop_stage
 
     # -- постоянный профиль WebView2 ------------------------------------------
     # private_mode=True (по умолчанию) создаёт temp-каталог на каждый запуск и
@@ -655,8 +666,10 @@ def run_pywebview(config, url, app=None, app_dir=None):
     # -- вотчдог «серого старта» ----------------------------------------------
     # WebView2 иногда отдаёт страницу, но НЕ исполняет JS: main_ready не
     # приходит, окно остаётся скрытым ("запускается через раз"). Следим со
-    # стороны сервера: фронт в init() первым делом шлёт POST /api/boot_progress
-    # с pct=25. Не пришёл - проверяем жив ли фронт (window.__tshBooted) и перезагружаем.
+    # стороны сервера: фронт в загрузчике скриптов шлёт POST /api/boot_progress
+    # (62..74), init() продолжает 78+. Порог seen — SEEN_PCT из boot_stages.
+    # Перезагрузка — только при ЗАСТРЯВШЕМ баре (процент не растёт 3 проверки
+    # подряд ≈12с): медленный, но живой старт больше не пинается.
     boot = {"seen": False}
 
     def _boot_request_hook():
@@ -671,27 +684,65 @@ def run_pywebview(config, url, app=None, app_dir=None):
                     pct = int((_req.get_json(silent=True) or {}).get("pct") or 0)
                 except (TypeError, ValueError):
                     pct = 0
-                if pct >= 25:
+                if pct >= _SEEN_PCT:
                     boot["seen"] = True
         except Exception:  # noqa: BLE001
             pass
 
-    if app is not None:
-        app.before_request(_boot_request_hook)
+    # приложение (и хук) появляются после тяжёлого билда: коробка, которую
+    # наполняет _launch_main; вотчдог читает её же прогресс
+    built_box = {}
+
+    def _boot_dead(text):
+        """Текст ошибки в лаунчер поверх любого процента: приложение может
+        быть уже построено, а может и нет. Пишем в dict напрямую —
+        монотонный _boot_ping подпись при ушедшем дальше баре не обновит."""
+        try:
+            app_now = built_box.get("app")
+            if app_now is not None:
+                try:
+                    app_now.boot_progress["label"] = text
+                    return
+                except Exception:  # noqa: BLE001
+                    pass
+                _boot_ping(app_now, 54, text)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _boot_pct():
+        try:
+            app_now = built_box.get("app")
+            if app_now is None:
+                return -1
+            return int((getattr(app_now, "boot_progress", None) or {})
+                       .get("pct") or 0)
+        except Exception:  # noqa: BLE001
+            return -1
 
     def _boot_watchdog():
         import time as _t
         fails = 0  # подряд evaluate failed = контроллер мёртв, reload не лечит
-        for attempt in range(6):
+        last_pct = -2  # последний виденный процент (stall-детектор)
+        stuck = 0  # сколько проверок подряд бар стоит
+        # 10 попыток ≈ 40с: тяжёлый билд теперь идёт при видимом лаунчере,
+        # окно появляется позже — медленный холодный старт не должен
+        # упираться в self-restart
+        for attempt in range(10):
             _t.sleep(4)
             if boot["seen"]:
                 if not boot.get("logged"):
                     boot["logged"] = True
                     _log("boot watchdog: booted (config seen)")
                 return
+            pct = _boot_pct()
+            if pct == last_pct and pct >= 0:
+                stuck += 1
+            else:
+                stuck = 0
+                last_pct = pct
             win = api._main
             if win is None:
-                continue   # главное окно ещё не создано (проверка обновлений)
+                continue   # главное окно ещё не создано (тяжёлый билд идёт)
             try:
                 alive = win.evaluate_js("!!window.__tshBooted")
                 fails = 0
@@ -707,6 +758,11 @@ def run_pywebview(config, url, app=None, app_dir=None):
             if alive:
                 _log("boot watchdog: page alive w/o config request; skip reload")
                 return
+            if stuck < 2 and pct >= 0:
+                # бар движется (скрипты грузятся, проект открывается) —
+                # медленный старт, не трогаем
+                _log("boot watchdog: slow boot at %d%%, waiting" % pct)
+                continue
             _log("boot watchdog: no config request, reload (try %d)" % (attempt + 1))
             try:
                 # load_url на мёртвом контроллере висит ~20с: в фоне + join
@@ -759,13 +815,12 @@ def run_pywebview(config, url, app=None, app_dir=None):
                     _sp.Popen(cmd, env=env, close_fds=True)
                 except Exception as e:  # noqa: BLE001
                     _log("boot watchdog: self-restart failed: %s" % e)
-                    _boot_ping(app, 18,
-                               "Окно не запустилось — закройте и запустите снова")
+                    _boot_dead("Окно не запустилось — закройте и запустите снова")
                     return
                 os._exit(0)
                 return
             _log("boot watchdog: window did not start, close and restart the app")
-            _boot_ping(app, 18, "Окно не запустилось — закройте и запустите снова")
+            _boot_dead("Окно не запустилось — закройте и запустите снова")
 
     class Api:
         # ВАЖНО: ссылки на окна хранятся ТОЛЬКО в атрибутах с подчёркиванием.
@@ -778,6 +833,7 @@ def run_pywebview(config, url, app=None, app_dir=None):
         _splash = None    # окно-лаунчер
         _ready = False    # main_ready пришёл раньше, чем создано главное окно
         _drop_filter = None  # маркер установки нативного дропа (хуки в _DROP_HOOKS)
+        _config = None    # Config появляется после тяжёлого билда (см. _launch_main)
 
         def _win(self):
             if self._main is not None:
@@ -799,7 +855,17 @@ def run_pywebview(config, url, app=None, app_dir=None):
             return True
 
         def _show_main(self):
-            _boot_ping(app, 100)
+            try:
+                from ..application.boot_stages import boot_label as _bl
+                _lang = "ru"
+                try:
+                    if self._config is not None:
+                        _lang = self._config.get("language", "ru") or "ru"
+                except Exception:  # noqa: BLE001
+                    pass
+                _boot_ping(built_box.get("app"), 100, _bl(_lang, "boot_done"))
+            except Exception:  # noqa: BLE001
+                pass
             try:
                 if self._main is not None:
                     self._main.show()
@@ -1030,8 +1096,19 @@ def run_pywebview(config, url, app=None, app_dir=None):
                 self._tray_dispose()
             except Exception:  # noqa: BLE001
                 pass
-            # своих webview-призраков — насильно: иначе переживают выход,
-            # держат профиль занятым и мешают следующему запуску/обновлению.
+            # СНАЧАЛА штатное destroy: Chromium сам снимает свои классы
+            # (Chrome_WidgetWin_0). Раньше били webview-процессы ДО destroy —
+            # мёртвый Chromium уже не мог UnregisterClass и в консоль сыпалось
+            # «Failed to unregister class Chrome_WidgetWin_0. Error = 1411».
+            try:
+                win = self._win()
+                if win is not None:
+                    win.destroy()
+            except Exception as e:  # noqa: BLE001
+                pass
+            # и только ПОТОМ добивка leftovers: своих webview-призраков —
+            # насильно, иначе переживают выход, держат профиль занятым и
+            # мешают следующему запуску/обновлению.
             # Детей бьём по pid, сирот прошлой жизни — по storage-пути
             try:
                 _kill_kids(log=_log)
@@ -1043,12 +1120,6 @@ def run_pywebview(config, url, app=None, app_dir=None):
                     "TerminatorToolSet", "WebView2")
                 _kill_stale_webview(_storage)
             except Exception:  # noqa: BLE001
-                pass
-            try:
-                win = self._win()
-                if win is not None:
-                    win.destroy()
-            except Exception as e:  # noqa: BLE001
                 pass
             # safety net in case the webview loop does not exit on its own
             threading.Timer(2.0, lambda: os._exit(0)).start()
@@ -1108,7 +1179,8 @@ def run_pywebview(config, url, app=None, app_dir=None):
                     mi_browser = ToolStripMenuItem("Открывать в браузере")
                     try:
                         mi_browser.CheckOnClick = True
-                        mi_browser.Checked = bool(config.get("open_in_browser"))
+                        cfg = self._config
+                        mi_browser.Checked = bool(cfg.get("open_in_browser")) if cfg is not None else False
                     except Exception:  # noqa: BLE001
                         pass
                     mi_browser.add_CheckedChanged(
@@ -1209,7 +1281,9 @@ def run_pywebview(config, url, app=None, app_dir=None):
 
         def _on_tray_browser_toggle(self, sender, event):
             try:
-                config.set("open_in_browser", bool(sender.Checked))
+                if self._config is None:
+                    return
+                self._config.set("open_in_browser", bool(sender.Checked))
                 _log("tray: open_in_browser=%s" % sender.Checked)
             except Exception as e:  # noqa: BLE001
                 _log("tray: browser toggle failed: %s" % e)
@@ -1252,7 +1326,11 @@ def run_pywebview(config, url, app=None, app_dir=None):
             except Exception as e:  # noqa: BLE001
                 pass
             # постоянная иконка не нужна, если пользователь не включил её в настройках
-            if not config.get("tray_enabled"):
+            try:
+                tray_on = bool(self._config.get("tray_enabled")) if self._config is not None else False
+            except Exception:  # noqa: BLE001
+                tray_on = False
+            if not tray_on:
                 self._tray_dispose()
             return True
 
@@ -1297,14 +1375,11 @@ def run_pywebview(config, url, app=None, app_dir=None):
             _log("browser open failed: %s" % e)
         keep_alive()
 
-    win_w, win_h = _clamp_to_workarea(
-        *WINDOW_SIZES.get(config.get("window_size", "normal"), (1280, 800)))
-    _log("mode=pywebview window=%s size=%sx%s" % (url, win_w, win_h))
-
     # пробный подъём .NET-моста ДО создания окон: если встроенного Framework
     # нет (выключен в компонентах / выпотрошенная сборка) или ToolSetLibs
     # бит — уходим в браузер сразу, с пометкой ветки в boot.log, а не падаем
     # в webview.start() необработанным исключением
+    _stage(22, "boot_gui")
     try:
         import clr  # noqa: E402
         clr.AddReference("System.Windows.Forms")
@@ -1313,8 +1388,10 @@ def run_pywebview(config, url, app=None, app_dir=None):
                           % (os.environ.get("PYTHONNET_RUNTIME", "?"), e))
         return
 
-    # -- лаунчер: маленькое окно с логотипом и прогрессом проверки обновлений.
-    # Живёт до сигнала main_ready от фронтенда (интерфейс + дерево загружены).
+    # -- лаунчер: маленькое окно с логотипом и прогрессом запуска.
+    # Показывается ДО тяжёлого билда: «Генерация конфигов» и «Создание базы
+    # данных» первого старта идут уже при видимом баре. Живёт до сигнала
+    # main_ready от фронтенда (интерфейс + дерево загружены).
     # background_color = цвет темы: без него форма вспыхивает белым до отрисовки
     # страницы; x/y — явное центрирование (CenterScreen pywebview сломан).
     splash_x, splash_y = _center_xy(420, 280) or (None, None)
@@ -1336,15 +1413,40 @@ def run_pywebview(config, url, app=None, app_dir=None):
         # бэкенд может грузиться уже здесь (зависит от версии pywebview)
         _browser_fallback("splash window: %s" % e)
         return
+    _stage(26, "boot_splash")
 
     def _launch_main():
+        # тяжёлый билд при видимом лаунчере: конфиги/БД/сервисы/swap
+        # (стадии 30..46 внутри build_heavy)
+        try:
+            built = build_heavy() if callable(build_heavy) else {}
+        except Exception as e:  # noqa: BLE001
+            _log("heavy build crashed: %s" % e)
+            built = {"error": str(e)}
+        if not built or built.get("error") or built.get("app") is None:
+            _log("heavy build failed: %s" % (built.get("error") if built else "?"))
+            _boot_dead("Ошибка запуска: %s"
+                       % ((built.get("error") if built else "?") or "?"))
+            return
+        config = built["config"]
+        app = built["app"]
+        api._config = config
+        built_box.update(built)
+        try:
+            app.before_request(_boot_request_hook)
+        except Exception:  # noqa: BLE001
+            pass
+        win_w, win_h = _clamp_to_workarea(
+            *WINDOW_SIZES.get(config.get("window_size", "normal"), (1280, 800)))
+        _log("mode=pywebview window=%s size=%sx%s" % (url, win_w, win_h))
         # проверка обновлений в лаунчере (быстрый опрос воркера; найденный
-        # релиз докачивается фоном, установка — следующим перезапуском)
+        # релиз докачивается фоном, установка — следующим перезапуском).
+        # Сеть — отдельным этапом: бар честно показывает ожидание.
+        _stage(50, "boot_updates")
         try:
             _check_updates(config, app, app_dir)
         except Exception as e:  # noqa: BLE001
             _log("update check error: %s" % e)
-        _boot_ping(app, 12)
         try:
             main_x, main_y = _center_xy(win_w, win_h) or (None, None)
             api._main = webview.create_window(
@@ -1368,61 +1470,69 @@ def run_pywebview(config, url, app=None, app_dir=None):
         except Exception as e:  # noqa: BLE001
             _log("main window error: %s" % e)
             raise
-        _boot_ping(app, 18)
-        # нативный DnD в окно (точные пути дропа в mailbox): форма
-        # появляется на GUI-потоке асинхронно — ждём её недолго, ставим
-        # строго в GUI-потоке (_form_invoke); ссылки на хуки живут в
-        # модуле _DROP_HOOKS, иначе GC убьёт колбэки. Поздние дочерние
-        # HWND WebView2 довстановливаются фоновым _drop_rehook.
-        _drop_form = None
-        for _ in range(24):
-            try:
-                _w, _f = api._form()
-            except Exception:  # noqa: BLE001
-                _w, _f = None, None
-            if _f is not None:
-                _drop_form = _f
-                break
-            time.sleep(0.25)
-        if _drop_form is not None:
-            _drop_box: "list" = []
+        _stage(54, "boot_window")
 
-            def _drop_job(f):
-                _drop_box.append(_install_drop_filter(f))
-                return True
-
-            api._form_invoke(_drop_job)
-            api._drop_filter = _drop_box[0] if _drop_box else None
-            # дочерние HWND WebView2 появляются/пересоздаются поздно, а свой
-            # OLE-приёмник Chromium регистрирует после старта рендера —
-            # поэтому сторож периодически повторяет revoke-проход (дешёво:
-            # несколько RevokeDragDrop) и переподтверждает приёмник формы.
-            # _hook_one пропускает уже подменённые wndproc, дубли безопасны.
-            def _drop_rehook(delays=(6.0, 20.0, 45.0, 90.0, 180.0, 300.0,
-                                     600.0)):
-                try:
-                    for d in delays:
-                        time.sleep(d)
-                        try:
-                            api._form_invoke(
-                                lambda f: _install_drop_child_hook(f))
-                        except Exception as e:  # noqa: BLE001
-                            _log("drop: rehook: %s" % e)
-                except Exception:  # noqa: BLE001
-                    pass
-
-            threading.Thread(target=_drop_rehook, daemon=True).start()
-        else:
-            _log("drop: no form, native drop disabled")
-        # «Полный экран» из настроек: ручной разворот на WorkingArea
-        # (панель задач остаётся видимой). Форма появляется на GUI-потоке
-        # асинхронно - ждём её недолго (до ~6с), иначе разворот молча
-        # пропускается.
-        if config.get("fullscreen", False):
+        def _post_window():
+            """DnD-хуки + разворот — в своём потоке: ожидание формы на
+            GUI-потоке (до ~6с) больше не держит launcher и вотчдог."""
+            # нативный DnD в окно (точные пути дропа в mailbox): форма
+            # появляется на GUI-потоке асинхронно — ждём её недолго, ставим
+            # строго в GUI-потоке (_form_invoke); ссылки на хуки живут в
+            # модуле _DROP_HOOKS, иначе GC убьёт колбэки. Поздние дочерние
+            # HWND WebView2 довстановливаются фоновым _drop_rehook.
+            _drop_form = None
             for _ in range(24):
-                if api._apply_maximize():
+                try:
+                    _w, _f = api._form()
+                except Exception:  # noqa: BLE001
+                    _w, _f = None, None
+                if _f is not None:
+                    _drop_form = _f
                     break
                 time.sleep(0.25)
+            if _drop_form is not None:
+                _drop_box: "list" = []
+
+                def _drop_job(f):
+                    _drop_box.append(_install_drop_filter(f))
+                    return True
+
+                api._form_invoke(_drop_job)
+                api._drop_filter = _drop_box[0] if _drop_box else None
+                # дочерние HWND WebView2 появляются/пересоздаются поздно, а свой
+                # OLE-приёмник Chromium регистрирует после старта рендера —
+                # поэтому сторож периодически повторяет revoke-проход (дешёво:
+                # несколько RevokeDragDrop) и переподтверждает приёмник формы.
+                # _hook_one пропускает уже подменённые wndproc, дубли безопасны.
+                def _drop_rehook(delays=(6.0, 20.0, 45.0, 90.0, 180.0, 300.0,
+                                         600.0)):
+                    try:
+                        for d in delays:
+                            time.sleep(d)
+                            try:
+                                api._form_invoke(
+                                    lambda f: _install_drop_child_hook(f))
+                            except Exception as e:  # noqa: BLE001
+                                _log("drop: rehook: %s" % e)
+                    except Exception:  # noqa: BLE001
+                        pass
+
+                threading.Thread(target=_drop_rehook, daemon=True).start()
+            else:
+                _log("drop: no form, native drop disabled")
+            # «Полный экран» из настроек: ручной разворот на WorkingArea
+            # (панель задач остаётся видимой). Форма появляется на GUI-потоке
+            # асинхронно - ждём её недолго (до ~6с), иначе разворот молча
+            # пропускается.
+            if config.get("fullscreen", False):
+                for _ in range(24):
+                    if api._apply_maximize():
+                        break
+                    time.sleep(0.25)
+            _stage(58, "boot_hooks")
+
+        threading.Thread(target=_post_window, daemon=True,
+                         name="post-window").start()
         # main_ready мог прийти, пока окно создавалось (спрятанное окно всё
         # равно грузит страницу) - тогда показать немедленно
         if api._ready:
@@ -1463,8 +1573,8 @@ def _check_updates(config, app=None, app_dir=None):
     throttle inside. Runs ONLY when auto_update is on (default off) — else
     updates are manual from the settings tab. A newer release downloads in
     the background; the frontend auto-installs it on stage (same restart
-    path as a manual download). Returns the check dict or None."""
-    _boot_ping(app, 10)
+    path as a manual download). Returns the check dict or None.
+    Стадия boot_updates (50) пинается вызывающим кодом."""
     try:
         if not config.get("auto_update"):
             return None
@@ -1478,9 +1588,7 @@ def _check_updates(config, app=None, app_dir=None):
         res = svc.check()
     except Exception as e:  # noqa: BLE001
         _log("update check error: %s" % e)
-        _boot_ping(app, 12)
         return None
-    _boot_ping(app, 12)
     if not res.get("ok"):
         _log("updates: check failed (%s)" % res.get("error"))
         return res

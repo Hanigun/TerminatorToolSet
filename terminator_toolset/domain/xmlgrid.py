@@ -90,17 +90,29 @@ class Session:
             return {"ok": False, "error": "row out of range"}
         r = ws.rows[row_idx]
         old = r.cell_value(col_idx)   # 0-based LOGICAL column
-        old_t = ws.cell_type(r.cell(col_idx))
+        cobj = r.cell(col_idx)
+        has_data = cobj is not None and cobj.has_data
+        old_t = ws.cell_type(cobj)
         # writing the same value (and type) is NOT an edit: no dirty flag,
         # no history record, no autosave
         if old == value and (old_t or None) == (type_token or None):
             return {"ok": True, "changed": False, "old": old, "payload": None}
+        if not has_data and value == "" and type_token is None:
+            # пустая absent-ячейка уже пуста: создавать <Data> ради пустой
+            # строки нельзя (меняло бы структуру без смысла)
+            return {"ok": True, "changed": False, "old": old, "payload": None}
+        pre_cell = self.doc.cell_raw(self.sheet_index, row_idx, col_idx)
         self.doc.set_cell_value(self.sheet_index, row_idx, col_idx,
                                 value, type_token)
+        post_cell = self.doc.cell_raw(self.sheet_index, row_idx, col_idx)
+        if pre_cell == post_cell:
+            # байты не изменились (spine no-op guard): не dirty, не журнал
+            return {"ok": True, "changed": False, "old": old, "payload": None}
         self.dirty = True
         return {"ok": True, "old": old,
                 "payload": {"r": row_idx, "c": col_idx, "o": old, "ot": old_t,
-                            "n": value, "nt": type_token or old_t}}
+                            "n": value, "nt": type_token or old_t,
+                            "pre": pre_cell, "post": post_cell}}
 
     def add_row(self, values: Optional[list] = None) -> dict:
         idx = len(self.worksheet.rows)
@@ -143,13 +155,74 @@ class Session:
         for i, r in enumerate(ws.rows):
             c = r.cell_by_logical(col1)
             if c is not None:
-                cells[i] = [c.value, ws.cell_type(c), c.elem.get(_SS + "StyleID")]
+                # [значение, тип, стиль, явный ss:Index]: нужно для
+                # побайтового отката (undo восстанавливает ячейку как была).
+                # Тип — как в row_payload (None, если <Data> нет), а не
+                # нормализованный cell_type: иначе пустой <Cell/> при
+                # откате превращался бы в <Data ss:Type="String">
+                _d = c._data()
+                _t = _d.get(_SS + "Type") if _d is not None else None
+                cells[i] = [c.value, _t, c.elem.get(_SS + "StyleID"),
+                            c.elem.get(_SS + "Index")]
         payload = {"c": col_idx, "name": name, "cells": cells}
         self.doc.delete_column(self.sheet_index, col_idx)
         self.dirty = True
         return {"ok": True, "payload": payload}
 
     # -- history engine -------------------------------------------------------
+    @staticmethod
+    def _apply_cell_image(doc, si: int, item: dict, forward: bool):
+        """Инверсия одной ячейки (edit): новые журналы несут pre/post —
+        сырые байты <Cell> (побайтовый откат: создание убирается, форма
+        <Cell/> и комментарии сохраняются); старые — перезапись значения."""
+        r, c = int(item["r"]), int(item["c"])
+        if "pre" in item or "post" in item:
+            raw = item.get("post") if forward else item.get("pre")
+            if raw is None:
+                doc.remove_cell(si, r, c)
+                return {"kind": "cell", "row": r, "col": c, "value": ""}
+            doc.swap_cell(si, r, c, raw)
+            v = str(item.get("n") if forward else item.get("o"))
+            return {"kind": "cell", "row": r, "col": c, "value": v}
+        v = str(item["n"] if forward else item["o"])
+        t = (item.get("nt") if forward else item.get("ot")) or None
+        doc.set_cell_value(si, r, c, v, t)
+        return {"kind": "cell", "row": r, "col": c, "value": v}
+
+    @staticmethod
+    def _apply_row_image(doc, si: int, item: dict, forward: bool):
+        """Инверсия одной строки (row_set): existed — пересборка строки,
+        новая строка — удаление при откате / вставка при повторе."""
+        r = int(item["r"])
+        existed = bool(item.get("existed"))
+        cells = [tuple(x) for x in
+                 (item.get("cells_n") if forward else item.get("cells_o")) or []]
+        ri = item.get("ri_n") if forward else item.get("ri_o")
+        if existed:
+            doc.delete_row(si, r)
+        elif not forward:
+            doc.delete_row(si, r)
+            return {"kind": "del_row", "row": r}
+        doc.insert_row_at(si, r, cells, ri)
+        return {"kind": "ins_row", "row": r}
+
+    @staticmethod
+    def _apply_col_image(doc, si: int, item: dict, forward: bool):
+        """Инверсия одной колонки (col_set): существовавшая — пересборка,
+        новая — удаление при откате / вставка при повторе."""
+        c = int(item["c"])
+        existed = bool(item.get("existed"))
+        name = item.get("name_n", "") if forward else item.get("name_o", "")
+        cells = {int(k): tuple(v) for k, v in
+                 ((item.get("cells_n") if forward else item.get("cells_o")) or {}).items()}
+        if existed:
+            doc.delete_column(si, c)
+        elif not forward:
+            doc.delete_column(si, c)
+            return {"kind": "del_col", "col": c}
+        doc.insert_column_at(si, c, name, cells)
+        return {"kind": "ins_col", "col": c}
+
     def apply_history_op(self, action: str, payload: dict, forward: bool) -> dict:
         """Apply one recorded change in the given direction.
 
@@ -159,11 +232,7 @@ class Session:
         si = self.sheet_index
         try:
             if action == "edit":
-                r, c = int(p["r"]), int(p["c"])
-                v = str(p["n"] if forward else p["o"])
-                t = (p.get("nt") if forward else p.get("ot")) or None
-                self.doc.set_cell_value(si, r, c, v, t)
-                return {"kind": "cell", "row": r, "col": c, "value": v}
+                return self._apply_cell_image(self.doc, si, p, forward)
 
             if action == "edit_cells":
                 # пачка ячеек одной записью (карта Uprising): откат/повтор
@@ -174,10 +243,7 @@ class Session:
                         r, c = int(ce["r"]), int(ce["c"])
                     except (TypeError, ValueError, KeyError):
                         continue
-                    v = str(ce["n"] if forward else ce["o"])
-                    t = (ce.get("nt") if forward else ce.get("ot")) or None
-                    self.doc.set_cell_value(si, r, c, v, t)
-                    out.append({"row": r, "col": c, "value": v})
+                    out.append(self._apply_cell_image(self.doc, si, ce, forward))
                 return {"kind": "cells", "cells": out}
 
             if action in ("add_row", "del_row"):
@@ -203,31 +269,38 @@ class Session:
                 return {"kind": "del_col", "col": c}
 
             if action == "row_set":
-                r = int(p["r"])
-                existed = bool(p.get("existed"))
-                cells = [tuple(x) for x in (p.get("cells_n") if forward else p.get("cells_o")) or []]
-                ri = p.get("ri_n") if forward else p.get("ri_o")
-                if existed:
-                    self.doc.delete_row(si, r)
-                elif not forward:
-                    self.doc.delete_row(si, r)
-                    return {"kind": "del_row", "row": r}
-                self.doc.insert_row_at(si, r, cells, ri)
-                return {"kind": "ins_row", "row": r}
+                return self._apply_row_image(self.doc, si, p, forward)
 
             if action == "col_set":
-                c = int(p["c"])
-                existed = bool(p.get("existed"))
-                name = p.get("name_n", "") if forward else p.get("name_o", "")
-                cells = {int(k): tuple(v) for k, v in
-                         ((p.get("cells_n") if forward else p.get("cells_o")) or {}).items()}
-                if existed:
-                    self.doc.delete_column(si, c)
-                elif not forward:
-                    self.doc.delete_column(si, c)
-                    return {"kind": "del_col", "col": c}
-                self.doc.insert_column_at(si, c, name, cells)
-                return {"kind": "ins_col", "col": c}
+                return self._apply_col_image(self.doc, si, p, forward)
+
+            if action == "merge_rows":
+                # пакетное слияние (кнопка «Слить всё»): одна запись журнала
+                # на всё слияние — один клик undo откатывает его целиком.
+                # Откат и повтор идут одним текстовым проходом (unmerge_rows
+                # / merge_rows — один refresh): поштучные delete+insert на
+                # сотне строк висли на минуты и раздували текст.
+                rows = list(p.get("rows") or [])
+                cols = list(p.get("cols") or [])
+                if forward:
+                    for cp in cols:
+                        self._apply_col_image(self.doc, si, cp, True)
+                    updates = [(int(it["r"]),
+                                [tuple(x) for x in (it.get("cells_n") or [])],
+                                it.get("ri_n")) for it in rows
+                               if it.get("existed")]
+                    appends = [([tuple(x) for x in (it.get("cells_n") or [])],
+                                it.get("ri_n")) for it in
+                               sorted(rows, key=lambda it: int(it["r"]))
+                               if not it.get("existed")]
+                    if updates or appends:
+                        self.doc.merge_rows(si, updates, appends)
+                else:
+                    if rows:
+                        self.doc.unmerge_rows(si, rows)
+                    for cp in reversed(cols):
+                        self._apply_col_image(self.doc, si, cp, False)
+                return {"kind": "merge", "rows": len(rows), "cols": len(cols)}
         except (KeyError, ValueError, TypeError) as e:
             raise SpreadsheetError("bad history payload: %s" % e)
         raise SpreadsheetError("unknown history action %r" % action)

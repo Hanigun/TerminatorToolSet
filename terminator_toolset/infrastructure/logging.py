@@ -1,6 +1,7 @@
-"""Logging setup: rotating app/errors logs + append-only boot log."""
+"""Logging setup: one fresh log per launch, human-readable, no rotation chain."""
 from __future__ import annotations
 
+import glob
 import logging
 import os
 import sys
@@ -8,12 +9,28 @@ import threading
 import time
 
 
+# криптичные имена логгеров -> понятные (видно в каждой строке лога)
+_LOGGER_NAMES = {
+    "werkzeug": "server",
+}
+
+_BOOT_FRESH = False  # первый boot_log процесса затирает файл прошлого запуска
+
+
+def _readable_name(record: logging.LogRecord) -> bool:
+    try:
+        record.name = _LOGGER_NAMES.get(record.name, record.name)
+    except Exception:  # noqa: BLE001
+        pass
+    return True
+
+
 # -- root logging --------------------------------------------------------------
 def setup_logging(base_dir: str):
-    """Rotating logs without duplicates, one file per severity:
-    Logs/app.log = INFO+ events; Logs/errors.log = WARNING+ only."""
+    """Один запуск — один лог: app.log (INFO+) и errors.log (WARNING+)
+    пересоздаются на старте, цепочка ротации app.log.1/.2/.3 больше не
+    собирается (хвосты от старых версий удаляем здесь же)."""
     try:
-        import logging.handlers
         logdir = os.path.join(base_dir, "Logs")
         os.makedirs(logdir, exist_ok=True)
         # legacy logs/ -> Logs/ migration
@@ -25,32 +42,50 @@ def setup_logging(base_dir: str):
                     os.replace(_oldp, _newp)
             except Exception:  # noqa: BLE001
                 pass
-        fh = logging.handlers.RotatingFileHandler(
-            os.path.join(logdir, "app.log"),
-            maxBytes=1_000_000, backupCount=3, encoding="utf-8")
-        fh.setFormatter(logging.Formatter(
-            "%(asctime)s %(levelname)s %(name)s: %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S"))
+        # хвосты ротации прошлых версий: один запуск — один лог, их не храним
+        for _tail in glob.glob(os.path.join(logdir, "app.log.*")) + \
+                glob.glob(os.path.join(logdir, "errors.log.*")):
+            try:
+                os.remove(_tail)
+            except Exception:  # noqa: BLE001
+                pass
+        fmt = logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S")
+        # свежие файлы на каждый запуск (mode="w"), без ротации
+        fh = logging.FileHandler(
+            os.path.join(logdir, "app.log"), mode="w", encoding="utf-8")
+        fh.setFormatter(fmt)
         fh.addFilter(lambda r: not str(getattr(r, "name", "")).startswith(
             ("terminatorsheet.boot", "terminatorsheet.crash")))
-        eh = logging.handlers.RotatingFileHandler(
-            os.path.join(logdir, "errors.log"),
-            maxBytes=1_000_000, backupCount=3, encoding="utf-8")
-        eh.setFormatter(logging.Formatter(
-            "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S"))
+        fh.addFilter(_readable_name)
+        eh = logging.FileHandler(
+            os.path.join(logdir, "errors.log"), mode="w", encoding="utf-8")
+        eh.setFormatter(fmt)
         eh.setLevel(logging.WARNING)
+        eh.addFilter(_readable_name)
         root = logging.getLogger()
         # drop stale handlers on re-start in one process (tests)
         for h in list(root.handlers):
             try:
-                if isinstance(h, logging.handlers.RotatingFileHandler):
+                if isinstance(h, logging.FileHandler) and getattr(
+                        h, "baseFilename", "") in (
+                        os.path.join(logdir, "app.log"),
+                        os.path.join(logdir, "errors.log")):
                     root.removeHandler(h)
             except Exception:  # noqa: BLE001
                 pass
         root.setLevel(logging.INFO)
         root.addHandler(fh)
         root.addHandler(eh)
+        # серверный access-лог (127.0.0.1 - - "GET /static/..." 200) — только
+        # проблемы: сотни строк про каждый чих статики читать невозможно,
+        # медленные/упавшие запросы и так пишет _log_requests в app.py
+        # понятной строкой "http GET /path -> 404 (0.00s)"
+        try:
+            logging.getLogger("werkzeug").setLevel(logging.WARNING)
+        except Exception:  # noqa: BLE001
+            pass
         # uncaught exceptions -> errors.log only
         def _excepthook(etype, value, tb):
             try:
@@ -76,7 +111,9 @@ def _boot_dir() -> str:
 
 
 def boot_log(msg: str):
-    """Startup events -> Logs/boot.log, human-readable, no duplicates."""
+    """Startup events -> Logs/boot.log, human-readable. Файл свежий на
+    каждый запуск: первый вызов процесса затирает лог прошлого."""
+    global _BOOT_FRESH
     try:
         logdir = _boot_dir()
         os.makedirs(logdir, exist_ok=True)
@@ -92,7 +129,12 @@ def boot_log(msg: str):
                     os.remove(_old)
         except Exception:  # noqa: BLE001
             pass
-        with open(os.path.join(logdir, "boot.log"), "a", encoding="utf-8") as fh:
+        mode = "a"
+        if not _BOOT_FRESH:
+            _BOOT_FRESH = True
+            mode = "w"
+        with open(os.path.join(logdir, "boot.log"), mode,
+                  encoding="utf-8") as fh:
             fh.write("%s %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), msg))
     except Exception:  # noqa: BLE001
         pass

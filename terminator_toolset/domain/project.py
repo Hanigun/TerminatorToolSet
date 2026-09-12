@@ -9,6 +9,7 @@ later, but the defaults live here and cover the stock files).
 """
 from __future__ import annotations
 
+import glob
 import os
 import time
 from typing import Optional
@@ -166,29 +167,27 @@ class Project:
         """{sysname: display_name} from localization/<lang>/.../locale/*.xml.
 
         Locale files map sysname (col 1) -> content (col 2); the first
-        non-empty content wins. Cached per (root, lang)."""
+        non-empty content wins. Cached per (root, lang).
+
+        Папки языков на диске — ru/en/de/cn: код интерфейса zh ищет
+        и в zh, и в cn (у игры китайской папки zh нет, только cn)."""
         if self._names is not None and self._names_lang == lang:
             return self._names
+        langs = {lang}
+        if lang == "zh":
+            langs.add("cn")
         names: dict[str, str] = {}
         if self.root and os.path.isdir(self.root):
-            root_norm = os.path.normpath(self.root).lower() + os.sep
-            for dirpath, dirnames, filenames in os.walk(self.root):
-                dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
-                dnorm = os.path.normpath(dirpath).lower()
-                if os.path.basename(dnorm) != "locale":
-                    continue
-                # must live under localization/<lang>/
-                parts = dnorm[len(root_norm):].split(os.sep) if dnorm.startswith(root_norm) else []
-                if "localization" not in parts:
-                    continue
-                if lang not in parts:
-                    continue
-                for fn in filenames:
-                    if not fn.endswith(".xml"):
-                        continue
+            # Быстрый путь: locale лежат строго в
+            # [dlc/*/]localization/<lang>/*/locale/*.xml — идём прямо туда
+            # glob-ом вместо полного walk всего дерева (десятки тысяч файлов
+            # на холодном HDD — это минуты против секунд). Если glob ничего
+            # не нашёл (нестандартная раскладка) — старый полный walk ниже.
+            files = self._locale_files(self.root, langs)
+            if files:
+                for fp in files:
                     try:
-                        for vals in iter_rows_logical(os.path.join(dirpath, fn),
-                                                      skip_header=True):
+                        for vals in iter_rows_logical(fp, skip_header=True):
                             if len(vals) >= 2 and vals[0] and vals[1]:
                                 v = vals[1].strip()
                                 # keep short labels only - locale files also
@@ -200,9 +199,56 @@ class Project:
                     # тяжёлый парсинг locale держит GIL: отпускаем, иначе
                     # параллельные /api/boot_progress висят (сплэш на 18%)
                     time.sleep(0.002)
+            else:
+                root_norm = os.path.normpath(self.root).lower() + os.sep
+                for dirpath, dirnames, filenames in os.walk(self.root):
+                    dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+                    dnorm = os.path.normpath(dirpath).lower()
+                    if os.path.basename(dnorm) != "locale":
+                        continue
+                    # must live under localization/<lang>/
+                    parts = dnorm[len(root_norm):].split(os.sep) if dnorm.startswith(root_norm) else []
+                    if "localization" not in parts:
+                        continue
+                    if langs.isdisjoint(parts):
+                        continue
+                    for fn in filenames:
+                        if not fn.endswith(".xml"):
+                            continue
+                        try:
+                            for vals in iter_rows_logical(os.path.join(dirpath, fn),
+                                                          skip_header=True):
+                                if len(vals) >= 2 and vals[0] and vals[1]:
+                                    v = vals[1].strip()
+                                    # keep short labels only - locale files also
+                                    # carry long description blobs in `content`
+                                    if len(v) <= 60 and "\n" not in v:
+                                        names.setdefault(vals[0].strip(), v)
+                        except Exception:  # noqa: BLE001
+                            continue
+                        # тяжёлый парсинг locale держит GIL: отпускаем, иначе
+                        # параллельные /api/boot_progress висят (сплэш на 18%)
+                        time.sleep(0.002)
         self._names = names
         self._names_lang = lang
         return names
+
+    @staticmethod
+    def _locale_files(root: str, langs) -> list:
+        """Прямые пути locale-XML без walk: [dlc/*/]localization/<lang>/*/
+        locale/*.xml. Пусто — значит нестандартная раскладка, вызывающий
+        метод откатится на полный walk."""
+        out = []
+        try:
+            for lg in sorted(langs):
+                for pat in (os.path.join(root, "localization", lg, "*",
+                                         "locale", "*.xml"),
+                            os.path.join(root, "dlc", "*", "localization",
+                                         lg, "*", "locale", "*.xml")):
+                    out.extend(glob.glob(pat))
+        except Exception:  # noqa: BLE001
+            return []
+        return sorted(set(out))
 
     def to_dict(self, lang: str = "ru") -> dict:
         # display_names здесь НЕТ сознательно: второй полный walk + парсинг

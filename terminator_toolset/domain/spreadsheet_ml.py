@@ -27,6 +27,7 @@ re-parsing BEFORE anything touches the target file.
 
 from __future__ import annotations
 
+import contextlib
 import io
 import logging
 from typing import Optional
@@ -463,14 +464,17 @@ class Worksheet:
         seq = 1
         for item in sorted(cells, key=lambda x: int(x[0])):
             pos, val = int(item[0]), str(item[1])
-            ttype = item[2] if len(item) > 2 and item[2] else "String"
+            raw_t = item[2] if len(item) > 2 and item[2] else None
             style = item[3] if len(item) > 3 and item[3] else None
             c = etree.SubElement(new, _SS + "Cell")
             if pos != seq:
                 c.set(_SS + "Index", str(pos))
             if style:
                 c.set(_SS + "StyleID", str(style))
-            Cell(c).set_value(val, ttype)
+            if val == "" and not raw_t:
+                pass  # у исходной ячейки не было <Data>: пустой <Cell/>
+            else:
+                Cell(c).set_value(val, raw_t or "String")
             seq = pos + 1
         if row_idx < len(self.rows):
             self.rows[row_idx].elem.addprevious(new)
@@ -503,13 +507,17 @@ class Worksheet:
         self._bump_column_count()
 
     @staticmethod
-    def row_payload(row: Row) -> "list[tuple[int, str, str, str]]":
-        """[(1-based logical column, value, ss:Type, StyleID), ...] for history."""
+    def row_payload(row: Row) -> "list[tuple]":
+        """[(1-based logical column, value, ss:Type|None, StyleID|None,
+        ss:Index|None), ...] for history. Type/Index — None, если их нет
+        в исходнике (пустой <Cell/> и неявная позиция восстанавливаются
+        как были, а не как String/explicit)."""
         out = []
         for pos, c in zip(row._logical_positions(), row.cells):
             data = c._data()
             ttype = data.get(_SS + "Type") if data is not None else None
-            out.append((pos, c.value, ttype, c.elem.get(_SS + "StyleID")))
+            out.append((pos, c.value, ttype, c.elem.get(_SS + "StyleID"),
+                        c.elem.get(_SS + "Index")))
         return out
 
     @staticmethod
@@ -554,6 +562,29 @@ class SpreadsheetML:
         self._enc: str = "utf-8"
         self._text: str = ""
         self.recovered: bool = False
+        # пакетный режим (batch): пока > 0, spine-мутации не перестраивают
+        # lxml — спайн сам держит спан-индекс в актуальности через refresh()
+        self._batch: int = 0
+
+    @contextlib.contextmanager
+    def batch(self):
+        """Групповая spine-правка: N мутаций — одна перестройка lxml на выходе.
+
+        Читать worksheet внутри пакета нельзя (вид протухает после первой
+        мутации): все чтения — до входа, все записи — внутри."""
+        self._batch += 1
+        try:
+            yield self
+        finally:
+            self._batch -= 1
+            if self._batch <= 0:
+                self._batch = 0
+                self._rebuild()
+
+    def _synced(self):
+        """Перестроить lxml, если не внутри batch()."""
+        if not self._batch:
+            self._rebuild()
 
     # -- parsing ----------------------------------------------------------
     def load(self, path: str, recover: bool = False) -> "SpreadsheetML":
@@ -678,15 +709,28 @@ class SpreadsheetML:
                        type_token: Optional[str] = None):
         sp = self._spine_or_raise()
         sp.set_cell(sheet, row, col, value, type_token)
-        self._rebuild()
+        self._synced()
+
+    def cell_raw(self, sheet: int, row: int, col: int) -> Optional[str]:
+        """Raw `<Cell...` bytes of the first cell at logical col+1 (None —
+        нет ячейки). Снапшот для побайтового undo правки ячейки."""
+        return self._spine_or_raise().cell_raw(sheet, row, col)
+
+    def swap_cell(self, sheet: int, row: int, col: int, raw: str):
+        self._spine_or_raise().swap_cell(sheet, row, col, raw)
+        self._synced()
+
+    def remove_cell(self, sheet: int, row: int, col: int):
+        self._spine_or_raise().remove_cell(sheet, row, col)
+        self._synced()
 
     def add_data_row(self, sheet: int, values: Optional[list] = None):
         self._spine_or_raise().add_row(sheet, values)
-        self._rebuild()
+        self._synced()
 
     def delete_row(self, sheet: int, row: int):
         self._spine_or_raise().delete_row(sheet, row)
-        self._rebuild()
+        self._synced()
 
     def row_raw(self, sheet: int, row: int) -> str:
         """Raw <Row>...</Row> bytes at data-row index `row` (byte-preserving)."""
@@ -698,20 +742,33 @@ class SpreadsheetML:
     def insert_row_at(self, sheet: int, row: int, cells: Optional[list] = None,
                       ri: Optional[str] = None, row_xml: Optional[str] = None):
         self._spine_or_raise().insert_row(sheet, row, cells, ri, row_xml)
-        self._rebuild()
+        self._synced()
+
+    def merge_rows(self, sheet: int, updates=None, appends=None):
+        """Пакетное слияние строк одним текстовым проходом: updates —
+        [(row_idx, cells, ri)] заменить целиком, appends — [(cells, ri)]
+        дописать в конец. cells — [(1-based logical, value, type, style)]."""
+        self._spine_or_raise().merge_rows(sheet, updates or [], appends or [])
+        self._synced()
+
+    def unmerge_rows(self, sheet: int, steps) -> None:
+        """Пакетный откат слияния одним текстовым проходом (undo merge_rows):
+        steps — инверсии журнала в порядке применения. Один refresh."""
+        self._spine_or_raise().unmerge_rows(sheet, steps or [])
+        self._synced()
 
     def add_column(self, sheet: int, name: str):
         self._spine_or_raise().add_column(sheet, name)
-        self._rebuild()
+        self._synced()
 
     def delete_column(self, sheet: int, col: int):
         self._spine_or_raise().delete_column(sheet, col)
-        self._rebuild()
+        self._synced()
 
     def insert_column_at(self, sheet: int, col: int, name: str,
                          vals: Optional[dict] = None):
         self._spine_or_raise().insert_column(sheet, col, name, vals)
-        self._rebuild()
+        self._synced()
 
     def fix_expanded_counts(self) -> list:
         """Пересчитать ss:ExpandedRowCount/ColumnCount по факту (кнопка

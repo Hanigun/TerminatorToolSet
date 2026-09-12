@@ -1,6 +1,6 @@
 [project]
 name = "terminator-toolset"
-version = "0.9.1"
+version = "0.9.2-pre4"
 description = "Terminator: Dark Fate - Defiance Modding ToolSet"
 requires-python = ">=3.11"
 dependencies = ["Pillow>=10"]

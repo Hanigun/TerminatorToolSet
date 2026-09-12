@@ -58,7 +58,7 @@ def _logo_data_url(config, base):
     return mem["url"]
 
 
-def register_shell(app, ctx):
+def register_shell(app, ctx, boot_progress=None):
     """Pages, launch progress, drop mailbox, locales/assets, i18n, misc."""
     config, i18n, log, base, version, upr = (
         ctx.config, ctx.i18n, ctx.log, ctx.base, ctx.version, ctx.upr)
@@ -83,7 +83,10 @@ def register_shell(app, ctx):
     # -- прогресс запуска для лаунчера ---------------------------------------
     # Монотонный счётчик 0..100 + подпись: ранние этапы сеет main.py,
     # этапы интерфейса — фронт; лаунчер опрашивает GET и рисует бар.
-    boot_progress = {"pct": 0, "label": ""}
+    # При раннем старте dict уже создан boot-приложением и shared: бар
+    # не прыгает назад после hot-swap WSGI.
+    boot_progress = boot_progress if isinstance(boot_progress, dict) \
+        else {"pct": 0, "label": ""}
     app.boot_progress = boot_progress  # точка доступа для main.py
 
     def _boot_ping(pct, label=""):
@@ -110,6 +113,19 @@ def register_shell(app, ctx):
     def api_boot_progress_set():
         data = request.get_json(silent=True) or {}
         _boot_ping(data.get("pct", 0), str(data.get("label") or ""))
+        # непустая подпись — событие фронта (stall/boot_failed/boot_retry
+        # лоадера): в boot.log, иначе зависший старт недиагностируем.
+        # log — boot_log или logging-логгер (как в application.boot_stages).
+        try:
+            if str(data.get("label") or ""):
+                if hasattr(log, "info"):
+                    log.info("boot: %s (%s%%)",
+                             data.get("label"), data.get("pct", 0))
+                else:
+                    log("boot: %s (%s%%)" % (data.get("label"),
+                                             data.get("pct", 0)))
+        except Exception:  # noqa: BLE001
+            pass
         return jsonify({"ok": True, "pct": boot_progress["pct"],
                         "label": boot_progress["label"]})
 
@@ -287,6 +303,24 @@ def register_shell(app, ctx):
         else:
             resp = send_from_directory(
                 os.path.join(base, "assets", "UprisingMap"), fn)
+        resp.headers["Cache-Control"] = "public, max-age=86400"
+        return resp
+
+    @app.route("/assets/campaign/<path:filename>")
+    def campaign_assets(filename):
+        # ассеты редактора кампании (GlobalMap.png, cities/*.webp,
+        # button_*.webp): внешние рядом с EXE в приоритете (правка без
+        # пересборки), иначе встроенные _base
+        fn = (filename or "").replace("\\", "/").strip("/")
+        if not fn or fn.startswith(".") or "/../" in ("/" + fn + "/"):
+            return ("", 404)
+        parts = fn.split("/")
+        ext = _resolve_external([config.dir, os.path.dirname(config.dir)],
+                                "assets", "Campaign", *parts)
+        if ext:
+            resp = send_from_directory(os.path.dirname(ext), parts[-1])
+        else:
+            resp = send_from_directory(os.path.join(base, "assets", "Campaign"), fn)
         resp.headers["Cache-Control"] = "public, max-age=86400"
         return resp
 

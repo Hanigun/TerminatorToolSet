@@ -7,12 +7,42 @@ from flask import jsonify, request
 
 from ..infrastructure.filesystem import walk_tree as _walk_tree
 
+# Кэш имён по (нормированный корень, язык) для корней игра/мод: у них нет
+# живого Project-инстанса с собственным кэшем, а walk+парсинг всех
+# locale-XML на холодном HDD — секунды на каждый запрос. Сбрасывается
+# в /api/tree_rescan (там же фронт перечитывает деревья).
+_NAMES_CACHE: dict[tuple[str, str], dict] = {}
+
+
+def _names_for(root: str, lang: str) -> dict:
+    key = (os.path.normpath(root).lower(), lang)
+    hit = _NAMES_CACHE.get(key)
+    if hit is not None:
+        return hit
+    from ..domain.project import Project as _Proj
+    names = _Proj(root).display_names(lang) or {}
+    _NAMES_CACHE[key] = names
+    return names
+
 
 def register_project(app, ctx):
     """Project lifecycle + trees + markers."""
     config, db, entities, markers, saves, log = (
         ctx.config, ctx.db, ctx.entities, ctx.markers, ctx.saves, ctx.log)
+    watch = getattr(ctx, "watch", None)
 
+    def _tree_for(role: str, root: str):
+        """Древо из фонового снапшота вотчера (без своего walk по диску):
+        второй параллельный walk душил холодный HDD до 14с (см. app.log).
+        Снапшота нет / корень сменился — честный walk_tree как раньше."""
+        try:
+            if watch is not None and root and os.path.isdir(root):
+                hit = watch.tree(role)
+                if hit and os.path.normpath(hit[0]) == os.path.normpath(root):
+                    return hit[1]
+        except Exception:  # noqa: BLE001
+            pass
+        return _walk_tree(root)
     # -- API: project / files -------------------------------------------------
     @app.route("/api/open_project", methods=["POST"])
     def api_open_project():
@@ -37,18 +67,51 @@ def register_project(app, ctx):
         это время висел лаунчер (фронт ждал open_project до main_ready).
         Теперь open_project лёгкий, а имена дотягиваются фоном после старта.
         Кэш на открытом проекте: повторный запрос того же корня/языка —
-        из памяти без walk."""
-        root = request.args.get("root", "") or ""
+        из памяти без walk.
+
+        Корней может быть несколько (повторяющийся ?root=): фронт шлёт
+        первым корень открытой карты (её источник: проект/мод/игра),
+        дальше остальные по порядку — побеждает первый, остальные
+        добивают только недостающие sysname. Слои: источник карты >
+        остальные > GameAssets (архив — только недостающее)."""
+        roots = [r for r in request.args.getlist("root") if r]
+        root = roots[0] if roots else (request.args.get("root", "") or "")
         lang = request.args.get("lang", "") or config.get("language", "ru")
         if not root or not os.path.isdir(root):
             return jsonify({"ok": False, "error": "no root"})
         try:
             if entities.project is not None and getattr(entities.project, "root", None) \
                     and os.path.normpath(entities.project.root) == os.path.normpath(root):
-                names = entities.project.display_names(lang)
+                names = dict(entities.project.display_names(lang) or {})
             else:
-                from project import Project as _Proj
-                names = _Proj(root).display_names(lang)
+                # тоже через модульный кэш: новый инстанс Project каждый
+                # запрос иначе повторяет полный проход locale (открытие карты
+                # со своим корнем после старта — тот же walk заново)
+                names = dict(_names_for(root, lang) or {})
+            # остальные корни (мод, игра) — только недостающие sysname
+            for extra in roots[1:]:
+                try:
+                    if not extra or not os.path.isdir(extra):
+                        continue
+                    if os.path.normpath(extra) == os.path.normpath(root):
+                        continue
+                    for k, v in _names_for(extra, lang).items():
+                        names.setdefault(k, v)
+                except Exception:  # noqa: BLE001
+                    continue
+            # GameAssets последним слоем не перекрывают проект: только
+            # недостающие sysname из localization/.../locale/*.xml архива
+            try:
+                from ..infrastructure.gameassets_path import (
+                    game_assets_root as _ga_root,
+                )
+                ga = _ga_root(config, getattr(config, "dir", ""))
+                if ga and os.path.isdir(ga):
+                    from ..domain.project import Project as _GaProj
+                    for k, v in _GaProj(ga).display_names(lang).items():
+                        names.setdefault(k, v)
+            except Exception:  # noqa: BLE001
+                pass
         except Exception as e:  # noqa: BLE001
             return jsonify({"ok": False, "error": str(e)})
         return jsonify({"ok": True, "names": names})
@@ -62,7 +125,7 @@ def register_project(app, ctx):
                 or not os.path.isdir(entities.project.root):
             return jsonify({"ok": False, "error": "no project"})
         return jsonify({"ok": True, "root": entities.project.root,
-                        "tree": _walk_tree(entities.project.root)})
+                        "tree": _tree_for("project", entities.project.root)})
 
     @app.route("/api/game_tree")
     def api_game_tree():
@@ -72,7 +135,7 @@ def register_project(app, ctx):
         if not root or not os.path.isdir(root):
             return jsonify({"ok": False, "error": "no unpacked game"})
         return jsonify({"ok": True, "root": root,
-                        "tree": _walk_tree(root)})
+                        "tree": _tree_for("game", root)})
 
     @app.route("/api/mod_tree")
     def api_mod_tree():
@@ -82,7 +145,33 @@ def register_project(app, ctx):
         if not root or not os.path.isdir(root):
             return jsonify({"ok": False, "error": "no mod path"})
         return jsonify({"ok": True, "root": root,
-                        "tree": _walk_tree(root)})
+                        "tree": _tree_for("mod", root)})
+
+    @app.route("/api/tree_watch")
+    def api_tree_watch():
+        """External-change generations for project/game/mod trees
+        (TreeWatch polling thread). The frontend reloads only the tree
+        whose generation outruns the applied one."""
+        if watch is None:
+            return jsonify({"ok": True, "v": 0,
+                            "roots": {"project": 0, "game": 0, "mod": 0}})
+        return jsonify(watch.state())
+
+    @app.route("/api/tree_rescan", methods=["POST"])
+    def api_tree_rescan():
+        """«Пересканировать»: drop watcher baselines, bump every live root.
+        The frontend then force-reloads all three trees itself."""
+        if watch is None:
+            return jsonify({"ok": False, "error": "no watcher"})
+        # locale-файлы могли правиться снаружи — кэш имён игры/мода сбросить,
+        # у открытого проекта тоже (Project.display_names кэширует инстанс)
+        _NAMES_CACHE.clear()
+        try:
+            if entities.project is not None:
+                entities.project._names = None
+        except Exception:  # noqa: BLE001
+            pass
+        return jsonify(watch.rescan())
 
     @app.route("/api/edited_marks")
     def api_edited_marks():

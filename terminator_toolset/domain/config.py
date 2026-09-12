@@ -15,7 +15,7 @@ DEFAULTS = {
     "window_size": "normal",   # normal | wide (+20% w) | big (+20% w & h)
     "window_width": 1280,
     "window_height": 800,
-    "auto_save": True,
+    "auto_save": False,
     "default_key_column": "sysname",
     "last_project": "",
     # корень текущего проекта (настройка; используется деревом по умолчанию)
@@ -30,6 +30,9 @@ DEFAULTS = {
     # привязан к origin (а порт сервера случаен), поэтому персист — здесь
     "uprising_rnd_opts": {},
     "uprising_rnd_excl": {},
+    # глобальный источник Проект | Игра | Мод: localStorage живёт один
+    # запуск по той же причине (случайный порт), поэтому персист — здесь
+    "tree_view": "project",
     # путь к основному (созданному пользователем) моду: заполняется
     # автоматически при создании мода; используется командой
     # «Скопировать в мод» в контекстных меню дерева и вкладок
@@ -56,6 +59,10 @@ DEFAULTS = {
     # автообновление при старте: проверка + скачивание + установка
     # (по умолчанию выкл — только ручная проверка из настроек)
     "auto_update": False,
+    # архив GameAssets (скрипты/локализация стоковой игры из релиза):
+    # флаг строго 0/1, версия — только информация (тег релиза-источника)
+    "game_assets_downloaded": 0,
+    "game_assets_version": "",
     "max_backups_per_file": 200,
 }
 
@@ -104,20 +111,55 @@ class Config:
 
     def load(self):
         if os.path.isfile(self.path):
-            try:
-                with open(self.path, "r", encoding="utf-8") as fh:
-                    user = json.load(fh)
+            user = self._read_json_retry(self.path)
+            if isinstance(user, dict):
                 self.data = {**DEFAULTS, **user}
                 # follow the system language until the user chooses one
                 if "language" not in user:
                     self.data["language"] = _system_language()
                 self._normalize()
                 return
-            except Exception:  # noqa: BLE001
-                pass
+            # Битый/оборванный config.json (типично: конкурентная запись
+            # в момент рестарта после обновления). Раньше ветка ниже молча
+            # затирала файл дефолтами — пути пропадали до ручного сейва.
+            # Теперь: бэкап в сторону, память — дефолты, дальше работает сейв.
+            self._backup_corrupt(self.path)
+        else:
+            # первый запуск: файла нет — создаём с дефолтами как раньше
+            self.data = dict(DEFAULTS)
+            self.data["language"] = _system_language()
+            self.save()
+            return
         self.data = dict(DEFAULTS)
         self.data["language"] = _system_language()
         self.save()
+
+    @staticmethod
+    def _read_json_retry(path, tries=3, delay=0.2):
+        """Прочитать JSON с повторами: файл может быть momentarily занят
+        (Windows-лок) или недописан другим процессом при рестарте.
+        Возвращает dict либо None."""
+        import time
+        for _ in range(tries):
+            try:
+                with open(path, "r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+                return data if isinstance(data, dict) else None
+            except Exception:  # noqa: BLE001
+                time.sleep(delay)
+        return None
+
+    @staticmethod
+    def _backup_corrupt(path):
+        """Убрать битый файл в сторону (config.json.corrupt-<ts>.bak),
+        чтобы данные можно было восстановить вручную."""
+        import time
+        try:
+            bak = "%s.corrupt-%d.bak" % (path, int(time.time()))
+            if os.path.isfile(path) and not os.path.isfile(bak):
+                os.replace(path, bak)
+        except Exception:  # noqa: BLE001
+            pass
 
     def _normalize(self):
         """Coerce known value types so a hand-edited/corrupt config.json cannot
@@ -141,8 +183,20 @@ class Config:
             self.data["window_size"] = DEFAULTS["window_size"]
         if self.data.get("update_channel") not in ("release", "beta"):
             self.data["update_channel"] = DEFAULTS["update_channel"]
+        try:
+            self.data["game_assets_downloaded"] = 1 if int(
+                self.data.get("game_assets_downloaded", 0)) == 1 else 0
+        except (TypeError, ValueError):
+            self.data["game_assets_downloaded"] = 0
+        try:
+            self.data["game_assets_version"] = str(
+                self.data.get("game_assets_version", "") or "")
+        except Exception:  # noqa: BLE001
+            self.data["game_assets_version"] = ""
         if self.data.get("language") not in ("ru", "en", "de", "zh"):
             self.data["language"] = "ru" if str(self.data.get("language", "")).lower().startswith("ru") else "en"
+        if self.data.get("tree_view") not in ("project", "game", "mod"):
+            self.data["tree_view"] = DEFAULTS["tree_view"]
 
     def save(self):
         try:
@@ -179,18 +233,16 @@ class Markers:
 
     def load(self):
         if os.path.isfile(self.path):
-            try:
-                with open(self.path, "r", encoding="utf-8") as fh:
-                    user = json.load(fh)
-                if isinstance(user, dict):
-                    for k in MARKER_SECTIONS:
-                        v = user.get(k)
-                        if isinstance(v, list):
-                            self.data[k] = [str(x) for x in v]
-                    self.data["_descriptions"] = dict(MARKER_SECTIONS)
-                    return
-            except Exception:  # noqa: BLE001
-                pass
+            user = Config._read_json_retry(self.path)
+            if isinstance(user, dict):
+                for k in MARKER_SECTIONS:
+                    v = user.get(k)
+                    if isinstance(v, list):
+                        self.data[k] = [str(x) for x in v]
+                self.data["_descriptions"] = dict(MARKER_SECTIONS)
+                return
+            # битый markers.json: бэкап в сторону вместо молчаливого wipe
+            Config._backup_corrupt(self.path)
         self.save()
 
     def save(self):

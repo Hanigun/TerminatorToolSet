@@ -21,9 +21,11 @@ log = logging.getLogger("terminatorsheet.api")
 # -- domain + package imports (refactored layout) ---------------------------
 from terminator_toolset import __version__ as VERSION
 from terminator_toolset.api.archive import register_archive
+from terminator_toolset.api.campaign import register_campaign
 from terminator_toolset.api.compare import register_compare
 from terminator_toolset.api.config import register_config
 from terminator_toolset.api.files import register_files
+from terminator_toolset.api.game_assets import register_game_assets
 from terminator_toolset.api.history import register_history
 from terminator_toolset.api.mods import register_mods
 from terminator_toolset.api.project import register_project
@@ -38,10 +40,12 @@ from terminator_toolset.domain.database import Database
 from terminator_toolset.domain.i18n import I18n
 from terminator_toolset.infrastructure.filesystem import resolve_external as _resolve_external
 from terminator_toolset.infrastructure.filesystem import walk_tree as _walk_tree
+from terminator_toolset.infrastructure.treewatch import TreeWatch
 from terminator_toolset.services.archive_service import Archive
 from terminator_toolset.services.compare_service import Compare
 from terminator_toolset.services.entity_service import EntityIndex
 from terminator_toolset.services.files_service import Files
+from terminator_toolset.services.game_assets_service import GameAssets
 from terminator_toolset.services.guard_service import Guard
 from terminator_toolset.services.history_service import HistoryLog
 from terminator_toolset.services.mods_service import Mods
@@ -54,7 +58,86 @@ from terminator_toolset.services.update_service import Updates
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def create_app(config: Config, db: Database, base_dir: Optional[str] = None) -> Flask:
+def create_boot_app(base_dir: Optional[str] = None,
+                    progress: Optional[dict] = None) -> Flask:
+    """Минимальный boot-Flask для раннего лаунчера: только /splash,
+    /api/boot_progress и иконка. Никаких Config/Database/сервисов —
+    тяжёлый билд идёт ПОСЛЕ показа окна, при видимом баре.
+    progress — общий dict {"pct","label"}: его же позже заберёт полное
+    приложение, бар не прыгает назад."""
+    from flask import jsonify, render_template, send_from_directory
+
+    _base = base_dir or BASE_DIR
+    if progress is None:
+        progress = {"pct": 0, "label": ""}
+    app = Flask("tsh_boot",
+                template_folder=os.path.join(_base, "templates"))
+    app.config["JSON_AS_ASCII"] = False
+    app.boot_progress = progress
+
+    def _ping(pct, label=""):
+        try:
+            pct = max(0, min(100, int(pct)))
+        except (TypeError, ValueError):
+            return
+        if pct >= progress["pct"]:
+            progress["pct"] = pct
+            if label:
+                progress["label"] = label
+        elif label and pct == progress["pct"]:
+            progress["label"] = label
+
+    app.boot_ping = _ping
+
+    def _logo_file():
+        # быстро и без побочек: только файл рядом, без embedded-распаковки
+        # и без config (их ещё нет) — полная версия доберёт остальное позже
+        p = os.path.join(_base, "assets", "icons", "app_icon.png")
+        return p if os.path.isfile(p) else ""
+
+    @app.route("/splash")
+    def splash():
+        logo = ""
+        p = _logo_file()
+        if p and os.path.getsize(p) <= 512_000:
+            import base64
+            with open(p, "rb") as fh:
+                logo = ("data:image/png;base64,"
+                        + base64.b64encode(fh.read()).decode("ascii"))
+        return render_template("splash.html", title="Terminator ToolSet",
+                               version=VERSION, v="boot",
+                               logo_data_url=logo)
+
+    @app.route("/assets/icons/app_icon.png")
+    def boot_icon():
+        p = _logo_file()
+        if not p:
+            return ("", 404)
+        return send_from_directory(os.path.dirname(p),
+                                   os.path.basename(p))
+
+    @app.route("/api/boot_progress")
+    def api_boot_progress():
+        return jsonify({"ok": True, "pct": progress["pct"],
+                        "label": progress["label"]})
+
+    @app.route("/api/boot_progress", methods=["POST"])
+    def api_boot_progress_set():
+        data = request.get_json(silent=True) or {}
+        _ping(data.get("pct", 0), str(data.get("label") or ""))
+        return jsonify({"ok": True, "pct": progress["pct"],
+                        "label": progress["label"]})
+
+    @app.errorhandler(404)
+    def _booting(_e):
+        # полное приложение ещё не подменено: честный 503 вместо 404
+        return jsonify({"ok": False, "error": "booting"}), 503
+
+    return app
+
+
+def create_app(config: Config, db: Database, base_dir: Optional[str] = None,
+               on_stage=None, boot_progress: Optional[dict] = None) -> Flask:
     _base = base_dir or BASE_DIR
     app = Flask(__name__,
                 template_folder=os.path.join(_base, "templates"),
@@ -90,9 +173,20 @@ def create_app(config: Config, db: Database, base_dir: Optional[str] = None) -> 
     mods = Mods(config, log)
     # -- game archive unpacker (ordered .pak extraction + progress) ---------
     arch = Archive(log, base_dir)
+    # -- program dir (frozen — рядом с exe, dev — корень исходников):
+    # тот же корень для Updates и GameAssets
+    import sys as _sys
+    _program_dir = (os.path.dirname(os.path.abspath(_sys.executable))
+                    if getattr(_sys, "frozen", False) else _base)
     # -- uprising map (species parsing, icons, balance configs) ---------------
-    upr = Uprising(store, config, entities, log, _base, BASE_DIR)
+    upr = Uprising(store, config, entities, log, _base, BASE_DIR,
+                   _program_dir)
     markers = Markers(config.cfg_dir if hasattr(config, "cfg_dir") else config.dir)
+    if callable(on_stage):
+        try:
+            on_stage("boot_services")
+        except Exception:  # noqa: BLE001
+            pass
     # -- save pipeline (disk writes, autosave, edited marks) ------------------
     saves = SavePipeline(store, markers, config, guarded=guard.guarded)
     # -- file lifecycle (save-as, stock rollback, journal jump) --------------
@@ -103,19 +197,22 @@ def create_app(config: Config, db: Database, base_dir: Optional[str] = None) -> 
     swt = Swt(store, saves, log)
     # -- self-updates (worker over GitHub releases; program dir next to the
     # exe when frozen, sources root in dev)
-    import sys as _sys
-    _program_dir = (os.path.dirname(os.path.abspath(_sys.executable))
-                    if getattr(_sys, "frozen", False) else _base)
     upd = Updates(config, log, _program_dir, VERSION)
+    ga = GameAssets(config, log, _program_dir)
 
+    # -- external-change watcher (project/game/mod trees): daemon polling
+    # thread, no dependency; the frontend pulls /api/tree_watch and reloads
+    # only the changed tree, «Пересканировать» bumps everything at once
+    watch = TreeWatch(config, entities, log)
+    watch.start()
     # -- route context (services + deploy values shared by api groups) -------
     ctx = SimpleNamespace(config=config, db=db, i18n=i18n, store=store,
                           entities=entities, hist=hist, guard=guard,
                           saves=saves, mods=mods, arch=arch, upr=upr, cmp=cmp,
                           files=files, swt=swt, markers=markers, log=log,
-                          upd=upd,
+                          upd=upd, ga=ga, watch=watch,
                           base=_base, version=VERSION)
-    register_shell(app, ctx)
+    register_shell(app, ctx, boot_progress=boot_progress)
     register_config(app, ctx)
     register_project(app, ctx)
     register_sheets(app, ctx)
@@ -124,9 +221,16 @@ def create_app(config: Config, db: Database, base_dir: Optional[str] = None) -> 
     register_history(app, ctx)
     register_swt(app, ctx)
     register_uprising(app, ctx)
+    register_campaign(app, ctx)
     register_updates(app, ctx)
+    register_game_assets(app, ctx)
     register_mods(app, ctx)
     register_archive(app, ctx)
+    if callable(on_stage):
+        try:
+            on_stage("boot_routes")
+        except Exception:  # noqa: BLE001
+            pass
     upr.start_warmup()
 
     @app.after_request

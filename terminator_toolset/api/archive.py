@@ -13,7 +13,9 @@ def register_archive(app, ctx):
     @app.route("/api/unpack_scan", methods=["POST"])
     def api_unpack_scan():
         """Find every .pak of the game root and order the extraction queue;
-        plus loose basis//localization folders copied before the paks."""
+        plus loose basis/ copied before the paks, localization .paks
+        (each into its own localization/<lang>/<stem>/ folder),
+        plus skipped .paks (not basis/patch_*) the queue ignores."""
         data = request.get_json(silent=True) or {}
         root = (data.get("path") or "").strip()
         return jsonify(arch.scan(root))
@@ -22,12 +24,13 @@ def register_archive(app, ctx):
     @app.route("/api/unpack_run", methods=["POST"])
     def api_unpack_run():
         """Unpack the whole found queue in a background thread; per group
-        loose basis//localization copies first, then ALL paks extract into
-        ONE folder so later patches overwrite earlier files: game base ->
+        loose basis/ copy first, then main paks extract into ONE folder
+        so later patches overwrite earlier files: game base ->
         dest\\basis\\ (basis.pak first, then patch_* by number),
         Legion -> dest\\dlc\\legion\\basis\\,
         Resistance -> dest\\dlc\\resistance\\basis\\,
-        Evolution -> dest\\dlc\\evolution\\basis\\."""
+        Evolution -> dest\\dlc\\evolution\\basis\\; localization .paks
+        each into their OWN dest\\localization\\<lang>\\<stem>\\ folder."""
         data = request.get_json(silent=True) or {}
         root = (data.get("game_root") or "").strip()
         dest = (data.get("dest") or "").strip()

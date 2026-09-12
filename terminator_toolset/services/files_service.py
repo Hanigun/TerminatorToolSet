@@ -116,7 +116,8 @@ class Files:
 
         Reverting to a past record undoes every newer change; 'reverting' to
         an undone record redoes the steps up to it. Moves the cursor only -
-        records themselves are never created or destroyed."""
+        records themselves are never created or destroyed. Memory only, no
+        disk write: the session stays dirty until an explicit save."""
         path = self._store.normal(path or "")
         if not path or not os.path.isfile(path):
             return {"ok": False, "error": "not a file"}
@@ -134,10 +135,10 @@ class Files:
             for e in reversed(entries[idx:]):
                 if e["undone"]:
                     self._hist.redo_once(s, save=False)
-            s.save()
+            s.dirty = True
         except SpreadsheetError as e:
             return {"ok": False, "error": str(e)}
-        self._store.dirty.discard(s.path)
+        self._store.dirty.add(s.path)
         return {"ok": True, "reload": True, **self._hist.flags(path)}
 
     # -- reset to beginning -------------------------------------------------------
@@ -145,7 +146,7 @@ class Files:
         """Undo every applied journal record: the file returns to the clean
         state before the first recorded change. Unlike restore_record() on
         the oldest entry - which keeps that first change applied - this
-        also undoes the oldest record itself."""
+        also undoes the oldest record itself. Memory only, no disk write."""
         path = self._store.normal(path or "")
         if not path or not os.path.isfile(path):
             return {"ok": False, "error": "not a file"}
@@ -157,8 +158,8 @@ class Files:
                 if not e["undone"]:
                     self._hist.undo_once(s, save=False)
                     n += 1
-            s.save()
+            s.dirty = True
         except SpreadsheetError as e:
             return {"ok": False, "error": str(e)}
-        self._store.dirty.discard(s.path)
+        self._store.dirty.add(s.path)
         return {"ok": True, "undone": n, **self._hist.flags(path)}

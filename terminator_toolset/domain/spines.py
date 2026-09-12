@@ -492,6 +492,10 @@ class Spine:
                 cell = c
                 break
         if cell is None:
+            if value == "" and type_token is None:
+                # ячейки нет и писать нечего: создавать <Cell> ради пустой
+                # строки нельзя (меняло бы структуру без смысла)
+                return
             self._insert_cell(ws, rowrec, col0 + 1, value, type_token)
             return
         d = cell["data"]
@@ -502,6 +506,17 @@ class Spine:
             tt = _safe_type(existing)
         else:
             tt = _guess_type(value)
+        if d is not None:
+            cur_inner = self.text[d["open_end"]:d["close_start"]]
+            want_type = _safe_type(type_token) if type_token else existing
+            if cur_inner == _esc(value) and want_type == existing:
+                # то же значение тем же типом (включая самозакрытый
+                # <Data/>): нечего менять, байты не трогаем
+                return
+        elif value == "" and type_token is None:
+            # <Cell> без <Data> уже пуст: добавлять <Data> ради пустой
+            # строки нельзя
+            return
         if d is None:
             ins = '<Data ss:Type="%s">%s</Data>' % (tt, _esc(value))
             if cell["self_close"]:
@@ -528,7 +543,10 @@ class Spine:
 
     def _insert_cell(self, ws: dict, rowrec: dict, col1: int,
                      value: str, type_token: "str | None"):
-        """Insert a new <Cell ss:Index=col1> keeping ss:Index ascending."""
+        """Insert a new <Cell> keeping cells in ascending logical order.
+        Явный ss:Index — только вне последовательности (как _render_cell).
+        Вставка — через _line_insert (та же конвенция разделителей, что
+        у колонок): симметрична remove_cell, откат создания побайтово точен."""
         tt = _safe_type(type_token) if type_token else _guess_type(value)
         # styles: copy the style of the cell before us if any (keep geometry sane)
         style = ""
@@ -538,17 +556,61 @@ class Spine:
                 if st:
                     style = ' ss:StyleID="%s"' % _esc_attr(st)
                 break
-        newcell = '<Cell%s ss:Index="%d"><Data ss:Type="%s">%s</Data></Cell>' % (
-            style, col1, tt, _esc(value))
-        # insert before the first cell whose logical >= col1
-        pos = None
+        prev = 0
         for c in rowrec["cells"]:
-            if c["logical"] >= col1:
-                pos = c["start"]
-                break
-        if pos is None:
-            pos = rowrec["close_start"]  # before </Row>
-        self._apply([(pos, pos, newcell)])
+            if c["logical"] < col1:
+                prev = max(prev, c["logical"])
+        # порядок атрибутов Index→StyleID, как в исходных файлах
+        idx = "" if prev == col1 - 1 else ' ss:Index="%d"' % col1
+        newcell = '<Cell%s%s><Data ss:Type="%s">%s</Data></Cell>' % (
+            idx, style, tt, _esc(value))
+        self._apply([self._line_insert(rowrec, col1, newcell)])
+
+    def cell_raw(self, s: int, row: int, col0: int) -> "str | None":
+        """Raw `<Cell...` bytes of the FIRST cell at logical col0+1 (None —
+        ячейки нет). Снапшот для побайтового undo правки ячейки."""
+        ws = self._ws(s)
+        if not (0 <= row < len(ws["rows"])):
+            raise SpineError("row out of range")
+        for c in ws["rows"][row]["cells"]:
+            if c["logical"] == col0 + 1:
+                return self.text[c["start"]:c["end"]]
+        return None
+
+    def swap_cell(self, s: int, row: int, col0: int, raw: str) -> None:
+        """Заменить ПЕРВУЮ ячейку на logical col0+1 сырыми байтами (undo/redo
+        правки: точная форма — теги, атрибуты, комментарии — как была)."""
+        ws = self._ws(s)
+        if not (0 <= row < len(ws["rows"])):
+            raise SpineError("row out of range")
+        for c in ws["rows"][row]["cells"]:
+            if c["logical"] == col0 + 1:
+                self._apply([(c["start"], c["end"], raw)])
+                return
+        raise SpineError("cell not found")
+
+    def remove_cell(self, s: int, row: int, col0: int) -> None:
+        """Убрать ПЕРВУЮ ячейку на logical col0+1 (откат создания ячейки).
+        Та же конвенция разделителей, что _line_delete: симметрична
+        _insert_cell через _line_insert."""
+        ws = self._ws(s)
+        if not (0 <= row < len(ws["rows"])):
+            raise SpineError("row out of range")
+        rowrec = ws["rows"][row]
+        for c in rowrec["cells"]:
+            if c["logical"] == col0 + 1:
+                prev_end = rowrec["open_end"]
+                for c2 in rowrec["cells"]:
+                    if c2["logical"] < col0 + 1:
+                        prev_end = c2["end"]
+                    else:
+                        break
+                j = c["start"]
+                while j > prev_end and self.text[j - 1].isspace():
+                    j -= 1
+                self._apply([(j, c["end"], "")])
+                return
+        raise SpineError("cell not found")
 
     # -- row edits ---------------------------------------------------------
     def add_row(self, s: int, values: "list | None" = None):
@@ -563,14 +625,12 @@ class Spine:
             j -= 1
         leading = self.text[j:row["start"]]
         seg = self.text[row["start"]:row["end"]]
-        newseg = _blank_row(seg)
+        newseg = _blank_row(seg, strip_comments=True)
         newseg = _strip_row_index(newseg)
         if values:
             newseg = _set_row_values(newseg, values)
         repls.append((row["end"], row["end"], leading + newseg))
-        fact_after = _table_fact(ws, "ExpandedRowCount") + 1
-        repls.append(_bump_table(ws, self.text, "ExpandedRowCount", +1,
-                                 set_to=fact_after))
+        repls.append(_bump_table(ws, self.text, "ExpandedRowCount", +1))
         self._apply(repls)
 
     def delete_row(self, s: int, row: int):
@@ -580,10 +640,7 @@ class Spine:
         rec = ws["rows"][row]
         prev_end = ws["header"]["end"] if row == 0 else ws["rows"][row - 1]["end"]
         repls = [(prev_end, rec["end"], "")]
-        # точный факт после удаления (а не -1: исходный счётчик мог быть битым)
-        fact_after = len(ws["rows"]) - 1 + (1 if ws.get("header") is not None else 0)
-        repls.append(_bump_table(ws, self.text, "ExpandedRowCount", -1,
-                                 set_to=max(fact_after, 0)))
+        repls.append(_bump_table(ws, self.text, "ExpandedRowCount", -1))
         self._apply(repls)
 
     def insert_row(self, s: int, row: int, cells: "list | None" = None,
@@ -615,20 +672,133 @@ class Spine:
             while j > prev_end and self.text[j - 1].isspace():
                 j -= 1
             leading = self.text[j:ws["rows"][row]["start"]]
-            fact_after = _table_fact(ws, "ExpandedRowCount") + 1
-            repls = [(pos, pos, leading + newseg),
-                     _bump_table(ws, self.text, "ExpandedRowCount", +1,
-                                 set_to=fact_after)]
+            # замена [j, pos): исходный отступ потребляется и переизлучается
+            # с ОБЕИХ сторон вставки (как _line_insert): иначе либо дубль
+            # отступа, либо склейка </Row><Row
+            repls = [(j, pos, leading + newseg + leading),
+                     _bump_table(ws, self.text, "ExpandedRowCount", +1)]
         else:
             last = ws["rows"][-1] if ws["rows"] else ws["header"]
             j = last["start"]
             while j > 0 and self.text[j - 1].isspace():
                 j -= 1
             leading = self.text[j:last["start"]]
-            fact_after = _table_fact(ws, "ExpandedRowCount") + 1
             repls = [(last["end"], last["end"], leading + newseg),
-                     _bump_table(ws, self.text, "ExpandedRowCount", +1,
-                                 set_to=fact_after)]
+                     _bump_table(ws, self.text, "ExpandedRowCount", +1)]
+        self._apply(repls)
+
+    @staticmethod
+    def _build_row_seg(template_seg: str, cells: "list | None",
+                       row_index_attr: "str | None") -> str:
+        """Собрать <Row>-сегмент из шаблона + [(logical, value, type, style)]
+        (тот же конвейер, что insert_row: blank -> strip Index -> add Index
+        -> значения из tuples)."""
+        newseg = _blank_row(template_seg)
+        newseg = _strip_row_index(newseg)
+        if row_index_attr:
+            newseg = _add_row_index(newseg, row_index_attr)
+        return _set_row_values_from_tuples(newseg, cells or [])
+
+    def merge_rows(self, s: int, updates, appends) -> None:
+        """Пакетное слияние строк одним текстовым проходом (compare merge).
+
+        updates: [(row_idx, cells, ri)] — заменить строку целиком;
+        appends: [(cells, ri)] — дописать в конец таблицы по порядку.
+        cells — [(1-based logical, value, ss:Type, StyleID)]. Все оффсеты
+        берутся из одного снапшота спан-индекса, применяется одним _apply
+        (один refresh вместо сотен) — большие слияния не виснут."""
+        ws = self._ws(s)
+        repls = []
+        for row_idx, cells, ri in updates:
+            if not (0 <= row_idx < len(ws["rows"])):
+                raise SpineError("row out of range")
+            rec = ws["rows"][row_idx]
+            seg = self.text[rec["start"]:rec["end"]]
+            newseg = self._build_row_seg(seg, cells, ri)
+            prev_end = (ws["header"]["end"] if row_idx == 0
+                        else ws["rows"][row_idx - 1]["end"])
+            j = rec["start"]
+            while j > prev_end and self.text[j - 1].isspace():
+                j -= 1
+            repls.append((j, rec["end"], self.text[j:rec["start"]] + newseg))
+        if appends:
+            last = ws["rows"][-1] if ws["rows"] else ws["header"]
+            if last is None:
+                raise SpineError("No template row")
+            last_seg = self.text[last["start"]:last["end"]]
+            # дописка — новая строка: чужие <Comment> не наследуются
+            last_seg = _strip_comments(last_seg)
+            j = last["start"]
+            while j > 0 and self.text[j - 1].isspace():
+                j -= 1
+            leading = self.text[j:last["start"]]
+            parts = []
+            for cells, ri in appends:
+                parts.append(leading + self._build_row_seg(last_seg, cells, ri))
+            repls.append((last["end"], last["end"], "".join(parts)))
+        if not repls:
+            return
+        # обновления счётчик не меняют, каждая дописка +1 к объявленному
+        # (строго дельта: молча не чиним, это делает только /api/fix_file)
+        if appends:
+            repls.append(_bump_table(ws, self.text, "ExpandedRowCount",
+                                     +len(appends)))
+        self._apply(repls)
+
+    def unmerge_rows(self, s: int, steps) -> None:
+        """Пакетный откат слияния одним текстовым проходом (undo merge_rows).
+
+        steps — инверсии из журнала в порядке применения: {"r", "existed",
+        "cells_o", "ri_o", ...}. Обновлённые строки пересобираются из
+        cells_o, добавленные (existed=False) вырезаются одним блоком.
+        Все оффсеты берутся из одного снапшота спан-индекса, применяется
+        одним _apply (один refresh вместо сотен) — откат больших слияний
+        не виснет и не накапливает ошибку поштучных delete+insert."""
+        ws = self._ws(s)
+        steps = list(steps or [])
+        updates = [it for it in steps if it.get("existed")]
+        appended = sorted(int(it["r"]) for it in steps if not it.get("existed"))
+        repls = []
+        for it in updates:
+            row_idx = int(it["r"])
+            if not (0 <= row_idx < len(ws["rows"])):
+                raise SpineError("row out of range")
+            rec = ws["rows"][row_idx]
+            cells = [tuple(x) for x in (it.get("cells_o") or [])]
+            newseg = self._build_row_seg(
+                self.text[rec["start"]:rec["end"]], cells, it.get("ri_o"))
+            prev_end = (ws["header"]["end"] if row_idx == 0
+                        else ws["rows"][row_idx - 1]["end"])
+            j = rec["start"]
+            while j > prev_end and self.text[j - 1].isspace():
+                j -= 1
+            repls.append((j, rec["end"], self.text[j:rec["start"]] + newseg))
+        if appended:
+            first, last = appended[0], appended[-1]
+            if not (0 <= first <= last < len(ws["rows"])):
+                raise SpineError("row out of range")
+            if (set(appended) == set(range(first, last + 1))
+                    and last == len(ws["rows"]) - 1):
+                # добавленные строки — хвостовой непрерывный блок (обычный
+                # случай merge_all): вырезаем одним диапазоном
+                prev_end = (ws["header"]["end"] if first == 0
+                            else ws["rows"][first - 1]["end"])
+                repls.append((prev_end, ws["rows"][last]["end"], ""))
+            else:
+                # редкий случай (строки двигали после слияния): поштучные
+                # диапазоны из того же снапшота, всё равно один _apply
+                for r in sorted(appended, reverse=True):
+                    rec = ws["rows"][r]
+                    prev = (ws["header"]["end"] if r == 0
+                            else ws["rows"][r - 1]["end"])
+                    repls.append((prev, rec["end"], ""))
+        if not repls:
+            return
+        # обновления счётчик не меняют, каждая убранная дописка −1
+        # к объявленному (строго дельта, без молчаливого ремонта)
+        if appended:
+            repls.append(_bump_table(ws, self.text, "ExpandedRowCount",
+                                     -len(appended)))
         self._apply(repls)
 
     # -- column edits ------------------------------------------------------
@@ -637,14 +807,12 @@ class Spine:
         repls = []
         col1 = _next_logical(ws)
         repls.append(self._line_insert(ws["header"], col1,
-                     "<Cell ss:Index=\"%d\"><Data ss:Type=\"String\">%s</Data></Cell>" % (col1, _esc(name))))
+                     self._col_frag(ws["header"], col1, "String", name, None, None)))
         for rowrec in ws["rows"]:
             repls.append(self._line_insert(rowrec, col1,
-                         "<Cell ss:Index=\"%d\"/>" % col1))
-        # факт после вставки: max(старый max, col1)
-        fact_after = max(_next_logical(ws) - 1, col1, 1)
-        repls.append(_bump_table(ws, self.text, "ExpandedColumnCount",
-                                 +1, set_to=fact_after))
+                         self._col_frag(rowrec, col1, None, "", None, None)))
+        # +1 к объявленному (строго дельта, без молчаливого ремонта)
+        repls.append(_bump_table(ws, self.text, "ExpandedColumnCount", +1))
         self._apply(repls)
 
     def delete_column(self, s: int, col0: int):
@@ -654,46 +822,130 @@ class Spine:
         repls.append(self._line_delete(ws["header"], col1))
         for rowrec in ws["rows"]:
             repls.append(self._line_delete(rowrec, col1))
-        # точный факт после удаления: max логическая колонка без col1
-        repls.append(_bump_table(ws, self.text, "ExpandedColumnCount", -1,
-                                 set_to=_max_logical_excluding(ws, col1)))
+        # последующие явные ss:Index сдвигаются −1 (абсолютные позиции
+        # уехали влево вместе с удалённой колонкой)
+        repls.extend(self._shift_row_indexes(ws["header"], col1, -1, False))
+        for rowrec in ws["rows"]:
+            repls.extend(self._shift_row_indexes(rowrec, col1, -1, False))
+        # −1 к объявленному (строго дельта, без молчаливого ремонта)
+        repls.append(_bump_table(ws, self.text, "ExpandedColumnCount", -1))
         self._apply(repls)
 
     def insert_column(self, s: int, col0: int, name: str,
                       cell_values: "dict | None" = None):
-        """Re-insert a column at 0-based position col0 (history redo/undo)."""
+        """Re-insert a column at 0-based position col0 (history redo/undo).
+
+        cell_values: row -> [text, type, style?, ss:Index?]. Явный ss:Index
+        восстанавливается как был (для побайтового отката удаления);
+        без него — авто (явный только вне последовательности). Последующие
+        явные ss:Index сдвигаются +1."""
         ws = self._ws(s)
         cell_values = cell_values or {}
         col1 = col0 + 1
-        repls = [self._line_insert(ws["header"], col1,
-                 "<Cell ss:Index=\"%d\"><Data ss:Type=\"String\">%s</Data></Cell>" % (col1, _esc(name)))]
+        hdr = self._col_frag(ws["header"], col1, "String", name, None, None)
+        repls = [self._line_insert(ws["header"], col1, hdr)]
         for r_idx, val in sorted(cell_values.items()):
             if 0 <= int(r_idx) < len(ws["rows"]):
                 v = str(val[0])
-                ttype = _safe_type(val[1] if len(val) > 1 and val[1] else "String")
+                ttype = val[1] if len(val) > 1 and val[1] else None
                 style = (val[2] if len(val) > 2 and val[2] else None)
-                stxt = '<Data ss:Type="%s">%s</Data>' % (ttype, _esc(v))
-                stag = '<Cell%s ss:Index="%d">%s</Cell>' % (
-                    (' ss:StyleID="%s"' % _esc_attr(style)) if style else "", col1, stxt)
-                repls.append(self._line_insert(ws["rows"][int(r_idx)], col1, stag))
-        repls.append(_bump_table(ws, self.text, "ExpandedColumnCount", +1,
-                                 set_to=max(_next_logical(ws) - 1, col1, 1)))
+                index = (val[3] if len(val) > 3 and val[3] else None)
+                frag = self._col_frag(ws["rows"][int(r_idx)], col1, ttype,
+                                      v, style, index)
+                repls.append(self._line_insert(ws["rows"][int(r_idx)], col1, frag))
+        # вставляемая колонка занимает col1: последующие явные ss:Index +1
+        repls.extend(self._shift_row_indexes(ws["header"], col1, +1, True))
+        for rowrec in ws["rows"]:
+            repls.extend(self._shift_row_indexes(rowrec, col1, +1, True))
+        repls.append(_bump_table(ws, self.text, "ExpandedColumnCount", +1))
         self._apply(repls)
+
+    @staticmethod
+    def _col_frag(rowrec: dict, col1: int, ttype, value: str,
+                  style, index) -> str:
+        """Сериализовать ячейку колонки: порядок атрибутов Index→StyleID
+        (как в исходных файлах), явный Index — если был или вне цепочки."""
+        if index is None:
+            prev = 0
+            for c in rowrec["cells"]:
+                if c["logical"] < col1:
+                    prev = max(prev, c["logical"])
+            index = None if prev == col1 - 1 else col1
+        stag = ""
+        if index is not None:
+            stag += ' ss:Index="%s"' % _esc_attr(str(index))
+        if style:
+            stag += ' ss:StyleID="%s"' % _esc_attr(style)
+        if value == "" and not ttype:
+            return '<Cell%s/>' % stag
+        return ('<Cell%s><Data ss:Type="%s">%s</Data></Cell>'
+                % (stag, _safe_type(ttype), _esc(value)))
+
+    def _shift_row_indexes(self, rowrec: dict, col1: int, delta: int,
+                           include_self: bool) -> list:
+        """Сдвинуть явные ss:Index ячеек строки (сохранить абсолютные позиции
+        при вставке/удалении колонки). delete: logical > col1; insert:
+        logical >= col1. Возвращает замены-реплики из снапшота."""
+        out = []
+        for c in rowrec["cells"]:
+            if c.get("index_attr") is None:
+                continue
+            hit = c["logical"] >= col1 if include_self else c["logical"] > col1
+            if not hit:
+                continue
+            try:
+                newval = int(c["index_attr"]) + delta
+            except (TypeError, ValueError):
+                continue
+            if newval < 1:
+                continue
+            rep = _shift_index_in_tag(self.text, c["start"], c["open_end"],
+                                      newval)
+            if rep is not None:
+                out.append(rep)
+        return out
 
     # -- helpers -----------------------------------------------------------
 
+    def _row_cell_sep(self, rowrec: dict) -> str:
+        """Преобладающий межъячеечный разделитель строки (переносы/отступы):
+        вставляемая ячейка встаёт в том же оформлении, а не склеивает
+        соседние строки."""
+        cand = []
+        cells = rowrec["cells"]
+        for i in range(len(cells) - 1):
+            cand.append(self.text[cells[i]["end"]:cells[i + 1]["start"]])
+        if cells:
+            cand.append(self.text[rowrec["open_end"]:cells[0]["start"]])
+        cand = [x for x in cand if x]
+        if not cand:
+            return ""
+        return max(set(cand), key=cand.count)
+
     def _line_insert(self, rowrec: dict, col1: int, frag: str):
-        """Insert `frag` after the cell at logical col1-1 (or at row end)."""
+        """Insert `frag` at logical col1, keeping pretty-printing: ячейка
+        встаёт на свою строку с отступом prevailing, соседи не склеиваются.
+
+        Замена [k, pos): k — конец предыдущей части (ячейки или <Row>),
+        pos — начало следующей ячейки или </Row>. Исходный разделитель
+        потребляется и переизлучается вокруг вставки."""
         if not rowrec["cells"]:
             return (rowrec["open_end"], rowrec["open_end"], frag)
-        pos = rowrec["open_end"]
+        pos = rowrec["close_start"]
         for c in rowrec["cells"]:
             if c["logical"] >= col1:
                 pos = c["start"]
                 break
-        else:
-            pos = rowrec["close_start"]
-        return (pos, pos, frag)
+        prev_end = rowrec["open_end"]
+        for c in rowrec["cells"]:
+            if c["start"] < pos:
+                prev_end = c["end"]
+        k = pos
+        while k > prev_end and self.text[k - 1].isspace():
+            k -= 1
+        follow = self.text[k:pos]
+        lead = self._row_cell_sep(rowrec)
+        return (k, pos, lead + frag + follow)
 
     def _line_delete(self, rowrec: dict, col1: int):
         for c in rowrec["cells"]:
@@ -809,9 +1061,24 @@ def _next_logical(ws: dict) -> int:
     return n + 1
 
 
-def _blank_row(seg: str) -> str:
-    """Empty every <Data>...</Data> value inside a <Row> fragment."""
+def _strip_comments(seg: str) -> str:
+    """Вырезать <Comment...>...</Comment> из <Row>-фрагмента (новая строка
+    не должна наследовать чужие примечания)."""
+    root = _tokenize(seg)
+    spans = sorted(((n.start, n.end) for n in _iter_local(root, "Comment")),
+                   reverse=True)
+    for s, e in spans:
+        seg = seg[:s] + seg[e:]
+    return seg
+
+
+def _blank_row(seg: str, strip_comments: bool = False) -> str:
+    """Empty every <Data>...</Data> value inside a <Row> fragment.
+    strip_comments=True: новая строка не наследует чужие <Comment>."""
     spans = _row_data_spans(seg)
+    if strip_comments:
+        seg = _strip_comments(seg)
+        spans = _row_data_spans(seg)
     out = []
     i = 0
     for (dst, doe, dcs, dend, logical) in spans:
@@ -888,34 +1155,152 @@ def _set_row_values_from_tuples(seg: str, cells: "list") -> str:
 
     Cells are built purely from the payload (same geometry rule as
     Worksheet.insert_row_at: ascending order, explicit ss:Index wherever
-    the position is not sequential). The template row contributes only its
-    <Row ...> open tag: matching payload positions against the template's
-    own (possibly different) sparsity silently dropped cells of sparse
-    rows on history undo/redo - e.g. an update rollback lost values."""
+    the position is not sequential). The template row contributes its
+    <Row ...> open tag AND the inter-cell separators (newlines/indents):
+    при той же геометрии строка остаётся побайтово в том же оформлении,
+    при другой — используется prevailing-отступ шаблона. Пустые ячейки без
+    <Data> сохраняются как <Cell/> (см. _render_cell)."""
     items = sorted(((int(c[0]), str(c[1]),
-                     (c[2] if len(c) > 2 and c[2] else None) or "String",
-                     c[3] if len(c) > 3 and c[3] else None) for c in cells),
+                     c[2] if len(c) > 2 and c[2] else None,
+                     c[3] if len(c) > 3 and c[3] else None,
+                     c[4] if len(c) > 4 and c[4] else None) for c in cells),
                    key=lambda x: x[0])
     if not items:
         return _blank_row(seg)
+    parts = _split_row_cells(seg)
+    if parts is None:
+        parts = {"head": seg[:_open_tag_end(seg)], "cells": [], "lead": "",
+                 "mids": [], "trail": "", "close": "</Row>"}
+    out = [parts["head"]]
+    tpl_logicals = [p for p, _s, _e, _x, _d in parts["cells"]]
+    # extras по (logical, вхождение): дубли ss:Index в ручных файлах —
+    # у каждого своя внутренность
+    _occ = {}
+    tpl_extras = {}
+    tpl_dform = {}
+    for p, _s, _e, x, df in parts["cells"]:
+        k = _occ.get(p, 0)
+        _occ[p] = k + 1
+        tpl_extras[(p, k)] = x
+        tpl_dform[(p, k)] = df
+    exact = ([p for p, _v, _t, _s, _i in items] == tpl_logicals)
+    if not exact:
+        # чужая геометрия (дописка по образцу другой строки): единый
+        # разделитель — самый частый из шаблона (обычно "\n    ")
+        cand = [m for m in parts["mids"] if m] + ([parts["lead"]] if parts["lead"] else [])
+        uni = max(set(cand), key=cand.count) if cand else ""
+        mids = [uni] * max(len(items) - 1, 0)
+        lead, trail = parts["lead"], parts["trail"]
+    else:
+        mids = list(parts["mids"])
+        lead, trail = parts["lead"], parts["trail"]
+    seq = 1
+    _occ2 = {}
+    for i, (pos, value, ttype, style, index) in enumerate(items):
+        if i == 0:
+            out.append(lead)
+        # extras (комментарии и пр.) — только при той же геометрии, иначе
+        # чужое примечание прилипло бы не к той ячейке
+        k = _occ2.get(pos, 0)
+        _occ2[pos] = k + 1
+        ex = tpl_extras.get((pos, k), "") if exact else ""
+        df = tpl_dform.get((pos, k)) if exact else None
+        frag, seq = _render_cell(pos, seq, value, ttype, style, index, ex, df)
+        out.append(frag)
+        if i < len(items) - 1:
+            out.append(mids[i] if i < len(mids) else (mids[-1] if mids else ""))
+        else:
+            out.append(trail)
+    out.append(parts["close"])
+    return "".join(out)
+
+
+def _split_row_cells(seg: str):
+    """Разложить <Row>-фрагмент: head, слоты ячеек, seps.
+
+    Слот: (logical, start, end, extras, data_selfclose), где extras —
+    внутренность ячейки БЕЗ <Data> (комментарии и пр.): пересборка обязана
+    их сохранять, иначе слияние молча уничтожало бы примечания;
+    data_selfclose — был ли пустой <Data/> самозакрытым (vs парный).
+    seps — «клей» между частями:
+    lead (head→первая ячейка), mids (между ячейками), trail (последняя
+    ячейка→</Row>), close (</Row...> хвост)."""
+    root = _tokenize(seg)
+    rownode = None
+    for n in _iter_local(root, "Row"):
+        rownode = n
+        break
+    if rownode is None:
+        return None
+    cellnodes = [c for c in rownode.children if c.local == "Cell"]
+    cells = []
+    seq = 1
+    for c in cellnodes:
+        idx = (c.attrs or {}).get("ss:Index")
+        if idx is not None:
+            try:
+                seq = int(idx)
+            except (TypeError, ValueError):
+                pass
+        extras = ""
+        dform = None
+        d = next((k for k in c.children if k.local == "Data"), None)
+        if d is not None:
+            dform = bool(d.self_close)
+            extras = seg[c.open_end:d.start] + seg[d.end:c.close_start]
+        elif c.close_start > c.open_end:
+            extras = seg[c.open_end:c.close_start]
+        cells.append((seq, c.start, c.end, extras, dform))
+        seq += 1
     oe = _open_tag_end(seg)
     head = seg[:oe]
     tail = seg[oe:]
     cut = tail.rfind("</Row")
-    close = tail[cut:] if cut != -1 else "</Row>"
-    out = [head]
-    seq = 1
-    for pos, value, ttype, style in items:
-        stag = ""
-        if pos != seq:
-            stag += ' ss:Index="%d"' % pos
-        if style:
-            stag += ' ss:StyleID="%s"' % _esc_attr(style)
-        out.append('<Cell%s><Data ss:Type="%s">%s</Data></Cell>'
-                   % (stag, _safe_type(ttype), _esc(value)))
-        seq = pos + 1
-    out.append(close)
-    return "".join(out)
+    if cut != -1:
+        body_end = oe + cut
+        close = tail[cut:]
+    else:
+        body_end = len(seg)
+        close = "</Row>"
+    if cells:
+        lead = seg[oe:cells[0][1]]
+        mids = [seg[cells[i][2]:cells[i + 1][1]] for i in range(len(cells) - 1)]
+        trail = seg[cells[-1][2]:body_end]
+    else:
+        lead, mids, trail = "", [], seg[oe:body_end]
+    return {"head": head, "cells": cells, "lead": lead, "mids": mids,
+            "trail": trail, "close": close}
+
+
+def _render_cell(pos: int, seq: int, value: str, ttype, style,
+                 index=None, extras: str = "",
+                 data_selfclose=None) -> "tuple[str, int]":
+    """Сериализовать одну ячейку + следующий seq.
+
+    index: явный ss:Index как был (строка) — для побайтового восстановления;
+    None — авто (явный только вне последовательности). extras — не-Data
+    дети ячейки (комментарии): сохраняются как были, пустой <Cell/>
+    без extras остаётся самозакрытым. data_selfclose: форма пустого <Data>
+    как в шаблоне (`<Data/>` vs `<Data></Data>`); None — парная."""
+    stag = ""
+    if index is not None:
+        stag += ' ss:Index="%s"' % _esc_attr(str(index))
+    elif pos != seq:
+        stag += ' ss:Index="%d"' % pos
+    if style:
+        stag += ' ss:StyleID="%s"' % _esc_attr(style)
+    if value == "" and not ttype and not extras:
+        # в исходной строке у ячейки не было <Data> (пустой <Cell/>):
+        # сохраняем форму без <Data>
+        frag = '<Cell%s/>' % stag
+    elif value == "" and not ttype:
+        frag = '<Cell%s>%s</Cell>' % (stag, extras)
+    elif value == "" and not extras and data_selfclose:
+        frag = '<Cell%s><Data ss:Type="%s"/></Cell>' % (stag, _safe_type(ttype))
+    else:
+        frag = ('<Cell%s><Data ss:Type="%s">%s</Data>%s</Cell>'
+                % (stag, _safe_type(ttype), _esc(value), extras))
+    return frag, pos + 1
 
 
 def _row_data_spans(seg: str):
@@ -943,12 +1328,15 @@ def _table_fact(ws: dict, attr: str) -> int:
     return max(_next_logical(ws) - 1, 0)
 
 
-def _bump_table(ws: dict, text: str, attr: str, delta: int,
-                set_to: "int | None" = None) -> "tuple | None":
+def _bump_table(ws: dict, text: str, attr: str, delta: int) -> "tuple | None":
     """Return a replacement for the Table start tag updating an expanded count.
 
-    Атрибут не задаётся, если его в теге не было (Excel/движок считают сами);
-    нечисловое значение заменяется фактическим. None = правка не нужна."""
+    Строго дельта к объявленному значению: правки никогда молча не чинят
+    счётчик (это делает только кнопка «исправить файл» /api/fix_file).
+    Изначальный перекос declared-vs-fact сохраняется как есть, файл меняется
+    ровно на действие пользователя. Атрибут не задаётся, если его в теге не
+    было (Excel/движок считают сами); нечисловое значение не трогается.
+    None = правка не нужна."""
     start = ws["table_start"]
     oe = _open_tag_end(text[start:])
     head = text[start:start + oe]
@@ -956,14 +1344,9 @@ def _bump_table(ws: dict, text: str, attr: str, delta: int,
     if cur is None:
         # атрибута не было: не добавляем свой, файл остаётся валидным как есть
         return None
-    if set_to is not None:
-        newval = set_to
-    elif cur.strip().isdigit():
-        newval = max(int(cur) + delta, 0)
-    else:
-        newval = max(_table_fact(ws, attr) + delta, 0)
-    if newval < 0:
-        newval = 0
+    if not cur.strip().lstrip("+-").isdigit():
+        return None
+    newval = max(int(cur) + delta, 0)
     new_head = _set_attr(head, "ss:" + attr, str(newval))
     return (start, start + oe, new_head)
 
@@ -980,6 +1363,32 @@ def _max_logical_excluding(ws: dict, col1: int) -> int:
                 continue
             n = max(n, c["logical"])
     return n
+
+
+def _shift_index_in_tag(text: str, tag_start: int, tag_open_end: int,
+                        newval: int) -> "tuple | None":
+    """Замена значения ss:Index внутри уже найденного start-тега <Cell ...>.
+    Возвращает (num_start, num_end, str) или None."""
+    seg = text[tag_start:tag_open_end]
+    p = seg.find("ss:Index")
+    if p == -1:
+        return None
+    q = p + len("ss:Index")
+    while q < len(seg) and seg[q].isspace():
+        q += 1
+    if q >= len(seg) or seg[q] != "=":
+        return None
+    q += 1
+    while q < len(seg) and seg[q].isspace():
+        q += 1
+    if q >= len(seg) or seg[q] not in "\"'":
+        return None
+    quote = seg[q]
+    s = q + 1
+    e = seg.find(quote, s)
+    if e == -1:
+        return None
+    return (tag_start + s, tag_start + e, str(newval))
 
 
 def _set_attr(seg: str, name: str, value: str) -> str:
