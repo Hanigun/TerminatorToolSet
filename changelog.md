@@ -13,6 +13,8 @@
 - Improved close-button styling and reorganized **Recent**.
 - Fixed first-launch layout issues after updates.
 - Added unsaved-changes protection before restarting updates.
+- Fixed crash on PCs without a compatible .NET host (`Failed to resolve Python.Runtime.Loader.Initialize`): a dead native window now falls back to browser mode instead of `Failed to execute script 'main'`.
+- Pinned the .NET bridge to the in-box Framework (`PYTHONNET_RUNTIME=netfx` in `main.py` + a pre-flight `clr` check in `run_pywebview`): no external .NET Desktop Runtime is required anymore.
 
 ### Comparison
 

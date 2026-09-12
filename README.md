@@ -1,69 +1,58 @@
-# Terminator Sheet
+Terminator ToolSet
+Modding tool for Terminator: Dark Fate — Defiance
 
-Deluxe SpreadsheetML-редактор для мода **TERMINATOR OVERHAUL ASSETS** (Terminator: Dark Fate - Defiance).
-Просмотр и редактирование `basis/scripts/species/*.xml`, понимает структуру проекта и DLC-оверлеи.
 
-## Возможности
+Please leave your suggestions and bug reports on the official Discord, in the Modding Threads - Terminator ToolSet (Modding Tool) section
+Join Discord
 
-- Чтение/запись SpreadsheetML с **минимально-инвазивной перезаписью**: меняется только текст внутри `<Data>`, вся прочая структура (атрибуты, `<Comment>`, `ss:Index`, пространства имён `ss:`/`x:`/`o:`/`html:`) сохраняется байт-в-байт — файл остаётся 100% совместимым с игровым движком.
-- **Frameless-окно** с кастомной шапкой: кнопки окна, компактные «Документ/Проект», перетаскивание за шапку.
-- **Вкладки-карточки** в стиле редактора: иконка типа файла, заголовок + подзаголовок (путь), бейдж «не сохранено», закреплённая вкладка приветствия, средний клик закрывает.
-- **Дерево проекта**: оверлеи (Компания `basis\scripts\species` / DLC Resistance / DLC Legion) → сворачиваемые категории → файлы, поиск по дереву, компактный рейл при сворачивании.
-- Таблица со sticky-колонкой, **виртуализацией строк**, «+» для добавления строки/колонки прямо в таблице и **контекстным меню** (копировать строку/sysname, дублировать, удалить; удалить колонку в шапке).
-- **Поиск и замена (Ctrl+F / Ctrl+H)**: подсветка совпадений, счётчик, F3/Shift+F3, замена по одному и «Все».
-- **Дружеские имена юнитов**: под sysname показывается имя из `localization/<lang>/.../locale/*.xml` — `Танк "Абрамс" (Fnd_abrams)`.
-- **Сравнение двух файлов по любой колонке** (зелёный/красный) и перенос строк/колонок — основной механизм интеграции новых юнитов/улучшений (NewUnits).
-- **Межфайловые ссылки**: ячейка, равная sysname из другого файла проекта → «↗» открывает файл и прокручивает к строке (индекс строится в фоне).
-- Подсказки по колонкам из `<Comment>` шапки.
-- Бэкапы + история правок в SQLite (откат к любой версии) — перед каждой записью полная копия файла.
-- Автосохранение (галочка), тёмная/светлая тема, RU/EN, JSON-конфиг рядом с программой; список горячих клавиш в настройках.
-- **PySide6/QtWebEngine** frameless-окно (тот же HTML/CSS/JS, что и в браузере) + сборка в один `.exe` (иконка из `assets/icons/app_icon.ico`).
-- Фоновый индекс связей и LRU-кэш сессий (незакрытые правки не вытесняются).
 
-## Запуск из исходников (dev, браузер)
+Edit units and game data as tables instead of raw XML. Compare files, merge new units, edit missions and Uprising maps, unpack .pak archives and manage mods.
 
-```
-python main.py --browser
-```
+Safe to use: stock game files are read-only by default — every edit is backed up with history and rollback.
 
-## Запуск окна из исходников
 
-```
-python main.py
-```
+⚠ IMPORTANT: always back up your files before using this tool.
+The tool is under active development — the author takes no responsibility for any damage.
+That said, not a single file has been damaged during the entire development.
 
-Стартует нативный frameless-окно PySide6/QtWebEngine (встроенный Chromium, тот же вид что в браузере).
 
-## Сборка .exe
+✦ Features ✦
 
-```
-build.bat
-```
 
-Результат: `dist\TerminatorSheetQt.exe` (PySide6 + QtWebEngine, onefile, windowed). Конфиг (`config.json`), БД (`terminator_sheet.db`) и журнал (`boot.log`) создаются рядом с exe.
+Spreadsheet editor — safe save, game format preserved
+Project / Game / Mod browser — search, filters, drag & drop
+Compare & Merge — diff two files by any column, copy rows and columns between them
+Cross-file links — sysname references jump to the target file, plus readable unit names from localization
+Mission (SWT) editor — triggers and actions with command dictionary
+Campaign editor — campaign shop editing tool
+Uprising tools — map editor, prices and unit limits
+.pak unpacker — ordered extraction of base game and DLCs, per-pack skip
+Mod tools — create mods, copy files into them, GameAssets download, DDS to WEBP icons auto-convert
+Safety net — backups before every write, SQLite history, Undo / Redo, autosave
+Service — auto-update, single instance, tray and browser modes
 
-## Структура
+⬇ Installation ⬇
 
-```
-app.py            Flask-бэкенд (JSON API, фоновый индекс, LRU-сессии)
-main.py           frameless-окно PySide6 (QtWebEngine) / браузер + сборка
-spreadsheet_ml.py ядро: SpreadsheetML parse/serialize (lxml, минимально-инвазивная запись) + стриминговый iterparse
-xmlgrid.py        сессия редактирования (grid, dirty-флаг, правки)
-project.py        реестр файлов мода: оверлеи, категории, дружеские имена
-comparator.py     diff по колонке + перенос строк/колонок
-links.py          межфайловые ссылки
-database.py       SQLite бэкапы + история
-config.py         JSON-конфиг
-i18n.py + locales RU/EN
-templates/, static/  фронтенд (тёмная тема, вкладки-карточки, find&replace)
-assets/icons/     иконка приложения (ico/png) + генератор make_icon.py
-TerminatorSheet.spec  PyInstaller
-test_roundtrip.py тест round-trip структуры
-test_api.py       интеграционный тест API
-```
 
-## Замечание по Python
+Download the latest Terminator_ToolSet zip from the Files tab.
+Extract it WHOLE into an empty folder 
+Check the layout — next to Terminator ToolSet.exe you must have:
 
-# Стек (Flask + **PySide6/QtWebEngine** + lxml + PyInstaller) проверен на **Python 3.14**. Если QtWebEngine не поднимет окно, `main.py` автоматически переключится на обычный браузер (`--browser` для явного dev-режима).
 
-# TerminatorToolSet
+ToolSetLibs/
+assets/
+locales/
+Run Terminator ToolSet.exe and open your mod folder — or just drop files into the window.
+
+⚙ Requirements
+
+
+Windows 10 / 11, 64-bit
+No external .NET needed — uses built-in Framework 4.8 + WebView2
+Do not run from OneDrive or a network folder
+If antivirus eats files from ToolSetLibs, restore the folder and add an exclusion
+
+Credits
+Terminator Dark fate Defiance team.
+Game by Slitherine / Cats Who Play.
+Fan modding tool, not affiliated with the publisher.
