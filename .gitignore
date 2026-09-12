@@ -58,6 +58,7 @@ GATES.md
 tests/
 TestProject.json
 scripts/
+run_dev.bat
 
 # Кэш конвертера DDS->WebP: генерируется локально по слоям
 # (BaseGame/проект/мод), в репозиторий не входит
