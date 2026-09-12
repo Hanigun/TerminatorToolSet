@@ -7,6 +7,21 @@ venv/
 
 # generated build artifact (compiler/embed_assets.py, п.6.1 ТЗ)
 terminator_toolset/_embedded_data.py
+# Возвраты для индексатора codebase-memory: весь проект должен быть
+# проиндексирован, поиск внутри файлов ведётся через search_code, а не grep.
+# Бинарники (*.db, 7z/, exe) остаются исключёнными — в них нет индексируемого содержимого.
+!terminator_toolset/_embedded_data.py
+!spawns.json
+!TERMINATOR_OVERHAUL.json
+!list.txt
+!boot.log
+!config.json
+!_roundtrip_out.xml
+!configs/
+!Logs/
+!UprisingCustomPresets/
+!UprisingCustomRandomizer/
+!uprising_backups/
 
 # Инструменты проекта (индексация/состояние агентов)
 .codegraph/
@@ -32,12 +47,17 @@ _roundtrip_out.xml
 7z/
 # исключение: ассеты карты Uprising — версионируются shields, difficulty
 # и текстура карты (остальное дерево UprisingMap/ локально: CustomImages и т.п.)
-!assets/UprisingMap/
-assets/UprisingMap/*
-!assets/UprisingMap/shields/
-assets/UprisingMap/shields/*
-!assets/UprisingMap/difficulty.webp
-!assets/UprisingMap/global_map.webp
+# shipped map assets are part of the program: tracked (only the
+# runtime-generated CustomImages cache above stays ignored)
+# --- not part of the program: dev docs, plans, gates, tests ---
+ADR-001-project-peculiarities.md
+GAMEASSETS_PLAN.md
+UPRISING_RANDOMIZER_V2_PLAN.md
+NEXUS_DESCRIPTION.txt
+GATES.md
+tests/
+TestProject.json
+scripts/
 
 # Кэш конвертера DDS->WebP: генерируется локально по слоям
 # (BaseGame/проект/мод), в репозиторий не входит
