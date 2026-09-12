@@ -605,9 +605,11 @@ async function openUprising(path, opts) {
   // справочник sysname (фон, с ленивой повторной попыткой из форм ввода)
   uprLoadSysnames();
   // имена юнитов — приоритет источника ЭТОЙ карты (фон; корни уже в кэше
-  // бэкенда после первого запроса — повтор дешёвый, только переслияние)
+  // бэкенда после первого запроса — повтор дешёвый, только переслияние).
+  // Без открытого проекта state.project.root пуст — тогда корень берём
+  // из переключателя источника карты, иначе на карте нет имён юнитов.
   try {
-    const pr = (state.project && state.project.root) || "";
+    const pr = (state.project && state.project.root) || uprSrcRoot() || "";
     if (pr && typeof loadDisplayNames === "function")
       loadDisplayNames(pr, state.uprising.path);
   } catch (e) { /* имена не критичны */ }

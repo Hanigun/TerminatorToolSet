@@ -209,9 +209,11 @@ async function openCampaign(path, opts) {
     .then(jh => { if (jh && jh.ok) setUndoRedoButtons(!!jh.can_undo, !!jh.can_redo); })
     .catch(() => {});
   // имена юнитов — приоритет источника ЭТОЙ карты (фон; корни уже в кэше
-  // бэкенда после первого запроса — повтор дешёвый, только переслияние)
+  // бэкенда после первого запроса — повтор дешёвый, только переслияние).
+  // Без открытого проекта state.project.root пуст — тогда корень берём
+  // из переключателя источника карты, иначе на карте нет имён юнитов.
   try {
-    const pr = (state.project && state.project.root) || "";
+    const pr = (state.project && state.project.root) || cmpSrcRoot() || "";
     if (pr && typeof loadDisplayNames === "function")
       loadDisplayNames(pr, state.campaign.path);
   } catch (e) { /* имена не критичны */ }
