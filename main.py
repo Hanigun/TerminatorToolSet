@@ -32,6 +32,19 @@ import webbrowser
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# Nuitka-шим (эксперимент compiler_nuitka/build_nuitka.bat): Nuitka не
+# выставляет sys.frozen/sys._MEIPASS, а весь код ищет datas через них.
+# В Nuitka-сборке (__compiled__ есть только в скомпилированном коде)
+# притворяемся frozen: _MEIPASS = каталог exe (standalone раскладывает
+# datas рядом с exe). Строго ДО первого импорта пакета —
+# terminator_toolset/__init__ уже читает pyproject через _MEIPASS.
+# В dev (python main.py) и под PyInstaller (_MEIPASS уже есть) — no-op.
+if "__compiled__" in globals():
+    if not getattr(sys, "frozen", False):
+        sys.frozen = True
+    if not getattr(sys, "_MEIPASS", None):
+        sys._MEIPASS = os.path.dirname(os.path.abspath(sys.executable))
+
 from terminator_toolset import __version__ as VERSION  # noqa: E402
 
 # -- refactored modules (window/tray/webview live in infrastructure.window) ---
