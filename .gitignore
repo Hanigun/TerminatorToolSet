@@ -44,7 +44,6 @@ config.json
 _roundtrip_out.xml
 
 # Внешние утилиты и рабочие заметки (не входят в проект)
-7z/
 # исключение: ассеты карты Uprising — версионируются shields, difficulty
 # и текстура карты (остальное дерево UprisingMap/ локально: CustomImages и т.п.)
 # shipped map assets are part of the program: tracked (only the
