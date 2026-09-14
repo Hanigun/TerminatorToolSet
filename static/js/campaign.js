@@ -199,7 +199,7 @@ async function openCampaign(path, opts) {
   $("#cmp-file").title = path;
   $("#cmp-wrap").hidden = false;
   $("#cmp-nofile").hidden = true;
-  ["#cmp-reload", "#cmp-analyze", "#cmp-open-grid", "#cmp-fs", "#cmp-resizer"]
+  ["#cmp-reload", "#cmp-analyze", "#cmp-open-grid", "#cmp-open-uprising", "#cmp-fs", "#cmp-resizer"]
     .forEach(s => { $(s).hidden = false; });
   const sw = parseInt(localStorage.getItem("tsh_cmp_panel_w") || "0", 10);
   if (sw >= 280 && sw <= 900) $("#cmp-main").style.flex = "0 0 " + sw + "px";
@@ -393,7 +393,7 @@ function cmpPaintNofile() {
   }
   const fp = $("#cmp-file");
   if (fp) { fp.textContent = t("cpg_sub") || ""; fp.title = ""; }
-  ["#cmp-reload", "#cmp-analyze", "#cmp-open-grid", "#cmp-fs", "#cmp-resizer"]
+  ["#cmp-reload", "#cmp-analyze", "#cmp-open-grid", "#cmp-open-uprising", "#cmp-fs", "#cmp-resizer"]
     .forEach(s => { const el = $(s); if (el) el.hidden = true; });
   renderCampaign();
 }
@@ -1958,6 +1958,8 @@ function setupCampaign() {
     else renderCampaign();
   };
   $("#cmp-open-grid").onclick = () => { if (state.campaign.path) openFile(state.campaign.path); };
+  // кросс-переход: карта наград Uprising ищется сама под текущим источником
+  $("#cmp-open-uprising").onclick = () => { if (typeof openUprising === "function") openUprising(); };
   $("#cmp-analyze").onclick = () => cmpAnalyze();
   // сегмент Проект|Игра|Мод в шапке — тот же глобальный переключатель,
   // что на карте (клик по серой — в настройки на строку пути)

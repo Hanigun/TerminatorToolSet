@@ -1560,9 +1560,9 @@ async function handleExternalPaths(paths, dirs) {
   // папка = открыть как проект; файлы + папка: сначала проект, потом файлы
   if (dirs.length) await loadProject(dirs[0]);
   for (const p of openables) {
-    // shop_presets.xml с рабочего стола — карта или таблица решает
-    // содержимое (openShopPresets → sniff), иначе DLC-файл уходил только
-    // в таблицу в обход диспетча дабл-клика в древе
+    // shop_presets.xml с рабочего стола — карта Uprising или кампания
+    // решает содержимое (openShopPresets → sniff), иначе DLC-файл уходил
+    // только в таблицу в обход диспетча дабл-клика в древе
     const bn = String(p || "").split(/[\\/]/).pop() || "";
     if (/^shop_presets\.xml$/i.test(bn)) await openShopPresets(p);
     else await openFile(p);

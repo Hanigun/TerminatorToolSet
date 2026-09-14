@@ -469,7 +469,7 @@ function uprPaintNofile() {
   // и рабочие кнопки — фантомная карта)
   const fp = $("#upr-file");
   if (fp) { fp.textContent = t("upr_sub") || ""; fp.title = ""; }
-  ["#upr-reload", "#upr-analyze", "#upr-open-grid", "#upr-fs", "#upr-resizer"]
+  ["#upr-reload", "#upr-analyze", "#upr-open-grid", "#upr-open-campaign", "#upr-fs", "#upr-resizer"]
     .forEach(s => { const el = $(s); if (el) el.hidden = true; });
 }
 
@@ -591,7 +591,7 @@ async function openUprising(path, opts) {
   $("#upr-panel-toggle").hidden = !UPR_MODAL_ENABLED;
   uprSetPanel(state.uprising.panel);
   // шестерёнка цветов живёт в оверлее карты (uprRndOverlay), не в шапке
-  ["#upr-reload", "#upr-analyze", "#upr-open-grid", "#upr-open-rnd", "#upr-fs",
+  ["#upr-reload", "#upr-analyze", "#upr-open-grid", "#upr-open-campaign", "#upr-open-rnd", "#upr-fs",
    "#upr-src", "#upr-resizer"]
     .forEach(s => { $(s).hidden = false; });
   // сохранённая ширина боковой панели
@@ -3316,6 +3316,8 @@ function setupUprising() {
     uprLoad().then(() => { uprReloadImages(); uprPreloadShields(); }).catch(() => {});
   };
   $("#upr-open-grid").onclick = () => { if (state.uprising.path) openFile(state.uprising.path); };
+  // кросс-переход: редактор кампании ищет свой файл сам под текущим источником
+  $("#upr-open-campaign").onclick = () => { if (typeof openCampaign === "function") openCampaign(); };
   // рандомайзер — отдельная страница (кнопка в шапке слева от Проект|Игра|Мод)
   $("#upr-open-rnd").onclick = () => openUprisingRnd();
   $("#upr-analyze").onclick = () => uprAnalyze();
