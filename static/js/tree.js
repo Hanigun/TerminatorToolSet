@@ -547,19 +547,28 @@ function buildTreeDirRow(dir, depth, path, expanded) {
   return row;
 }
 
-// дабл-клик по shop_presets.xml: карта Uprising или редактор кампании —
-// решает содержимое (бэкенд /api/uprising_sniff считает sysname
-// sector_N_reward), путь не участвует: секторный файл откроется картой
-// из любого места, базовый — редактором кампании из любой dlc-папки.
-// Ошибка sniff — редактор кампании (сырая таблица — через «Открыть
-// в таблице» из шапки кампании).
+// дабл-клик по shop_presets.xml: работают ОБА сигнала — проверка
+// содержимого (счётчики sector/shop из /api/uprising_sniff) и приоритет
+// пути (очевидный dlc-путь → карта, остальное → кампания). Путь сам
+// ничего не решает: чисто секторный откроется картой из любого места
+// (хоть с рабочего стола), чисто магазинный — кампанией из любой
+// dlc-папки. Смешанный файл (есть и те, и другие строки) и ошибка чтения —
+// решает приоритет пути. Сырая таблица — через «Открыть в таблице» из шапки.
 async function openShopPresets(path) {
+  const dlcPath = /(^|[\\/])dlc([\\/]|$)/i.test(String(path || ""));
+  let toMap = dlcPath; // приоритет пути — стартовое значение
   try {
     const r = await api("/api/uprising_sniff", { method: "POST",
       body: JSON.stringify({ path }) });
     const j = await r.json();
-    if (j && j.ok && j.uprising) { openUprising(path); return; }
-  } catch (e) { /* ниже — кампания как раньше таблицей */ }
+    if (j && j.ok) {
+      const sector = +j.sector || 0, shop = +j.shop || 0;
+      if (j.uprising && !shop) toMap = true; // чисто секторный → карта
+      else if (!sector) toMap = false; // секторов нет → кампания
+      // смешанный: остаётся приоритет пути
+    }
+  } catch (e) { /* ниже — приоритет пути */ }
+  if (toMap) { openUprising(path); return; }
   if (typeof openCampaign === "function") openCampaign(path);
   else openFile(path);
 }
@@ -601,10 +610,9 @@ function buildTreeFileRow(fname, depth, path) {
     if (state.treeSel && state.treeSel.size) clearTreeSel();
     markActiveTreeFile(path);
     if (/\.swt$/i.test(fname)) openSwt(path);
-    // shop_presets.xml — карта Uprising или редактор кампании решает
-    // СОДЕРЖИМОЕ (бэкенд sniff по sysname sector_N_reward), а не путь:
-    // DLC-файл с рабочего стола, лежащий где угодно, откроется картой;
-    // базовый (магазины кампании) из любой dlc-папки — кампанией
+    // shop_presets.xml — карта Uprising или редактор кампании: чистое
+    // содержимое решает само (секторы → карта, магазины → кампания),
+    // смешанный файл — приоритет пути (dlc → карта, база → кампания)
     else if (/^shop_presets\.xml$/i.test(fname)) openShopPresets(path);
     else if (TREE_EDITABLE_EXTS.has(fileExt(fname))) openFile(path);
     else toast(t("tree_not_editable") || "Этот формат пока не открывается в редакторе", "");

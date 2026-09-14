@@ -25,10 +25,13 @@ def register_uprising(app, ctx):
     def api_uprising_sniff():
         """Контентный детект для дабл-клика в древе: этот shop_presets.xml —
         файл карты (секторы -> открыть картой) или обычная таблица?
-        Файл с рабочего стола, лежащий где угодно, опознаётся так же."""
+        Файл с рабочего стола, лежащий где угодно, опознаётся так же.
+        Кроме флага uprising отдаёт счётчики sector/shop/named: чисто
+        секторный открывает карта, чисто магазинный — кампания, смешанный
+        (есть и те, и другие) решает приоритет пути."""
         data = request.get_json(silent=True) or {}
         path = store.normal(data.get("path", ""))
-        return jsonify({"ok": True, "uprising": upr.is_uprising_shop(path)})
+        return jsonify({"ok": True, **upr.sniff_shop(path)})
 
     @app.route("/api/uprising_sysnames", methods=["POST"])
     def api_uprising_sysnames():

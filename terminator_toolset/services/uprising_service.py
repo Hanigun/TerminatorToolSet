@@ -87,6 +87,10 @@ _UPR_SECTOR_RE = re.compile(r"^sector_\d+_reward")
 # Карта — если сектор-строк не меньше минимума И не меньше половины
 # именованных строк (DLC: 39/39; базовый файл: 0/27 -> таблица).
 _UPR_SECTOR_MIN = 2
+# Маркер магазинных строк кампании (вторая сторона смешанного файла):
+# test_shop_* — тестовые, vega_*/tortuga_* — поселения, resistance_dlc_shop*
+# — демо. Тот же набор, что фильтрует cmpPresets в campaign.js.
+_UPR_SHOP_RE = re.compile(r"^(test_shop|vega_|tortuga_|resistance_dlc_shop)")
 
 
 # -- uprising -----------------------------------------------------------------
@@ -2988,19 +2992,17 @@ class Uprising:
                 return {"ok": False, "error": str(e)}
         return {"ok": True, "restored": restored, "cfg_removed": cfg_removed}
 
-    def is_uprising_shop(self, path):
-        """Контентный детект файла карты: sysname строк — награды секторов
-        (sector_N_reward[_variant]). Путь НЕ участвует: DLC-файл с рабочего
-        стола, лежащий в корне проекта, опознаётся так же, как из
-        dlc/Resistance. Базовый shop_presets (магазины кампании test_shop_*,
-        vega_*, tortuga_*...) сектор-строк не имеет -> False (таблица)."""
+    def sniff_shop_counts(self, path):
+        """Счётчики строк shop_presets.xml за один проход: sector (награды
+        секторов sector_N_reward), shop (магазины кампании), named (всего
+        именованных). Ошибка чтения — нули."""
+        sector = shop = named = 0
         try:
             with open(path, "r", encoding="utf-8",
                        errors="replace") as fh:
                 text = fh.read(4 << 20)
         except (OSError, ValueError):
-            return False
-        sector = named = 0
+            return {"sector": 0, "shop": 0, "named": 0}
         for i, m in enumerate(_SPECIES_ROW_RE.finditer(text)):
             if i == 0:
                 continue  # header
@@ -3013,7 +3015,26 @@ class Uprising:
             named += 1
             if _UPR_SECTOR_RE.match(name):
                 sector += 1
-        return sector >= _UPR_SECTOR_MIN and sector * 2 >= named
+            elif _UPR_SHOP_RE.match(name):
+                shop += 1
+        return {"sector": sector, "shop": shop, "named": named}
+
+    def sniff_shop(self, path):
+        """Счётчики + legacy-флаг uprising (правило карты не меняется).
+        Нужно дабл-клику: чисто секторный -> карта, чисто магазинный ->
+        кампания, смешанный (есть и те, и другие) -> решает путь."""
+        c = self.sniff_shop_counts(path)
+        c["uprising"] = (c["sector"] >= _UPR_SECTOR_MIN
+                         and c["sector"] * 2 >= c["named"])
+        return c
+
+    def is_uprising_shop(self, path):
+        """Контентный детект файла карты: sysname строк — награды секторов
+        (sector_N_reward[_variant]). Путь НЕ участвует: DLC-файл с рабочего
+        стола, лежащий в корне проекта, опознаётся так же, как из
+        dlc/Resistance. Базовый shop_presets (магазины кампании test_shop_*,
+        vega_*, tortuga_*...) сектор-строк не имеет -> False (таблица)."""
+        return self.sniff_shop(path)["uprising"]
 
     def find_shop(self, root):
         """Найти файл карты по СОДЕРЖИМОМУ: первый shop_presets.xml
