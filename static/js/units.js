@@ -27,6 +27,26 @@ var UNT_ALL_EXPAND_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="
 var UNT_ALL_COLLAPSE_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 11l6-6 6 6M6 19l6-6 6-6"/></svg>';
 // Иконка кнопки разворота длинного значения в многострочное поле.
 var UNT_EXPAND_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>';
+// Иконка кнопки предпросмотра картинки поля (колонки image/pic).
+var UNT_EYE_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+// Кнопка поля в стиле разворота: та же геометрия и то же место (справа
+// от поля). title — ключ локали; новые кнопки по запросу — той же
+// фабрикой, в тот же ряд после поля.
+function untFieldBtn(svg, key) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "unt-kv-expand";
+  const title = t(key);
+  b.title = title;
+  b.setAttribute("aria-label", title);
+  b.innerHTML = svg;
+  return b;
+}
+// Колонка картинки: имя содержит image или pic (hover_image_*,
+// tech_pic, status_pic, garrison_pic).
+function untIsPicCol(c) {
+  return /(image|pic)/i.test(String(c || ""));
+}
 // Тон слоя по имени DLC (подстрока, регистр не важен — папки называются
 // вольно: Legion, "We are legion", Resistance, Evolution…): legion —
 // красный, resistance — тёмно-оранжевый, evolution — фиолетовый (как SWT);
@@ -1014,6 +1034,14 @@ async function untPaintTypeDetail(box) {
     };
     wireField(inp);
     r.appendChild(k);
+    // Перечисление через запятую — чипами вместо поля ввода: каждый элемент
+    // свой чип, в файл уходит строка с запятой (разделитель исходного
+    // значения). Комбо unit_set чипами не трогаем.
+    if (String(c) !== "unit_set" && s.indexOf(",") !== -1) {
+      untChipsField(r, i, s, commitNow);
+      kv.appendChild(r);
+      return;
+    }
     // Класс техники — то же комбо, что в кампании и таблице, но в своём
     // держателе: makeUnitSetCombo чистит переданный контейнер
     // (textContent="") — раньше туда уходила вся строка вместе с именем
@@ -1028,20 +1056,15 @@ async function untPaintTypeDetail(box) {
       catch (e) { /* обычное поле без комбо */ }
     } else {
       r.appendChild(inp);
-      // Длинные значения (перечисления): в строке — компактный однострочник,
+      // Длинные одиночные значения: в строке — компактный однострочник,
       // кнопка разворачивает многострочное поле для удобной правки.
       if (s.length > 90) {
-        const tgl = document.createElement("button");
-        tgl.type = "button";
-        tgl.className = "unt-kv-expand";
-        tgl.title = t("unt_expand") || "Развернуть поле";
-        tgl.setAttribute("aria-label", tgl.title);
-        tgl.innerHTML = UNT_EXPAND_SVG;
+        const tgl = untFieldBtn(UNT_EXPAND_SVG, "unt_expand");
         tgl.onclick = e => {
           e.stopPropagation();
           if (longTa) {
             collapseLong();
-            tgl.title = t("unt_expand") || "Развернуть поле";
+            tgl.title = t("unt_expand");
             try { inp.focus({ preventScroll: true }); } catch (e2) {}
             return;
           }
@@ -1060,16 +1083,225 @@ async function untPaintTypeDetail(box) {
           longTa.addEventListener("input", grow);
           r.replaceChild(longTa, inp);
           r.classList.add("unt-kv-open");
-          tgl.title = t("unt_collapse") || "Свернуть поле";
+          tgl.title = t("unt_collapse");
           grow();
           try { longTa.focus(); } catch (e2) {}
         };
         r.appendChild(tgl);
       }
+      // Колонки картинок (image/pic): кнопка предпросмотра — той же фабрикой
+      // кнопок, в том же ряду после поля.
+      if (untIsPicCol(c)) {
+        const pv = untFieldBtn(UNT_EYE_SVG, "unt_preview");
+        pv.classList.add("unt-kv-preview");
+        pv.onclick = e => {
+          e.stopPropagation();
+          untPicPreview(pv, untPicUrl(cat, sys, c, inp.value));
+        };
+        r.appendChild(pv);
+      }
     }
     kv.appendChild(r);
   });
   box.appendChild(kv);
+}
+
+// Перечисление через запятую — чипами: каждый элемент свой чип с минимальным
+// зазором, без запятых и без аутлайна. В файл уходит строка с запятой
+// (разделитель — как в исходном значении: ", " или ","): commit пишет
+// склейку через скрытое поле штатным untDetailCommit.
+// Клик по чипу — инлайн-правка (Enter/мимо — сохранить, пустое — убрать,
+// Esc — отмена); × — убрать; + — добавить (Enter — сохранить и следующее).
+function untChipsField(r, i, s, commit) {
+  const sep = s.indexOf(", ") !== -1 ? ", " : ",";
+  let items = s.split(",").map(x => x.trim()).filter(x => x !== "");
+  const hidden = document.createElement("input");
+  hidden.type = "hidden";
+  hidden.dataset.col = String(i);
+  hidden.value = s;
+  r.appendChild(hidden);
+  const box = document.createElement("div");
+  box.className = "unt-chips";
+  r.appendChild(box);
+  const save = () => {
+    hidden.value = items.join(sep);
+    commit(hidden);
+  };
+  const paint = () => {
+    box.innerHTML = "";
+    items.forEach((it, idx) => {
+      const chip = document.createElement("span");
+      chip.className = "unt-chip";
+      const tx = document.createElement("span");
+      tx.className = "unt-chip-txt";
+      tx.textContent = it;
+      tx.onclick = () => editChip(chip, idx, it);
+      const x = document.createElement("button");
+      x.type = "button";
+      x.className = "unt-chip-x";
+      x.setAttribute("aria-label", "×");
+      x.textContent = "×";
+      x.onclick = () => {
+        items.splice(idx, 1);
+        save();
+        paint();
+      };
+      chip.append(tx, x);
+      box.appendChild(chip);
+    });
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "unt-chip-add";
+    add.textContent = "+";
+    add.onclick = () => addChip();
+    box.appendChild(add);
+  };
+  const editChip = (chip, idx, it) => {
+    const ed = document.createElement("input");
+    ed.className = "unt-chip-edit";
+    ed.type = "text";
+    ed.spellcheck = false;
+    ed.autocomplete = "off";
+    ed.value = it;
+    let done = false;
+    const fin = ok => {
+      if (done) return;
+      done = true;
+      const v = ed.value.trim();
+      if (ok) {
+        if (v === "") items.splice(idx, 1);
+        else if (v !== it) items[idx] = v;
+        else { paint(); return; }
+        save();
+      }
+      paint();
+    };
+    ed.addEventListener("blur", () => fin(true));
+    ed.addEventListener("keydown", ev => {
+      if (ev.key === "Enter") { ev.preventDefault(); fin(true); }
+      else if (ev.key === "Escape") { ev.preventDefault(); fin(false); }
+    });
+    try { chip.replaceWith(ed); } catch (e) { return; }
+    try { ed.focus(); ed.select(); } catch (e2) {}
+  };
+  const addChip = () => {
+    const ed = document.createElement("input");
+    ed.className = "unt-chip-edit";
+    ed.type = "text";
+    ed.spellcheck = false;
+    ed.autocomplete = "off";
+    ed.value = "";
+    let done = false;
+    const fin = ok => {
+      if (done) return "";
+      done = true;
+      const v = ed.value.trim();
+      if (ok && v !== "") {
+        items.push(v);
+        save();
+      }
+      paint();
+      return (ok && v !== "") ? v : "";
+    };
+    ed.addEventListener("blur", () => fin(true));
+    ed.addEventListener("keydown", ev => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        if (fin(true)) addChip();
+      }
+      else if (ev.key === "Escape") { ev.preventDefault(); fin(false); }
+    });
+    const anchor = box.querySelector(".unt-chip-add");
+    if (anchor) box.insertBefore(ed, anchor);
+    else box.appendChild(ed);
+    try { ed.focus(); } catch (e2) {}
+  };
+  paint();
+}
+
+// URL превью картинки поля: сырой ключ колонки резолвит /api/units_pic
+// (.dds — готовым конвертером в webp, нет файла — плейсхолдер категории).
+function untPicUrl(cat, sys, col, value) {
+  const p = new URLSearchParams({
+    root: untSrcRoot() || "",
+    cat: cat || "",
+    sys: sys || "",
+    col: String(col || ""),
+    value: value || "",
+  });
+  return "/api/units_pic?" + p.toString();
+}
+
+let untPicPopEl = null;
+let untPicPopHooked = false;
+// Один глобальный хук: клик мимо, скролл, ресайз и Esc закрывают превью
+// (попап живёт в body — скролл тела его не режет, только закрывает).
+function untPicHook() {
+  if (untPicPopHooked) return;
+  untPicPopHooked = true;
+  document.addEventListener("mousedown", e => {
+    try {
+      if (e.target && e.target.closest &&
+          e.target.closest(".unt-pic-pop, .unt-kv-preview")) return;
+      untPicClose();
+    } catch (e2) { /* noop */ }
+  });
+  document.addEventListener("scroll", untPicClose, true);
+  window.addEventListener("resize", untPicClose);
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") untPicClose();
+  });
+}
+function untPicClose() {
+  if (!untPicPopEl) return;
+  try { untPicPopEl.remove(); } catch (e) {}
+  untPicPopEl = null;
+}
+// Вписать окно в экран в зоне кнопки: под ней, не влезло — над ней.
+function untPicFit(pop, anchor) {
+  if (!pop || !anchor || !anchor.getBoundingClientRect) return;
+  const r = anchor.getBoundingClientRect();
+  const w = pop.offsetWidth || 120;
+  const h = pop.offsetHeight || 120;
+  const x = Math.max(4, Math.min(r.left, window.innerWidth - w - 4));
+  let y = r.bottom + 6;
+  if (y + h > window.innerHeight - 4) {
+    y = r.top - h - 6;
+    if (y < 4) y = Math.max(4, window.innerHeight - h - 4);
+  }
+  pop.style.left = x + "px";
+  pop.style.top = y + "px";
+}
+// Превью картинки поля: маленькое окно по размеру самой картинки в зоне
+// кнопки; повторный клик по кнопке — закрыть.
+function untPicPreview(btn, url) {
+  untPicHook();
+  if (untPicPopEl && untPicPopEl.dataset.url === url) {
+    untPicClose();
+    return;
+  }
+  untPicClose();
+  const pop = document.createElement("div");
+  pop.className = "unt-pic-pop";
+  pop.dataset.url = url;
+  const spin = document.createElement("div");
+  spin.className = "unt-pic-spin";
+  pop.appendChild(spin);
+  const img = document.createElement("img");
+  img.className = "unt-pic-img";
+  img.alt = "";
+  img.draggable = false;
+  img.onload = () => {
+    try { spin.remove(); } catch (e) {}
+    untPicFit(pop, btn);
+  };
+  // Бэкенд без плейсхолдера 404 не отдаёт; сбой сети — тихо закрываем.
+  img.onerror = () => untPicClose();
+  img.src = url;
+  pop.appendChild(img);
+  document.body.appendChild(pop);
+  untPicFit(pop, btn);
+  untPicPopEl = pop;
 }
 
 // Запись одного поля тела: ячейка (rowIdx, col) файла своего слоя.

@@ -155,6 +155,53 @@ def _units_grid(store, upr, path):
             "rows": out_rows}
 
 
+def _units_pic_cands(value):
+    """Кандидаты rel для сырого ключа картинки species-колонки.
+
+    Ключ чистится от .. и повторов слэшей (файл может подсунуть путь
+    наружу — наружу не выходим). Голый стем без папки ищется и в
+    известных папках иконок (small/big обоих семейств).
+    """
+    v = str(value or "").replace("\\", "/").strip()
+    parts = [p for p in v.split("/") if p not in ("", ".", "..")]
+    if not parts:
+        return []
+    rel = "/".join(parts)
+    out = [rel]
+    if len(parts) == 1:
+        stem = parts[0]
+        for sub in ("vehicles_icons_small", "infantry_icons_small",
+                    "vehicles_icons_big", "infantry_icons_big"):
+            out.append(sub + "/" + stem)
+    return out
+
+
+def _units_pic_file(upr, root, value):
+    """Исходник картинки по сырому ключу колонки (image/pic): путь или ''.
+
+    Поиск — теми же машинами иконок, что /api/uprising_icon: rel через
+    icon_file (поддерево tech_pic + CustomImages), голое имя — прямым
+    поиском по папкам иконок. Модели, конфиги и мусор не находятся.
+    """
+    for rel in _units_pic_cands(value):
+        try:
+            p = upr.icon_file(root, rel, "unit")
+        except Exception:  # noqa: BLE001
+            p = ""
+        if p and os.path.isfile(p):
+            return p
+    v = str(value or "").replace("\\", "/").strip().split("/")[-1]
+    stem, _ = os.path.splitext(v)
+    if stem and stem not in ("", ".", ".."):
+        try:
+            hit = upr._icon_direct_source(root, stem)
+        except Exception:  # noqa: BLE001
+            hit = None
+        if hit and os.path.isfile(hit[0]):
+            return hit[0]
+    return ""
+
+
 def _layer_of(root, path):
     """Слой файла внутри корня: 'basis', 'dlc' либо ''."""
     try:
@@ -202,6 +249,58 @@ def register_units(app, ctx):
                         "layer": _layer_of(root, path),
                         "overlays": existing[1:],
                         "columns": grid["columns"], "rows": grid["rows"]})
+
+    @app.route("/api/units_pic")
+    def api_units_pic():
+        """Превью картинки species-колонки (image/pic) по сырому ключу
+        (hover_image_*, tech_pic, status_pic, garrison_pic): исходник ищется
+        теми же машинами иконок, .dds уходит в готовый webp-конвертер
+        (dds_webp в CustomImages/<слой>, как состояния иконок); нет файла —
+        плейсхолдер категории, в крайнем случае серая заглушка (не 404)."""
+        from flask import request, send_file
+        root = store.normal(request.args.get("root", ""))
+        value = request.args.get("value") or ""
+        cat = (request.args.get("cat") or "").strip()
+        sys = (request.args.get("sys") or "").strip()
+        p = _units_pic_file(upr, root, value)
+        if p and p.lower().endswith(".dds"):
+            try:
+                p = upr.dds_webp(p, root=root) or ""
+            except Exception:  # noqa: BLE001
+                p = ""
+        if p and os.path.isfile(p):
+            mime = ("image/webp" if p.lower().endswith(".webp")
+                    else "image/png")
+            try:
+                resp = send_file(p, mimetype=mime)
+            except OSError:
+                return ("", 404)
+            resp.headers["Cache-Control"] = "public, max-age=3600"
+            return resp
+        try:
+            ph = upr.category_placeholder(cat, sys)
+        except Exception:  # noqa: BLE001
+            ph = ""
+        if ph:
+            try:
+                resp = send_file(ph, mimetype="image/webp")
+            except OSError:
+                pass
+            else:
+                resp.headers["Cache-Control"] = "public, max-age=3600"
+                return resp
+        try:
+            p = upr.placeholder_png()
+        except Exception:  # noqa: BLE001
+            p = ""
+        if not p:
+            return ("", 404)
+        try:
+            resp = send_file(p, mimetype="image/png")
+        except OSError:
+            return ("", 404)
+        resp.headers["Cache-Control"] = "public, max-age=3600"
+        return resp
 
     @app.route("/api/units_refs", methods=["POST"])
     def api_units_refs():

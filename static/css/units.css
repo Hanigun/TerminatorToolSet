@@ -184,5 +184,43 @@ body.unt-resizing { user-select: none; cursor: col-resize; }
 /* развёрнутое длинное значение: авторастяжение до 240px, дальше свой скролл */
 .unt-kv-ta { resize: vertical; min-height: 56px; max-height: 240px;
   line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+/* перечисление чипами: минимальный зазор, без запятых, без аутлайна везде */
+.unt-chips { flex: 1; min-width: 0; display: flex; flex-wrap: wrap;
+  gap: 3px; align-items: center; padding: 2px 0; }
+.unt-chip { display: inline-flex; align-items: center; gap: 2px;
+  padding: 3px 3px 3px 8px; background: var(--bg-elev); border: none;
+  border-radius: 3px; font-size: 12px; font-family: var(--mono);
+  color: var(--text); outline: none; }
+.unt-chip:focus { outline: none; }
+.unt-chip-txt { cursor: text; }
+.unt-chip-txt:hover { color: var(--accent); }
+.unt-chip-x { display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; padding: 0; border: none; border-radius: 3px;
+  background: transparent; color: var(--text-mute); font-size: 13px;
+  line-height: 1; cursor: pointer; opacity: 0; outline: none; }
+.unt-chip:hover .unt-chip-x { opacity: .8; }
+.unt-chip-x:hover { color: var(--accent); background: rgba(255,255,255,.08); }
+.unt-chip-x:focus { outline: none; }
+.unt-chip-add { display: inline-flex; align-items: center; justify-content: center;
+  min-width: 24px; height: 22px; padding: 0 7px; border: 1px dashed var(--border);
+  border-radius: 3px; background: transparent; color: var(--text-mute);
+  font-size: 13px; line-height: 1; cursor: pointer; outline: none; }
+.unt-chip-add:hover { color: var(--accent); border-color: var(--accent);
+  border-style: solid; }
+.unt-chip-add:focus { outline: none; }
+.unt-chip-edit { font-size: 12px; font-family: var(--mono); padding: 3px 7px;
+  border: 1px solid var(--accent); border-radius: 3px; outline: none;
+  background: var(--bg-card); color: var(--text); min-width: 60px; max-width: 100%; }
+.unt-chip-edit:focus { outline: none; }
+/* превью картинки поля: маленькое окно в зоне кнопки, по размеру картинки */
+.unt-pic-pop { position: fixed; z-index: 1400; display: flex; align-items: center;
+  justify-content: center; min-width: 72px; min-height: 72px; padding: 4px;
+  background: var(--bg-elev); border: 1px solid var(--border); border-radius: 5px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .55); }
+.unt-pic-img { display: block; width: auto; height: auto;
+  max-width: min(360px, 90vw); max-height: min(360px, 80vh); border-radius: 3px; }
+.unt-pic-spin { width: 26px; height: 26px; border-radius: 50%;
+  border: 3px solid rgba(255,255,255,.25); border-top-color: #fff;
+  animation: spin .8s linear infinite; }
 /* подсказка пустого тела карточки (выбор в другом слоте) */
 .unt-empty-hint { font-size: 12px; color: var(--text-mute); padding: 8px 2px; }
