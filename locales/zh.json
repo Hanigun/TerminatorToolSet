@@ -857,7 +857,7 @@
   "about_goto_updates": "打开更新",
   "about_support": "支持项目",
   "ga_title": "GameAssets存档",
-  "ga_hint": "官方游戏的species、本地化与图标（取自其.pak，用于提示与自动补全）。",
+  "ga_hint": "官方游戏的脚本、出生点与本地化（取自其.pak，用于提示与自动补全）。",
   "ga_download": "下载资源",
   "ga_redownload": "重新下载",
   "ga_downloaded": "已下载",

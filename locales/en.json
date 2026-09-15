@@ -857,7 +857,7 @@
   "about_goto_updates": "Open updates",
   "about_support": "Support the project",
   "ga_title": "GameAssets archive",
-  "ga_hint": "Stock game species, localization and icons from its .paks (for hints and autocomplete).",
+  "ga_hint": "Stock game scripts, spawns and localization from its .paks (for hints and autocomplete).",
   "ga_download": "Download assets",
   "ga_redownload": "Re-download",
   "ga_downloaded": "Downloaded",

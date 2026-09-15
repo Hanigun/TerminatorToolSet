@@ -1,12 +1,10 @@
 """Ассеты игры без скачивания: выборочная распаковка GameAssets из паков игры.
 
-Берётся только то, что реально читает слой GameAssets (последний слой
-данных перед встроенным GameScripts):
-- basis/scripts/species/* — юниты, предметы, пресеты, guns/armor/engines
-  (иконки, sysnames, цены, costs, мета);
-- basis/scripts/invs.xml, basis/scripts/inventory_items.xml;
-- locale/* из паков локализации — имена юнитов (языки выбираются);
-- basis/textures/ui/pictures/{inventory,tech_pic/*} — dds-иконки.
+Состав — строго как эталонная папка GameAssets (никаких текстур/иконок:
+их там нет): basis/{locale,scripts,spawns} + DLC-оверлеи + локализация.
+- basis/scripts/* — species, ui, lboxes, json, invs, default_army и т.д.;
+- basis/locale/*, basis/spawns/*.swt;
+- locale/* и scripts/ui/* из паков локализации (языки выбираются).
 
 Распаковка — 7z с фильтрами путей (тем же 7z и паролем, что у полной
 распаковки), в <program_dir>/GameAssets. Успех ставит
@@ -25,31 +23,22 @@ from .archive_service import _NW
 # фильтры 7z для главных паков (пути внутри пака — относительно basis/:
 # пак базы распаковывается прямо в <dest>/basis/)
 GA_MAIN_FILTERS = (
-    "scripts/species/*",
-    "scripts/invs.xml",
-    "scripts/inventory_items.xml",
-    "textures/ui/pictures/inventory/*",
-    "textures/ui/pictures/tech_pic/*",
+    "locale/*",
+    "scripts/*",
+    "spawns/*",
 )
-# фильтры для паков локализации (внутри — locale/ в корне пака)
-GA_LOC_FILTERS = ("locale/*",)
+# фильтры для паков локализации (внутри — locale/ и scripts/ui/)
+GA_LOC_FILTERS = ("locale/*", "scripts/ui/*")
 # те же префиксы для loose-папки basis рядом с паками (копирование подмножества)
-GA_LOOSE_PREFIXES = (
-    "scripts/species",
-    "scripts/invs.xml",
-    "scripts/inventory_items.xml",
-    "textures/ui/pictures/inventory",
-    "textures/ui/pictures/tech_pic",
-)
+GA_LOOSE_PREFIXES = ("locale", "scripts", "spawns")
 
 # папки для чипов попапа (показ состава, без кликов; языки — кликабельные)
 GA_CHIPS = (
-    "basis/scripts/species/",
-    "basis/scripts/invs.xml",
-    "basis/scripts/inventory_items.xml",
-    "basis/textures/ui/pictures/inventory/",
-    "basis/textures/ui/pictures/tech_pic/",
+    "basis/locale/",
+    "basis/scripts/",
+    "basis/spawns/",
     "localization/<язык>/locale/",
+    "localization/<язык>/scripts/ui/",
 )
 
 _GROUPS = ("base", "legion", "resistance", "evolution")
