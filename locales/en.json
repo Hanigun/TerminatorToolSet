@@ -865,6 +865,7 @@
   "ga_extracting": "Extracting...",
   "ga_checking": "Checking...",
   "ga_not_found": "Archive not found in the release",
+  "ga_stuck": "Check is stuck — press Download again",
   "cpg_title": "Campaign Editor",
   "cpg_sub": "Settlement shops (base game shop_presets.xml)",
   "cpg_shop": "Shop",

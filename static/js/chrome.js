@@ -2264,6 +2264,7 @@ async function updAutoTick() {
 // зелёная точка — архив скачан и распакован.
 let gaState = null;
 let gaPollTimer = null;
+let gaRunTs = 0;
 
 async function gaStateLoad() {
   try {
@@ -2359,6 +2360,7 @@ async function gaDownload() {
   }
   // POST вернулся сразу — бар показываем тут же (сначала крутится
   // на проверке, затем живые проценты из polling)
+  gaRunTs = Date.now();
   gaShowBusy();
   gaPollStart();
 }
@@ -2383,9 +2385,25 @@ async function gaPollTick() {
   const pr = j && j.progress;
   if (!pr) return;
   if (gaState) gaState.progress = pr;
+  // попап перерисовали без нас (элементов нет) — пересобрать из свежего
+  // состояния, иначе анимация крутится без живого polling
+  const pop = $("#ga-pop");
+  if (pop && !pop.hidden && !$("#gap-fill")) gaPopRender();
   const bar = $("#gap-progress"), fill = $("#gap-fill"), pct = $("#gap-pct");
   const st = $("#gap-state"), dlb = $("#gap-dl");
   if (pr.state === "checking") {
+    if (gaRunTs && Date.now() - gaRunTs > 45000) {
+      // бэкенд держит проверку ≤25с: дольше — зависший процесс,
+      // показываем ошибку и отдаём кнопку вместо вечной анимации
+      gaPollStop();
+      gaRunTs = 0;
+      const stuck = t("ga_stuck") || "stuck";
+      toast(stuck, "err");
+      if (bar) bar.hidden = true;
+      if (st) st.textContent = stuck;
+      if (dlb) dlb.disabled = false;
+      return;
+    }
     // проверка воркера: реальные проценты ещё неизвестны — полоска бежит
     if (bar) bar.hidden = false;
     if (fill) { fill.style.width = "100%"; fill.classList.add("indet"); }
@@ -2405,11 +2423,13 @@ async function gaPollTick() {
     if (st) st.textContent = txt;
   } else if (pr.state === "done") {
     gaPollStop();
+    gaRunTs = 0;
     if (bar) bar.hidden = true;
     toast(t("ga_downloaded") || "Done", "ok");
     await gaStateLoad();
   } else if (pr.state === "error") {
     gaPollStop();
+    gaRunTs = 0;
     if (bar) bar.hidden = true;
     toast(pr.error || "error", "err");
     if (st) st.textContent = pr.error || "";

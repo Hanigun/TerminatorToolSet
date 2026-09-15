@@ -865,6 +865,7 @@
   "ga_extracting": "解压中",
   "ga_checking": "检查中",
   "ga_not_found": "发布包中未找到档案",
+  "ga_stuck": "检查卡住——请再次点击下载",
   "cpg_title": "战役编辑器",
   "cpg_sub": "定居点商店（基础游戏 shop_presets.xml）",
   "cpg_shop": "商店",

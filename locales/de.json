@@ -865,6 +865,7 @@
   "ga_extracting": "Wird entpackt...",
   "ga_checking": "Wird geprüft...",
   "ga_not_found": "Archiv im Release nicht gefunden",
+  "ga_stuck": "Prüfung hängt — erneut laden",
   "cpg_title": "Kampagnen-Editor",
   "cpg_sub": "Siedlungsläden (shop_presets.xml des Basisspiels)",
   "cpg_shop": "Laden",

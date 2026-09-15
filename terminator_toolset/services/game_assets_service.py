@@ -135,11 +135,35 @@ class GameAssets:
         th.start()
         return {"ok": True, "started": True}
 
+    def _check_guarded(self, timeout=25):
+        """Проверка воркера с жёстким лимитом по wall-clock.
+
+        getaddrinfo на Windows не уважает timeout urlopen: при битом
+        DNS поток виснет внутри check() навсегда и прогресс стоит на
+        «Проверке...» вечно. Ждём не дольше timeout — иначе бросаем
+        ожидание и отдаём ошибку (висящий поток-демон умрёт с процессом).
+        """
+        box = {}
+
+        def _run():
+            try:
+                box["res"] = self.check()
+            except Exception as e:  # noqa: BLE001
+                box["res"] = {"ok": False, "error": str(e)}
+
+        th = threading.Thread(target=_run, daemon=True, name="ga-check")
+        th.start()
+        th.join(timeout)
+        if th.is_alive():
+            return {"ok": False,
+                    "error": "update server unreachable (timeout)"}
+        return box.get("res") or {"ok": False, "error": "check failed"}
+
     def _check_and_download_job(self):
         """Фон: спросить воркер о свежем архиве, затем скачать/распаковать."""
         meta = self._meta
         if not (isinstance(meta, dict) and meta.get("url")):
-            fresh = self.check()
+            fresh = self._check_guarded()
             if not (isinstance(fresh, dict) and fresh.get("ok")):
                 self._set_progress(state="error",
                                    error=str(fresh.get("error") or "check failed"))
