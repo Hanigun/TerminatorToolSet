@@ -1750,20 +1750,28 @@ const CMP_CHUNK = 400; // rows rendered per chunk (virtualization: more on scrol
 const CMP_COLL = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
 // ---------- выбор колонки-ключа: раскрывающееся окно с поиском ----------
+// подпись пункта: v=-1 всегда из текущего словаря (см. renderKeyDropdown)
+function labelOf(it) {
+  return it.v === -1 ? t("cmp_all_keys") : it.label;
+}
 function renderKeyDropdown() {
   const face = $("#cmp-key-face");
   const list = $("#cmp-key-list");
   if (!face || !list) return;
   const cur = state.cmpKeyItems.find(it => it.v === state.cmpKeyCol);
-  face.textContent = cur ? cur.label : t("cmp_all_keys");
+  // пункт «все ключи» — не кэшируем перевод: подпись вычисляем при каждой
+  // отрисовке, иначе после смены языка в настройках лицо списка остаётся
+  // на старом языке до следующего сравнения (колонки — данные файла, их не трогаем)
+  const allLabel = t("cmp_all_keys");
+  face.textContent = cur ? (cur.v === -1 ? allLabel : cur.label) : allLabel;
   const q = ($("#cmp-key-search").value || "").trim().toLowerCase();
   list.innerHTML = "";
-  const items = state.cmpKeyItems.filter(it => !q || it.label.toLowerCase().includes(q));
+  const items = state.cmpKeyItems.filter(it => !q || labelOf(it).toLowerCase().includes(q));
   for (const it of items) {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "key-dd-item" + (it.v === state.cmpKeyCol ? " active" : "");
-    b.textContent = it.label;
+    b.textContent = labelOf(it);
     b.addEventListener("click", () => {
       state.cmpKeyCol = it.v;
       $("#cmp-key-pop").hidden = true;

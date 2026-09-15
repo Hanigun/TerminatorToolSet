@@ -1424,6 +1424,12 @@ async function applyLang(lang) {
   if (state.tabs.some(tb => tb.id === "campaign")) {
     renderCampaign();
   }
+  // страница сравнения: ключ-список и фильтры запекают строки при рендере —
+  // без перерисовки остаются на старом языке до первого клика
+  if (state.tabs.some(tb => tb.id === "compare")) {
+    try { if (typeof renderKeyDropdown === "function") renderKeyDropdown(); } catch (e) {}
+    try { if (typeof renderCompare === "function") renderCompare(); } catch (e) {}
+  }
   // редактор горячих клавиш строится динамически — перерисовать под словарь
   // (модалка настроек со сменой языка открыта прямо сейчас)
   if (!$("#settings-modal").hidden) renderHotkeyEditor();
