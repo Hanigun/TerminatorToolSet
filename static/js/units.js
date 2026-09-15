@@ -1,24 +1,18 @@
 /* TerminatorToolSet frontend — units.js: вкладка «Редактор юнитов» (S5+S6).
    Классический скрипт, общий глобальный скоуп, порядок загрузки — FILES в templates/index.html.
-   S5: чтение и витрина (пулы, шапка). S6: попап-редактор, CRUD, контекстные меню. */
+   S5: чтение и витрина (слои, шапка). S6: попап-редактор, CRUD, контекстные меню. */
 // Категории-классы вкладки: пять species-файлов + humans как справочник пехоты.
 // Порядок — как найм в кампании: сначала отряды и техника, затем предметы и пехота.
 var UNT_CATS = ["squads", "cars", "tanks", "helicopters", "inventory_items", "humans"];
-// Иконки заголовков секций — ДОСЛОВНО карта CMP_CAT_ICONS кампании
-// (campaign.js:145-154): squads=infantry, cars=light_vehicle, tanks=tank,
-// helicopters=heli, inventory_items=supply_vehicle. Текст остаётся в
-// title/alt, нет файла — откат на текстовую подпись. humans без иконки —
-// всегда текстовая подпись.
-var UNT_CAT_ICONS = {
-  squads: "infantry.webp",
-  cars: "light_vehicle.webp",
-  tanks: "tank.webp",
-  helicopters: "heli.webp",
-  inventory_items: "supply_vehicle.webp",
-};
-function untCatIcon(cat) {
-  return "/assets/campaign/UnitSet/" + (UNT_CAT_ICONS[cat] || "");
-}
+// Буквы плашек-тегов карточек типов (span.swt-item-tag): по первой букве
+// класса, humans — «P» (пехота), чтобы не путать с helicopters («H»).
+var UNT_TYPE_TAGS = { squads: "S", cars: "C", tanks: "T", helicopters: "H",
+  inventory_items: "I", humans: "P" };
+// Шеврон сворачивания — РОВНО как в SWT (swt.js:1239, swtItemCard:855).
+var UNT_CHEV_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+// Кнопки «развернуть/свернуть всё» слоя — РОВНО иконки mkAllBtn (swt.js:1311-1313).
+var UNT_ALL_EXPAND_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6M6 20l6-6 6 6"/></svg>';
+var UNT_ALL_COLLAPSE_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6M6 4l6 6 6-6"/></svg>';
 // Иконки строк и тела — РОВНО чипы кампании (cmpChip, campaign.js):
 // чистая иконка .upr-chip.upr-card + .upr-chip-icon, без слотов veh/inf
 // и подложек.
@@ -27,15 +21,17 @@ function untCatIcon(cat) {
 var UNT_STAT_COLS = ["cost", "cp_cost", "supply_consumption", "people_capacity", "unit_set"];
 
 // Единственный дефолт состояния вкладки (старт + закрытие вкладки):
-// cats[cat] = {path, columns, overlays, items:[{sys, src, path}]}, src — источник загрузки,
+// layers = [{key:'basis'|'dlc:<Имя>', label, open, cats:{cat:{path, columns,
+// items:[{sys, path}], _open}}}] — каждый слой хранит ТОЛЬКО строки своего
+// файла (basis и DLC-оверлеи рядом, без слияния); src — источник загрузки,
 // clip — буфер обмена таба {op, items:[{cat, sys, path, values?}]} или null,
-// cat — выбранный класс селектора, sel — выбранный юнит (sysname) для тела,
-// iconMap — свои иконки категории (sysname -> data-URL webp, НЕ карта uprising),
-// iconsReady/iconsLoading/iconSeq — готовность/загрузка/поколение своего батча,
+// cat/sel/selLayer — выбранный юнит (тройка: слой, класс, sysname), один на
+// вкладку; iconMap — свои иконки (sysname -> data-URL webp, НЕ карта uprising),
+// iconsReady/iconsLoading/iconSeq — готовность/загрузка/поколение батча,
 // detSeq — поколение тела (защита от гонки чтений при быстрых кликах).
 function untFreshState() {
-  return { src: "", cats: {}, loading: false, loadSeq: 0, analyzing: false, clip: null,
-    cat: "squads", sel: null, iconMap: {}, iconsReady: false, iconsLoading: false,
+  return { src: "", layers: [], loading: false, loadSeq: 0, analyzing: false, clip: null,
+    cat: "squads", sel: null, selLayer: null, iconMap: {}, iconsReady: false, iconsLoading: false,
     iconSeq: 0, detSeq: 0 };
 }
 
@@ -121,7 +117,10 @@ function untDlcName(path) {
 }
 
 // Загрузка всех категорий через /api/units_list (api-хелпер из core.js):
-// база — сразу, DLC-оверлеи — добором чтением файлов (бейдж источника на чипе).
+// basis — ответом units_list, DLC-оверлеи — добором чтением файлов.
+// Слои хранят ТОЛЬКО строки своего файла: basis-слой — базу, каждый
+// DLC-слой — свой оверлей (один sysname виден в двух слоях, если файл
+// оверлея его переопределяет — зеркало вниз чинится записью в оба).
 async function renderUnits(force) {
   if (!state.units) state.units = untFreshState();
   if (state.units.loading && !force) return;
@@ -130,7 +129,8 @@ async function renderUnits(force) {
   const fresh = () => my === state.units.loadSeq;
   const root = untSrcRoot();
   const src = state.treeView;
-  const cats = {};
+  const basisByCat = {};
+  const ovByCat = {};
   try {
     for (const cat of UNT_CATS) {
       if (!fresh()) return;
@@ -141,56 +141,105 @@ async function renderUnits(force) {
         j = await r.json();
       } catch (e) { j = null; }
       if (!j || !j.ok || !Array.isArray(j.rows)) continue;
-      // Единый список: сначала база, поверх — оверлеи (DLC выигрывает
-      // у basis при том же sysname, порядок первого появления сохраняем).
-      const bySys = new Map();
-      (j.rows || []).forEach(row => {
-        const sys = untRowSys(row);
-        if (untSysJunk(sys) || bySys.has(sys)) return;
-        bySys.set(sys, { sys, src: "basis", path: j.path || "" });
-      });
+      basisByCat[cat] = { path: j.path || "", columns: j.columns || [],
+        rows: j.rows || [] };
       for (const op of (j.overlays || [])) {
         if (!fresh()) return;
         try {
           const or = await api("/api/file?path=" + encodeURIComponent(op));
           const oj = await or.json();
           if (!oj || !oj.ok || !Array.isArray(oj.rows)) continue;
-          const dlc = untDlcName(op);
-          (oj.rows || []).forEach(row => {
-            const sys = untRowSys(row);
-            if (untSysJunk(sys)) return;
-            // Повтор sysname из DLC затирает basis-версию (зеркало вниз).
-            bySys.delete(sys);
-            bySys.set(sys, { sys, src: dlc, path: op });
-          });
-        } catch (e) { /* оверлей не прочитался — остаётся база */ }
+          if (!ovByCat[cat]) ovByCat[cat] = [];
+          ovByCat[cat].push({ path: op, dlc: untDlcName(op),
+            columns: oj.columns || [], rows: oj.rows || [] });
+        } catch (e) { /* оверлей не прочитался — слоя не будет */ }
       }
-      cats[cat] = { path: j.path || "", columns: j.columns || [],
-        overlays: (j.overlays || []).slice(),
-        items: Array.from(bySys.values()) };
     }
     if (!fresh()) return;
+    // Порядок слоёв: basis, затем DLC по первому появлению в классах.
+    const dlcOrder = [];
+    UNT_CATS.forEach(cat => {
+      (ovByCat[cat] || []).forEach(o => {
+        if (dlcOrder.indexOf(o.dlc) === -1) dlcOrder.push(o.dlc);
+      });
+    });
+    // Флаги раскрытия переживают перезагрузку (как condOpen/actOpen в SWT).
+    const prev = new Map(((state.units && state.units.layers) || [])
+      .map(L => [L.key, L]));
+    const prevOpen = key => {
+      const p = prev.get(key);
+      return !p || p.open !== false;
+    };
+    const prevTypeOpen = (key, cat) => {
+      const p = prev.get(key);
+      const t = p && p.cats && p.cats[cat];
+      return !t || t._open !== false;
+    };
+    // Строки файла в элементы слоя (дубли sysname внутри файла — первый).
+    const mkItems = (rows, path) => {
+      const out = [];
+      (rows || []).forEach(row => {
+        const sys = untRowSys(row);
+        if (untSysJunk(sys) || out.some(x => x.sys === sys)) return;
+        out.push({ sys, path: path || "" });
+      });
+      return out;
+    };
+    const layers = [];
+    const basisL = { key: "basis", label: "basis", open: prevOpen("basis"), cats: {} };
+    UNT_CATS.forEach(cat => {
+      const b = basisByCat[cat];
+      if (!b) return;
+      basisL.cats[cat] = { path: b.path, columns: b.columns,
+        items: mkItems(b.rows, b.path), _open: prevTypeOpen("basis", cat) };
+    });
+    layers.push(basisL);
+    dlcOrder.forEach(dlc => {
+      const key = "dlc:" + dlc;
+      const L = { key, label: dlc, open: prevOpen(key), cats: {} };
+      UNT_CATS.forEach(cat => {
+        const o = (ovByCat[cat] || []).find(x => x.dlc === dlc);
+        if (!o) return;
+        L.cats[cat] = { path: o.path, columns: o.columns,
+          items: mkItems(o.rows, o.path), _open: prevTypeOpen(key, cat) };
+      });
+      layers.push(L);
+    });
     // Смена источника — чужие иконки и тело недействительны; внутри одного
     // источника карту копим (батч добирает только недостающее, как кампания).
     const srcChanged = state.units.src !== src;
     state.units.src = src;
-    state.units.cats = cats;
+    state.units.layers = layers;
     if (srcChanged) {
       state.units.iconMap = {};
       state.units.iconsReady = false;
     }
-    // Выбор живёт по sysname: класс чиним на первый непустой, sel сбрасываем
-    // только если строка пропала (CRUD/зеркало), иначе тело держит старое.
-    if (UNT_CATS.indexOf(state.units.cat) === -1 || !cats[state.units.cat])
-      state.units.cat = UNT_CATS.find(c => cats[c] && (cats[c].items || []).length) || "squads";
-    const curItems = ((cats[state.units.cat] || {}).items) || [];
-    if (state.units.sel && !curItems.some(x => x.sys === state.units.sel))
+    // Выбор — тройка (слой, класс, sysname): чиним класс на первый непустой
+    // тип, sel сбрасываем только если строка пропала, иначе тело держит старое.
+    if (!untLayerCatData(state.units.selLayer, state.units.cat) ||
+        !untFindLayerItem(state.units.selLayer, state.units.cat, state.units.sel)) {
       state.units.sel = null;
-    if (!state.units.sel && curItems.length) state.units.sel = curItems[0].sys;
+      state.units.selLayer = null;
+    }
+    let catOk = false;
+    layers.forEach(L => {
+      if (((L.cats[state.units.cat] || {}).items || []).length) catOk = true;
+    });
+    if (!catOk) {
+      const fst = untFirstSlot();
+      state.units.cat = (fst && fst.cat) || "squads";
+    }
+    if (!state.units.sel) {
+      const fst = untFirstSlot(state.units.cat);
+      if (fst) {
+        state.units.selLayer = fst.layerKey;
+        state.units.sel = fst.sys;
+      }
+    }
     untPaintHeader(root, src);
     untPaint();
-    // Иконки текущего класса — своим батчем (карту uprising не трогаем).
-    untEnsureIcons(state.units.cat).catch(() => {});
+    // Иконки всех слоёв — своим батчем (карту uprising не трогаем).
+    untEnsureIcons().catch(() => {});
   } finally {
     if (fresh()) state.units.loading = false;
   }
@@ -200,11 +249,11 @@ async function renderUnits(force) {
 function untPaintHeader(root, src) {
   const fp = $("#unt-file");
   if (fp) {
-    const has = Object.keys(state.units.cats || {}).length > 0;
+    const has = ((state.units && state.units.layers) || []).length > 0;
     fp.textContent = has && root ? root : (t("unt_sub") || "");
     fp.title = has && root ? root : "";
   }
-  const has = Object.keys(state.units.cats || {}).length > 0;
+  const has = ((state.units && state.units.layers) || []).length > 0;
   ["#unt-reload", "#unt-analyze", "#unt-open-grid", "#unt-fs"].forEach(s => {
     const el = $(s);
     if (el) el.hidden = !has;
@@ -214,16 +263,25 @@ function untPaintHeader(root, src) {
   } catch (e) { /* переключатели красит древо */ }
 }
 
-// Витрина master-detail (как найм в кампании): сверху селектор класса
-// (один открытый класс за раз, выбор — в state.units.cat), ниже слева
-// секция найма кампании (div.cmp-sec > div.upr-cat-title с иконкой +
-// div.upr-cat-body), справа — тело с параметрами.
+// Витрина в три уровня по структуре SWT-редактора:
+// уровень 1 — слои-источники (basis + DLC-оверлеи), каждый — collapsible-
+// секция РОВНО классами SWT (swt-sec-head/swt-sec-closed/swt-sec-chev/
+// swt-sec-body, образец mkSec в swt.js:1221-1250);
+// уровень 2 — типы внутри слоя, каждый — карточка РОВНО классами SWT
+// (swt-item/swt-item-closed/swt-item-head/swt-item-chev/swt-item-body,
+// образец swtItemCard/swtApplyItemOpen в swt.js:834-1026);
+// уровень 3 — внутри тела карточки типа: master-detail (слева чипы найма
+// кампании, справа тело параметров) без изменений логики.
 function untPaint() {
   const main = $("#unt-main");
   if (!main) return;
   main.innerHTML = "";
-  const cats = (state.units && state.units.cats) || {};
-  const total = UNT_CATS.reduce((a, c) => a + ((cats[c] && cats[c].items.length) || 0), 0);
+  // ПКМ по пустому месту вкладки — меню сектора (весь пул).
+  main.oncontextmenu = e => {
+    if (e.target === main) untSecCtx(e);
+  };
+  const layers = (state.units && state.units.layers) || [];
+  const total = layers.reduce((a, L) => a + untLayerTotal(L), 0);
   if (!total) {
     const d = document.createElement("div");
     d.className = "tree-empty";
@@ -231,107 +289,207 @@ function untPaint() {
     main.appendChild(d);
     return;
   }
-  if (UNT_CATS.indexOf(state.units.cat) === -1 || !cats[state.units.cat])
-    state.units.cat = UNT_CATS.find(c => cats[c]) || "squads";
-  const cat = state.units.cat;
-  main.appendChild(untCatBar(cats, total));
+  layers.forEach(L => {
+    if (!untLayerTotal(L)) return;
+    const sec = untLayerSec(L);
+    main.appendChild(sec.headEl);
+    main.appendChild(sec.bodyEl);
+    UNT_CATS.forEach(cat => {
+      const data = (L.cats || {})[cat];
+      if (!data || !((data.items || []).length)) return;
+      sec.bodyEl.appendChild(untTypeCard(L, cat, data));
+    });
+  });
+}
+
+// Сводка слоя: сколько юнитов всего.
+function untLayerTotal(L) {
+  let n = 0;
+  UNT_CATS.forEach(cat => {
+    n += ((((L && L.cats) || {})[cat] || {}).items || []).length;
+  });
+  return n;
+}
+
+// Секция слоя — РОВНО механика mkSec (swt.js:1221-1250): шапка
+// .swt-sec-head (+.swt-sec-closed), шеврон-кнопка .swt-sec-chev, тело
+// .swt-sec-body; флаг раскрытия — L.open; клик по шапке — тоггл
+// (игнор кликов по input/select/button как в mkSec:1246).
+function untLayerSec(L) {
+  let open = L.open !== false;
+  const headEl = document.createElement("div");
+  headEl.className = "swt-sec-head" + (open ? "" : " swt-sec-closed");
+  headEl.dataset.layer = L.key;
+  const chev = document.createElement("button");
+  chev.className = "icon-btn swt-sec-chev";
+  const bodyEl = document.createElement("div");
+  bodyEl.className = "swt-sec-body";
+  const apply = () => {
+    headEl.classList.toggle("swt-sec-closed", !open);
+    bodyEl.hidden = !open;
+    chev.title = open ? (t("swt_collapse") || "Свернуть")
+                      : (t("swt_expand") || "Развернуть");
+  };
+  const flip = () => {
+    open = !open;
+    L.open = open;
+    apply();
+  };
+  chev.innerHTML = UNT_CHEV_SVG;
+  chev.onclick = e => { e.stopPropagation(); flip(); };
+  const ttl = document.createElement("span");
+  ttl.textContent = L.label || L.key;
+  headEl.append(chev, ttl);
+  const sum = document.createElement("span");
+  sum.className = "unt-layer-sum";
+  sum.textContent = "· " + untLayerTotal(L);
+  sum.title = ttl.textContent;
+  headEl.appendChild(sum);
+  headEl.appendChild(untLayerAllBtn(L, true));
+  headEl.appendChild(untLayerAllBtn(L, false));
+  headEl.addEventListener("click", e => {
+    if (e.target.closest("input, select, button, label, .swt-cmd-combo")) return;
+    flip();
+  });
+  // ПКМ по шапке слоя — меню слоя (копировать/вставить/очистить слой).
+  headEl.addEventListener("contextmenu", e => untLayerCtx(e, L.key));
+  apply();
+  return { headEl, bodyEl };
+}
+
+// Кнопки «развернуть/свернуть все типы слоя» — РОВНО механика mkAllBtn
+// (swt.js:1307-1325): флаги на данных + синхронизация карточек своей
+// секции напрямую через card.__item, без перерисовки.
+function untLayerAllBtn(L, expand) {
+  const b = document.createElement("button");
+  b.className = "icon-btn swt-sec-all";
+  b.title = expand ? (t("swt_expand_all") || "Развернуть все")
+                   : (t("swt_collapse_all") || "Свернуть все");
+  b.innerHTML = expand ? UNT_ALL_EXPAND_SVG : UNT_ALL_COLLAPSE_SVG;
+  b.onclick = () => {
+    UNT_CATS.forEach(cat => {
+      const data = (L.cats || {})[cat];
+      if (data) data._open = expand;
+    });
+    const bodyEl = b.closest(".swt-sec-head") &&
+      b.closest(".swt-sec-head").nextElementSibling;
+    if (bodyEl) bodyEl.querySelectorAll(".swt-item").forEach(c => {
+      if (c.__item) untApplyTypeOpen(c, c.__item);
+    });
+  };
+  return b;
+}
+
+// Применение флага раскрытия карточки типа — РОВНО swtApplyItemOpen
+// (swt.js:834-842): класс .swt-item-closed + hidden тела + подсказка шеврона.
+function untApplyTypeOpen(card, data) {
+  const o = !!data._open;
+  card.classList.toggle("swt-item-closed", !o);
+  const body = card.querySelector(".swt-item-body");
+  if (body) body.hidden = !o;
+  const chev = card.querySelector(".swt-item-chev");
+  if (chev) chev.title = o ? (t("swt_collapse") || "Свернуть")
+                           : (t("swt_expand") || "Развернуть");
+}
+
+// Карточка типа внутри слоя — РОВНО механика swtItemCard (swt.js:844-954):
+// .swt-item (+.swt-item-closed), шапка .swt-item-head (шеврон .swt-item-chev,
+// плашка-тег с буквой типа, название, счётчик), тело .swt-item-body.
+// Жёлтая полоса — родной border-left .swt-item, ничего своего.
+function untTypeCard(L, cat, data) {
+  const card = document.createElement("div");
+  card.className = "swt-item" + (data._open ? "" : " swt-item-closed");
+  card.__item = data;   // для «развернуть/свернуть все» без перерисовки
+  card.dataset.layer = L.key;
+  card.dataset.cat = cat;
+  const head = document.createElement("div");
+  head.className = "swt-item-head";
+  const chev = document.createElement("button");
+  chev.className = "icon-btn swt-item-chev";
+  chev.title = data._open ? (t("swt_collapse") || "Свернуть")
+                          : (t("swt_expand") || "Развернуть");
+  chev.innerHTML = UNT_CHEV_SVG;
+  chev.onclick = e => {
+    e.stopPropagation();
+    data._open = !data._open;
+    untApplyTypeOpen(card, data);
+  };
+  const tag = document.createElement("span");
+  tag.className = "swt-item-tag unt-type-tag";
+  tag.textContent = UNT_TYPE_TAGS[cat] || "?";
+  const nm = document.createElement("span");
+  nm.className = "unt-type-name";
+  nm.textContent = t("unt_class_" + cat) || cat;
+  const cnt = document.createElement("span");
+  cnt.className = "unt-type-count";
+  cnt.textContent = "· " + ((data.items || []).length);
+  head.append(chev, tag, nm, cnt);
+  head.addEventListener("click", e => {
+    // клик по свободному месту шапки тоже сворачивает карточку
+    if (e.target.closest("input, select, button, label")) return;
+    data._open = !data._open;
+    untApplyTypeOpen(card, data);
+  });
+  // ПКМ по шапке — меню категории слоя (как было по шапке списка).
+  head.addEventListener("contextmenu", e => untCatCtx(e, L.key, cat));
+  card.appendChild(head);
+  const body = document.createElement("div");
+  body.className = "swt-item-body";
+  if (!data._open) body.hidden = true;
+  // Уровень 3 — существующий master-detail: слева чипы, справа тело.
   const wrap = document.createElement("div");
   wrap.className = "unt-wrap";
   const pane = document.createElement("div");
   pane.className = "unt-list-pane";
-  // Секция — РОВНО как найм кампании (campaign.js:773-809): шапка-иконка +
-  // тело-ряд; скролл/вертикаль — своим unt-классом ДОПОЛНИТЕЛЬНО
-  // (id живёт на теле, вид чипов задаёт upr-cat-body).
-  const sec = document.createElement("div");
-  sec.className = "cmp-sec";
-  const title = document.createElement("div");
-  title.className = "upr-cat-title";
-  const label = t("unt_class_" + cat) || cat;
-  title.title = label;
-  if (UNT_CAT_ICONS[cat]) {
-    const timg = document.createElement("img");
-    timg.className = "cmp-sec-icon";
-    timg.src = untCatIcon(cat);
-    timg.alt = label;
-    timg.draggable = false;
-    timg.onerror = () => {
-      try { title.textContent = label; } catch (e) {}
-    };
-    title.appendChild(timg);
-  } else title.textContent = label;
-  // ПКМ по шапке — меню сектора (как было по шапке списка).
-  title.oncontextmenu = e => untSecCtx(e);
-  sec.appendChild(title);
   const list = document.createElement("div");
   list.className = "upr-cat-body unt-list";
-  list.id = "unt-list";
+  list.dataset.layer = L.key;
   list.dataset.cat = cat;
-  // ПКМ по пустому месту ряда — меню категории (как вставка в кампании).
+  // ПКМ по пустому месту ряда — меню категории слоя.
   list.oncontextmenu = e => {
-    if (e.target === list) untCatCtx(e, cat);
+    if (e.target === list) untCatCtx(e, L.key, cat);
   };
-  sec.appendChild(list);
-  pane.appendChild(sec);
+  pane.appendChild(list);
   const detail = document.createElement("div");
   detail.className = "unt-detail";
-  detail.id = "unt-detail";
+  detail.dataset.layer = L.key;
+  detail.dataset.cat = cat;
   wrap.appendChild(pane);
   wrap.appendChild(detail);
-  main.appendChild(wrap);
-  untPaintList();
-  untPaintDetail();
+  body.appendChild(wrap);
+  card.appendChild(body);
+  untPaintTypeList(list);
+  untPaintTypeDetail(detail);
+  return card;
 }
 
-// Селектор класса: выпадающий список шести species-классов
-// (подписи — unt_class_*, как заголовки старой витрины).
-function untCatBar(cats, total) {
-  const bar = document.createElement("div");
-  bar.className = "unt-catbar";
-  bar.oncontextmenu = e => untSecCtx(e);
-  const lab = document.createElement("span");
-  lab.className = "unt-catbar-label";
-  lab.textContent = (t("unt_pool_all") || "Общий пул") + " · " + total;
-  bar.appendChild(lab);
-  const sel = document.createElement("select");
-  sel.className = "unt-cat-sel";
-  sel.title = lab.textContent;
-  UNT_CATS.forEach(c => {
-    if (!cats[c]) return;
-    const o = document.createElement("option");
-    o.value = c;
-    o.textContent = (t("unt_class_" + c) || c) + " · " + ((cats[c].items || []).length);
-    if (c === state.units.cat) o.selected = true;
-    sel.appendChild(o);
-  });
-  sel.onchange = () => {
-    if (!state.units) return;
-    state.units.cat = sel.value;
-    state.units.sel = null;
-    state.units.iconsReady = false;
-    untPaint();
-    untEnsureIcons(state.units.cat).catch(() => {});
-  };
-  bar.appendChild(sel);
-  return bar;
+// Первый непустой слот (слой, класс, sysname): optCat ограничивает классом.
+// Порядок — basis первым, классы — порядком UNT_CATS.
+function untFirstSlot(optCat) {
+  const layers = (state.units && state.units.layers) || [];
+  const cats = optCat ? [optCat] : UNT_CATS;
+  for (const L of layers) {
+    for (const cat of cats) {
+      const items = (((L.cats || {})[cat] || {}).items) || [];
+      if (items.length) return { layerKey: L.key, cat, sys: items[0].sys };
+    }
+  }
+  return null;
 }
 
-// Список юнитов выбранного класса — РОВНО ряд найма кампании
+// Список юнитов карточки типа — РОВНО ряд найма кампании
 // (campaign.js:810-839): чипы + кнопка «+» последней в ряду.
 // Выбор — клик, попап — двойной клик, меню — правая кнопка
 // (чип — untChipCtx, пустое место ряда — untCatCtx).
-function untPaintList() {
-  const list = $("#unt-list");
+function untPaintTypeList(list) {
   if (!list) return;
   const st = list.scrollTop;
-  const cat = state.units.cat;
-  list.dataset.cat = cat;
+  const layerKey = list.dataset.layer;
+  const cat = list.dataset.cat;
   list.innerHTML = "";
-  const data = untCatData(cat);
+  const data = untLayerCatData(layerKey, cat);
   const items = ((data && data.items) || []).slice();
-  if (state.units.sel && !items.some(x => x.sys === state.units.sel))
-    state.units.sel = null;
-  if (!state.units.sel && items.length) state.units.sel = items[0].sys;
-  items.forEach(it => list.appendChild(untRow(it, cat)));
+  items.forEach(it => list.appendChild(untRow(layerKey, it, cat)));
   // Плюс последним в ряду — как .upr-chip-add на карте Uprising и в кампании.
   const add = document.createElement("button");
   add.className = "upr-chip-add";
@@ -346,10 +504,15 @@ function untPaintList() {
   if (typeof uprAddBtn === "function") uprAddBtn(add, addImg);
   add.onclick = ev => {
     ev.stopPropagation();
-    untAddUnit(cat).catch(() => {});
+    untAddUnit(cat, null, layerKey).catch(() => {});
   };
   list.appendChild(add);
   list.scrollTop = st;
+}
+
+// Все списки вкладки (после батча иконок): скролл каждого сохраняем.
+function untPaintAllLists() {
+  document.querySelectorAll("#unt-main .unt-list").forEach(untPaintTypeList);
 }
 
 // Чип списка — РОВНО чип кампании (cmpChip, campaign.js:901-930):
@@ -359,11 +522,14 @@ function untPaintList() {
 // не трогаем). Своё здесь только состояние списка: .unt-row/.sel/
 // dataset.sys (не вид) + бейдж basis/DLC поверх (как .cmp-price-badge
 // у кампании). Имя — только в подсказке (sysname + путь).
-function untRow(it, cat) {
+function untRow(layerKey, it, cat) {
   const row = document.createElement("span");
   row.className = "upr-chip upr-card unt-row";
-  if (it.sys === state.units.sel) row.classList.add("sel");
+  if (it.sys === state.units.sel && layerKey === state.units.selLayer
+      && cat === state.units.cat) row.classList.add("sel");
   row.dataset.sys = it.sys;
+  row.dataset.layer = layerKey || "";
+  row.dataset.cat = cat;
   row.title = it.sys + "\n" + (it.path || "");
   const img = document.createElement("img");
   img.className = "upr-chip-icon";
@@ -385,43 +551,56 @@ function untRow(it, cat) {
   // Клик — выбор и тело; двойной клик — попап untEditUnit; ПКМ — меню чипа.
   row.addEventListener("click", ev => {
     ev.stopPropagation();
-    untSelect(cat, it.sys);
+    untSelect(layerKey, cat, it.sys);
   });
   row.addEventListener("dblclick", ev => {
     ev.stopPropagation();
     untEditUnit(cat, it.sys, row).catch(() => {});
   });
-  row.addEventListener("contextmenu", e => untChipCtx(e, cat, it.sys));
+  row.addEventListener("contextmenu", e => untChipCtx(e, layerKey, cat, it.sys));
   return row;
 }
 
-// Выбор строки: подсветка без полной перерисовки списка (иконки
-// не перезапрашиваются) + перерисовка тела.
-function untSelect(cat, sys) {
+// Выбор чипа: тройка (слой, класс, sysname) — одна на вкладку; подсветка
+// без полной перерисовки списков (иконки не перезапрашиваются) +
+// перерисовка тел всех карточек (тело показывает только свой слот).
+function untSelect(layerKey, cat, sys) {
   if (!state.units) return;
-  if (state.units.cat === cat && state.units.sel === sys) return;
+  if (state.units.selLayer === layerKey && state.units.cat === cat
+      && state.units.sel === sys) return;
+  state.units.selLayer = layerKey;
   state.units.cat = cat;
   state.units.sel = sys;
-  document.querySelectorAll("#unt-list .unt-row").forEach(r => {
-    r.classList.toggle("sel", r.dataset.sys === sys);
+  document.querySelectorAll("#unt-main .unt-row").forEach(r => {
+    r.classList.toggle("sel", r.dataset.sys === sys
+      && r.dataset.layer === (layerKey || "") && r.dataset.cat === cat);
   });
-  untPaintDetail();
+  document.querySelectorAll("#unt-main .unt-detail").forEach(untPaintTypeDetail);
 }
 
-// Иконки текущего класса своим батчем (образец cmpEnsureIcons): имена без
+// Иконки всех слоёв своим батчем (образец cmpEnsureIcons): имена без
 // иконок — одним запросом /api/uprising_icons_data, затем только перерисовка
-// списка (тело от иконок не зависит). Флаг готовности свой — uprIconsReady
+// списков (тела от иконок не зависят). Флаг готовности свой — uprIconsReady
 // и uprIconMap карты не трогаем.
-async function untEnsureIcons(cat) {
+async function untEnsureIcons() {
   if (!state.units) return;
   const my = ++state.units.iconSeq;
-  const data = untCatData(cat);
   const map = state.units.iconMap || {};
-  const names = (((data && data.items) || []).map(x => x.sys) || [])
-    .filter(s => s && !map[s]);
+  const seen = new Set();
+  const names = [];
+  ((state.units && state.units.layers) || []).forEach(L => {
+    UNT_CATS.forEach(cat => {
+      ((((L.cats || {})[cat] || {}).items) || []).forEach(x => {
+        if (x && x.sys && !map[x.sys] && !seen.has(x.sys)) {
+          seen.add(x.sys);
+          names.push(x.sys);
+        }
+      });
+    });
+  });
   if (!names.length) {
     state.units.iconsReady = true;
-    untPaintList();
+    untPaintAllLists();
     return;
   }
   state.units.iconsLoading = true;
@@ -431,11 +610,11 @@ async function untEnsureIcons(cat) {
       body: JSON.stringify({ root, names }), timeout: 60000 });
     const j = await r.json();
     if (my !== state.units.iconSeq) return;
-    if (!state.units || state.units.cat !== cat) return;
+    if (!state.units) return;
     if (j && j.ok) {
       Object.assign(state.units.iconMap, j.icons || {});
       state.units.iconsReady = true;
-      untPaintList();
+      untPaintAllLists();
     }
   } catch (e) { /* чипы добирают одиночными через uprChipIcon */ }
   finally {
@@ -443,20 +622,25 @@ async function untEnsureIcons(cat) {
   }
 }
 
-// Тело справа: ВСЕ параметры выбранного юнита из species-строки без
+// Тело карточки типа: ВСЕ параметры юнита из species-строки без
 // исключений (колонка: значение по всем колонкам файла, включая sysname).
-// Строка читается из выигравшего файла витрины (basis/DLC-зеркало уже смёржено).
-async function untPaintDetail() {
-  const box = $("#unt-detail");
+// Тело показывает только свой слот: полный разбор — если глобальный выбор
+// (слой, класс, sysname) попал в эту карточку, иначе подсказка.
+// Строка читается из файла своего слоя (без побочных эффектов,
+// как добор оверлеев в renderUnits).
+async function untPaintTypeDetail(box) {
   if (!box || !state.units) return;
+  const layerKey = box.dataset.layer;
+  const cat = box.dataset.cat;
+  const mine = state.units.sel && state.units.selLayer === layerKey
+    && state.units.cat === cat;
   const my = ++state.units.detSeq;
-  const cat = state.units.cat;
-  const sys = state.units.sel;
+  const sys = mine ? state.units.sel : null;
   box.innerHTML = "";
-  const item = sys ? untFindItem(cat, sys) : null;
+  const item = sys ? untFindLayerItem(layerKey, cat, sys) : null;
   if (!item) {
     const d = document.createElement("div");
-    d.className = "swt-empty";
+    d.className = "unt-empty-hint";
     d.textContent = t("cpg_pick") || t("unt_sub") || "";
     box.appendChild(d);
     return;
@@ -501,19 +685,20 @@ async function untPaintDetail() {
     untEditUnit(cat, item.sys, editB).catch(() => {});
   };
   head.appendChild(editB);
-  head.oncontextmenu = e => untChipCtx(e, cat, item.sys);
+  head.oncontextmenu = e => untChipCtx(e, layerKey, cat, item.sys);
   box.appendChild(head);
   const pathRow = document.createElement("div");
   pathRow.className = "unt-detail-path";
   pathRow.textContent = item.path || "";
   pathRow.title = item.path || "";
   box.appendChild(pathRow);
-  // Параметры: читаем строку выигравшего файла (без побочных эффектов,
-// как добор оверлеев в renderUnits).
+  // Параметры: читаем строку файла своего слоя (без побочных эффектов,
+  // как добор оверлеев в renderUnits).
   const got = await untReadRows(item.path);
-  if (my !== state.units.detSeq || state.units.sel !== sys || state.units.cat !== cat)
+  if (my !== state.units.detSeq || state.units.sel !== sys
+      || state.units.cat !== cat || state.units.selLayer !== layerKey)
     return;
-  const data = untCatData(cat);
+  const data = untLayerCatData(layerKey, cat);
   const columns = (got && got.columns && got.columns.length)
     ? got.columns : ((data && data.columns) || []);
   let values = [];
@@ -552,10 +737,10 @@ async function untAnalyze() {
   if (btn) { btn.disabled = true; btn.textContent = label + "…"; }
   try {
     if (!state.units.src) await renderUnits();
-    const cats = state.units.cats || {};
     const parts = [];
     UNT_CATS.forEach(cat => {
-      const n = (cats[cat] && cats[cat].items.length) || 0;
+      const d = untCatData(cat);
+      const n = ((d && d.items) || []).length;
       if (n > 0) parts.push((t("unt_class_" + cat) || cat) + ": " + n);
     });
     toast(parts.length ? parts.join(" · ") : label, parts.length ? "ok" : "");
@@ -568,9 +753,9 @@ async function untAnalyze() {
 
 // Открыть species-файл в гриде через существующий механизм (первый загруженный класс).
 function untOpenGrid() {
-  const cats = (state.units && state.units.cats) || {};
   for (const cat of UNT_CATS) {
-    const p = cats[cat] && cats[cat].path;
+    const d = untCatData(cat);
+    const p = d && d.path;
     if (p && typeof openFile === "function") { openFile(p); return; }
   }
   toast(t("unt_sub") || "", "err");
@@ -578,7 +763,7 @@ function untOpenGrid() {
 
 // Пачка правок ячеек одной записью истории (редактор и CRUD S6):
 // cells = [{row, col, value, type?}] — строки species-файла, row включая шапку.
-// path — ТОЛЬКО реальный путь из state.units.cats (на несуществующем пути
+// path — ТОЛЬКО реальный путь из витрины слоёв (на несуществующем пути
 // бэкенд отвечает 500, а не JSON).
 async function untWriteCells(path, cells, summary) {
   if (!path) {
@@ -611,10 +796,69 @@ async function untWriteCells(path, cells, summary) {
 // Витрина читается мимо живых сессий (оверлеи — через /api/file без побочных
 // эффектов): после каждой записи витрину категории перечитываем renderUnits(true).
 
-// Данные категории из витрины (реальные пути!) или null.
+// Данные категории слоя {path, columns, items:[{sys, path}]} или null.
+// Слой держит ТОЛЬКО строки своего файла (basis и DLC рядом, без слияния).
+function untLayerCatData(layerKey, cat) {
+  const layers = (state.units && state.units.layers) || [];
+  for (const L of layers) {
+    if (L.key === layerKey) return ((L.cats || {})[cat]) || null;
+  }
+  return null;
+}
+
+// Сводный вид категории для CRUD/зеркала (старая форма cats[cat]):
+// {path (basis), columns, overlays (пути DLC), items:[{sys, src, path}]} —
+// сначала база, поверх оверлеи (DLC выигрывает у basis при том же sysname).
+// Пути — ТОЛЬКО реальные из витрины слоёв.
 function untCatData(cat) {
-  const c = (state.units && state.units.cats) || {};
-  return c[cat] || null;
+  return untMergedCat(cat);
+}
+
+function untMergedCat(cat) {
+  const layers = (state.units && state.units.layers) || [];
+  let path = "", columns = [], overlays = [];
+  const bySys = new Map();
+  layers.forEach(L => {
+    const d = (L.cats || {})[cat];
+    if (!d) return;
+    const src = L.key === "basis" ? "basis" : (L.label || L.key);
+    if (L.key === "basis") {
+      path = d.path || "";
+      columns = d.columns || [];
+    } else if (d.path) overlays.push(d.path);
+    if (!columns.length && (d.columns || []).length) columns = d.columns;
+    (d.items || []).forEach(it => {
+      bySys.delete(it.sys);
+      bySys.set(it.sys, { sys: it.sys, src, path: d.path || "" });
+    });
+  });
+  if (!path && !overlays.length && !bySys.size) return null;
+  if (!path && overlays.length) path = overlays[0];
+  return { path, columns, overlays, items: Array.from(bySys.values()) };
+}
+
+// Элемент слоя {sys, src, path} или null (src — метка слоя: basis/Имя DLC).
+function untFindLayerItem(layerKey, cat, sys) {
+  const layers = (state.units && state.units.layers) || [];
+  for (const L of layers) {
+    if (L.key !== layerKey) continue;
+    const items = (((L.cats || {})[cat] || {}).items) || [];
+    const hit = items.find(x => x.sys === sys);
+    if (hit) return { sys: hit.sys,
+      src: L.key === "basis" ? "basis" : (L.label || L.key),
+      path: hit.path || "" };
+  }
+  return null;
+}
+
+// Первый слой, где лежит строка (для выбора после переименования).
+function untLayerOf(cat, sys) {
+  const layers = (state.units && state.units.layers) || [];
+  for (const L of layers) {
+    const items = (((L.cats || {})[cat] || {}).items) || [];
+    if (items.some(x => x.sys === sys)) return L.key;
+  }
+  return null;
 }
 
 // Элемент витрины {sys, src, path} или null.
@@ -624,12 +868,13 @@ function untFindItem(cat, sys) {
   return (d.items || []).find(x => x.sys === sys) || null;
 }
 
-// Все sysname витрины (для проверки уникальности).
+// Все sysname витрины (для проверки уникальности) — по всем слоям.
 function untAllSys() {
   const out = new Set();
-  const cats = (state.units && state.units.cats) || {};
-  UNT_CATS.forEach(c => {
-    ((cats[c] && cats[c].items) || []).forEach(x => { if (x.sys) out.add(x.sys); });
+  ((state.units && state.units.layers) || []).forEach(L => {
+    UNT_CATS.forEach(c => {
+      ((((L.cats || {})[c] || {}).items) || []).forEach(x => { if (x.sys) out.add(x.sys); });
+    });
   });
   return out;
 }
@@ -912,9 +1157,13 @@ async function untEditUnit(cat, sys, anchorEl) {
       }
     }
     close();
-    // Переименование ушло вниз — выбор едет на новое имя, иначе валидация
-    // renderUnits сбросит тело на первую строку класса.
-    if (newSys !== sys && state.units) state.units.sel = newSys;
+    // Переименование ушло вниз — выбор едет на новое имя в том же слое
+    // и классе, иначе валидация renderUnits сбросит тело на первый слот.
+    if (newSys !== sys && state.units) {
+      state.units.cat = cat;
+      state.units.selLayer = untLayerOf(cat, sys) || state.units.selLayer;
+      state.units.sel = newSys;
+    }
     // Оверлеи читались мимо живых сессий — перечитать витрину категории.
     await renderUnits(true).catch(() => {});
     if (ok) toast(t("saved") || "Сохранено", "ok");
@@ -943,13 +1192,16 @@ async function untCheckSquadRefs(values) {
 }
 
 // Добавление новой строки (клонированием Row — правило spreadsheet_ml, бэкенд
-// /api/add_row): path — только реальный путь basis-файла категории из витрины.
-// preset — готовые значения (вставка из буфера) или null (чистая строка).
-async function untAddUnit(cat, preset) {
+// /api/add_row): path — реальный путь файла своего слоя (кнопка «+» карточки
+// пишет в файл слоя, иначе — в basis сводного вида). preset — готовые
+// значения (вставка из буфера) или null (чистая строка).
+async function untAddUnit(cat, preset, layerKey) {
+  const layerData = layerKey ? untLayerCatData(layerKey, cat) : null;
   const d = untCatData(cat);
-  const path = d && d.path;
+  const path = (layerData && layerData.path) || (d && d.path);
   if (!path) { toast(t("unt_sub") || "error", "err"); return null; }
-  const width = Math.max((d.columns || []).length, 1);
+  const effLayer = layerKey || "basis";
+  const width = Math.max((((layerData && layerData.columns) || (d && d.columns)) || []).length, 1);
   let vals = null;
   if (preset && preset.length) {
     vals = preset.slice(0, width);
@@ -975,9 +1227,13 @@ async function untAddUnit(cat, preset) {
     j = await r.json();
   } catch (e) { j = null; }
   if (!j || !j.ok) { toast((j && j.error) || "error", "err"); return null; }
-  if (cat === "squads") await untCheckSquadRefs(vals, d.columns);
-  // Выбор — на добавленную строку (валидация renderUnits его сохранит).
-  if (state.units) { state.units.cat = cat; state.units.sel = vals[0]; }
+  if (cat === "squads") await untCheckSquadRefs(vals, (d && d.columns) || []);
+  // Выбор — на добавленную строку в её слое (валидация renderUnits сохранит).
+  if (state.units) {
+    state.units.cat = cat;
+    state.units.selLayer = effLayer;
+    state.units.sel = vals[0];
+  }
   await renderUnits(true).catch(() => {});
   toast(t("saved") || "Сохранено", "ok");
   return vals[0];
@@ -1054,17 +1310,21 @@ async function untCopyUnit(cat, sys, cut) {
 }
 
 // Вставить буфер: targetCat — конкретная категория (меню чипа/категории) или
-// null (меню сектора: каждый элемент в свою категорию). Имена уникализируем,
-// ширину подгоняем под файл-приёмник, связи squads→humans проверяем.
-async function untPasteClip(targetCat) {
+// null (меню сектора/слоя: каждый элемент в свою категорию); targetLayerKey —
+// слой-приёмник (меню карточки/слоя) или null (сводный basis). Имена
+// уникализируем, ширину подгоняем под файл-приёмник, связи squads→humans
+// проверяем. Пути — ТОЛЬКО реальные из витрины слоёв.
+async function untPasteClip(targetCat, targetLayerKey) {
   const clip = state.units && state.units.clip;
   const entries = (clip && clip.items) || [];
   if (!entries.length) return;
   let n = 0;
   for (const en of entries) {
     const tcat = targetCat || en.cat;
+    const layerData = targetLayerKey ? untLayerCatData(targetLayerKey, tcat) : null;
     const d = untCatData(tcat);
-    const path = d && d.path;
+    const columns = ((layerData && layerData.columns) || (d && d.columns)) || [];
+    const path = (layerData && layerData.path) || (d && d.path);
     if (!path) continue;
     // Значения: срез при вырезании либо ленивое чтение копии-источника.
     let vals = (en.values || []).slice();
@@ -1076,11 +1336,11 @@ async function untPasteClip(targetCat) {
       }
     }
     if (!vals.length) {
-      const w0 = Math.max((d.columns || []).length, 1);
+      const w0 = Math.max(columns.length, 1);
       vals = [en.sys];
       while (vals.length < w0) vals.push("");
     }
-    const width = Math.max((d.columns || []).length, 1);
+    const width = Math.max(columns.length, 1);
     vals = vals.slice(0, width);
     while (vals.length < width) vals.push("");
     vals[0] = untUniqueSys(String(vals[0] || en.sys || "unit_new").trim() || "unit_new");
@@ -1091,17 +1351,66 @@ async function untPasteClip(targetCat) {
       j = await r.json();
     } catch (e) { j = null; }
     if (!j || !j.ok) { toast((j && j.error) || "error", "err"); continue; }
-    if (tcat === "squads") await untCheckSquadRefs(vals, d.columns);
+    if (tcat === "squads") await untCheckSquadRefs(vals, columns);
     n++;
   }
   await renderUnits(true).catch(() => {});
   if (n) toast(t("saved") || "Сохранено", "ok");
 }
 
-// Очистка категории: удалить все строки категории (каждая — из своего файла).
-async function untClearCat(cat) {
-  const d = untCatData(cat);
-  const items = ((d && d.items) || []).slice();
+// Вставить буфер в свой слой: каждый элемент — в свой класс, но в файл
+// этого слоя (меню слоя); нет файла класса в слое — в сводный basis.
+async function untPasteClipToLayer(layerKey) {
+  const clip = state.units && state.units.clip;
+  const entries = (clip && clip.items) || [];
+  if (!entries.length) return;
+  let n = 0;
+  for (const en of entries) {
+    const tcat = en.cat;
+    const layerData = untLayerCatData(layerKey, tcat);
+    const d = untCatData(tcat);
+    const columns = ((layerData && layerData.columns) || (d && d.columns)) || [];
+    const path = (layerData && layerData.path) || (d && d.path);
+    if (!path) continue;
+    // Значения: срез при вырезании либо ленивое чтение копии-источника.
+    let vals = (en.values || []).slice();
+    if (!vals.length && en.path) {
+      const got = await untReadRows(en.path);
+      if (got) {
+        const ri = untFindRow(got.rows, en.sys);
+        if (ri !== -1) vals = (got.rows[ri].values || []).slice();
+      }
+    }
+    const width = Math.max(columns.length, 1);
+    if (!vals.length) vals = [en.sys];
+    vals = vals.slice(0, width);
+    while (vals.length < width) vals.push("");
+    vals[0] = untUniqueSys(String(vals[0] || en.sys || "unit_new").trim() || "unit_new");
+    let j = null;
+    try {
+      const r = await api("/api/add_row", { method: "POST",
+        body: JSON.stringify({ path, values: vals, save: true }) });
+      j = await r.json();
+    } catch (e) { j = null; }
+    if (!j || !j.ok) { toast((j && j.error) || "error", "err"); continue; }
+    if (tcat === "squads") await untCheckSquadRefs(vals, columns);
+    n++;
+  }
+  await renderUnits(true).catch(() => {});
+  if (n) toast(t("saved") || "Сохранено", "ok");
+}
+
+// Очистка категории слоя (layerKey) или всей категории (сводно, меню сектора):
+// удалить строки (каждая — из своего файла).
+async function untClearCat(cat, layerKey) {
+  let items;
+  if (layerKey) {
+    const ld = untLayerCatData(layerKey, cat);
+    items = (((ld && ld.items) || []).map(x => ({ sys: x.sys, path: x.path })));
+  } else {
+    const d = untCatData(cat);
+    items = (((d && d.items) || []).slice());
+  }
   if (!items.length) return;
   const c = await askConfirm({
     title: (t("unt_class_" + cat) || cat) + ": " + items.length,
@@ -1175,12 +1484,13 @@ async function untReplaceSys() {
 }
 
 // Меню чипа (образец uprChipCtx): добавить/править/копировать/вырезать/
-// удалить/вставить + открыть в таблице.
-function untChipCtx(e, cat, sys) {
+// удалить/вставить + открыть в таблице. Добавление и вставка пишут в файл
+// своего слоя.
+function untChipCtx(e, layerKey, cat, sys) {
   const hasClip = !!((state.units && state.units.clip && state.units.clip.items || []).length);
   openCtxMenu(e, [
     { label: t("unt_add") || "Добавить", icon: "add",
-      fn: () => { untAddUnit(cat).catch(() => {}); } },
+      fn: () => { untAddUnit(cat, null, layerKey).catch(() => {}); } },
     { label: t("unt_edit") || "Редактировать", icon: "edit",
       fn: () => { untEditUnit(cat, sys, null).catch(() => {}); } },
     { label: t("unt_copy") || "Копировать", icon: "copy",
@@ -1191,44 +1501,106 @@ function untChipCtx(e, cat, sys) {
     { label: t("unt_delete") || "Удалить", icon: "delete", danger: true,
       fn: () => { untDelUnit(cat, sys).catch(() => {}); } },
     { label: t("unt_paste") || "Вставить", icon: "paste", disabled: !hasClip,
-      fn: () => { untPasteClip(cat).catch(() => {}); } },
+      fn: () => { untPasteClip(cat, layerKey).catch(() => {}); } },
     { sep: true },
     { label: t("upr_open_grid") || "Открыть в таблице", icon: "grid",
       fn: () => {
-        const it = untFindItem(cat, sys);
+        const it = untFindLayerItem(layerKey, cat, sys) || untFindItem(cat, sys);
         if (it && it.path && typeof openFile === "function") openFile(it.path);
       } },
   ]);
 }
 
-// Меню категории (фон ряда/заголовок): добавить, копировать всё, вставить, очистить.
-function untCatCtx(e, cat) {
-  const d = untCatData(cat);
-  const n = ((d && d.items) || []).length;
+// Меню категории слоя (фон ряда/шапка карточки): добавить, копировать всё,
+// вставить, очистить. Пишет в файл своего слоя.
+function untCatCtx(e, layerKey, cat) {
+  const ld = untLayerCatData(layerKey, cat);
+  const items = ((ld && ld.items) || []).map(x => ({ sys: x.sys, path: x.path }));
+  const n = items.length;
   const hasClip = !!((state.units && state.units.clip && state.units.clip.items || []).length);
   openCtxMenu(e, [
     { label: t("unt_add") || "Добавить", icon: "add",
-      fn: () => { untAddUnit(cat).catch(() => {}); } },
+      fn: () => { untAddUnit(cat, null, layerKey).catch(() => {}); } },
     { label: t("unt_copy") || "Копировать", icon: "copy", disabled: !n,
       fn: () => {
         if (!state.units) state.units = untFreshState();
         state.units.clip = { op: "copy",
-          items: (d.items || []).map(x => ({ cat, sys: x.sys, path: x.path })) };
+          items: items.map(x => ({ cat, sys: x.sys, path: x.path })) };
         toast(t("ctx_copied") || "Скопировано", "ok");
       } },
     { label: t("unt_paste") || "Вставить", icon: "paste", disabled: !hasClip,
-      fn: () => { untPasteClip(cat).catch(() => {}); } },
+      fn: () => { untPasteClip(cat, layerKey).catch(() => {}); } },
     { sep: true },
     { label: t("upr_sec_clear") || "Очистить", icon: "delete", danger: true, disabled: !n,
-      fn: () => { untClearCat(cat).catch(() => {}); } },
+      fn: () => { untClearCat(cat, layerKey).catch(() => {}); } },
+  ]);
+}
+
+// Меню слоя (шапка секции): копировать весь слой, вставить в слой, очистить слой.
+function untLayerCtx(e, layerKey) {
+  const layers = (state.units && state.units.layers) || [];
+  const L = layers.find(x => x.key === layerKey);
+  if (!L) return;
+  let total = untLayerTotal(L);
+  const hasClip = !!((state.units && state.units.clip && state.units.clip.items || []).length);
+  openCtxMenu(e, [
+    { label: t("unt_copy") || "Копировать", icon: "copy", disabled: !total,
+      fn: () => {
+        if (!state.units) state.units = untFreshState();
+        const items = [];
+        UNT_CATS.forEach(c => {
+          ((((L.cats || {})[c] || {}).items) || []).forEach(x =>
+            items.push({ cat: c, sys: x.sys, path: x.path }));
+        });
+        state.units.clip = { op: "copy", items };
+        toast(t("ctx_copied") || "Скопировано", "ok");
+      } },
+    { label: t("unt_paste") || "Вставить", icon: "paste", disabled: !hasClip,
+      fn: () => { untPasteClipToLayer(layerKey).catch(() => {}); } },
+    { sep: true },
+    { label: t("upr_sec_clear") || "Очистить", icon: "delete", danger: true, disabled: !total,
+      fn: async () => {
+        const c = await askConfirm({
+          title: (L.label || L.key) + ": " + total,
+          message: t("upr_sec_clear_m") || "Всё наполнение будет удалено.",
+          buttons: [
+            { id: "ok", label: t("delete") || "Удалить", kind: "danger" },
+            { id: "cancel", label: t("cancel") || "Отмена", kind: "ghost" },
+          ],
+        });
+        if (c !== "ok") return;
+        for (const cat of UNT_CATS) {
+          const ld = (L.cats || {})[cat];
+          if (!(((ld && ld.items) || []).length) || !ld.path) continue;
+          const got = await untReadRows(ld.path);
+          if (!got) continue;
+          const rows = [];
+          (ld.items || []).forEach(x => {
+            const ri = untFindRow(got.rows, x.sys);
+            if (ri !== -1) rows.push(ri);
+          });
+          rows.sort((a, b) => b - a);
+          for (const ri of rows) {
+            try {
+              await api("/api/delete_row", { method: "POST",
+                body: JSON.stringify({ path: ld.path, row: ri, save: true }) });
+            } catch (ex) { /* пропускаем, идём дальше */ }
+          }
+        }
+        await renderUnits(true).catch(() => {});
+        toast(t("saved") || "Сохранено", "ok");
+      } },
   ]);
 }
 
 // Меню сектора (образец uprSectorCtx): заменить/копировать/вставить/очистить.
+// Сводно по всем слоям (пул вкладки).
 function untSecCtx(e) {
-  const cats = (state.units && state.units.cats) || {};
   let total = 0;
-  UNT_CATS.forEach(c => { total += ((cats[c] && cats[c].items) || []).length; });
+  UNT_CATS.forEach(c => {
+    const d = untCatData(c);
+    total += (((d && d.items) || []).length);
+  });
   const hasClip = !!((state.units && state.units.clip && state.units.clip.items || []).length);
   openCtxMenu(e, [
     { label: t("unt_edit") || "Редактировать", icon: "swap", disabled: !total,
@@ -1238,7 +1610,8 @@ function untSecCtx(e) {
         if (!state.units) state.units = untFreshState();
         const items = [];
         UNT_CATS.forEach(c => {
-          (((cats[c] || {}).items) || []).forEach(x =>
+          const d = untCatData(c);
+          (((d && d.items) || [])).forEach(x =>
             items.push({ cat: c, sys: x.sys, path: x.path }));
         });
         state.units.clip = { op: "copy", items };
@@ -1259,8 +1632,8 @@ function untSecCtx(e) {
         });
         if (c !== "ok") return;
         for (const cat of UNT_CATS) {
-          const d = cats[cat];
-          if (!((d && d.items) || []).length) continue;
+          const d = untCatData(cat);
+          if (!(((d && d.items) || []).length)) continue;
           const byPath = new Map();
           d.items.forEach(it => {
             if (!it.path) return;

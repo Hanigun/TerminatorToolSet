@@ -1,28 +1,28 @@
-/* units.css — редактор юнитов species: пулы, селектор класса, секция найма, тело · последний в каскаде (<link> в templates/index.html после overrides.css) */
+/* units.css — редактор юнитов species: слои, карточки типов, master-detail · последний в каскаде (<link> в templates/index.html после overrides.css) */
+/* Сворачивание секций слоёв и карточек типов — РОВНО классы SWT
+   (swt-sec-head/swt-sec-chev/swt-sec-body, swt-item/swt-item-head/
+   swt-item-chev/swt-item-body из swt.css): здесь их НЕ дублируем. */
 /* обёртка сегмента-источника «Проект | Игра | Мод»: не даёт шапке сжать сегмент */
 .unt-src-wrap { position: relative; flex-shrink: 0; }
-/* контейнер витрины: селектор класса сверху, ниже master-detail */
-.unt-main { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
-/* селектор класса: подпись пула + выпадающий список species-классов */
-.unt-catbar { display: flex; align-items: center; gap: 10px; flex-shrink: 0;
-  border: 1px solid var(--border); background: var(--bg-card); padding: 6px 10px; }
-.unt-catbar-label { font-size: 13px; font-weight: 700; white-space: nowrap; }
-.unt-cat-sel { max-width: 320px; background: var(--bg); color: var(--text);
-  border: 1px solid var(--border); padding: 3px 6px; font-size: 13px; }
-/* master-detail: слева список (фикс. ширина), справа тело (резина) */
-.unt-wrap { flex: 1; min-height: 0; display: flex; gap: 8px; }
-.unt-list-pane { width: 280px; flex-shrink: 0; display: flex; flex-direction: column;
-  min-height: 0; border: none; background: transparent; }
-/* список — тело секции найма кампании (.upr-cat-body из uprising.css задаёт
-   чипы, зазоры и фон); свой unt-класс ДОПОЛНИТЕЛЬНО — только скролл и
-   растяжение в панели, вид чипов не трогаем */
-.unt-list { flex: 1; min-height: 0; overflow-y: auto; }
+/* контейнер витрины: секции слоёв друг под другом, скролл страницы */
+.unt-main { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; }
+/* сводка слоя в шапке секции (название слоя — родной span .swt-sec-head > span) */
+.unt-layer-sum { font-size: 11px; font-weight: 400; color: var(--text-mute); text-transform: none; letter-spacing: 0; }
+/* плашка-тег карточки типа: буква класса (размер/вид — родной .swt-item-tag) */
+.unt-type-tag { background: #a06af5; }
+.unt-type-name { font-size: 12px; font-weight: 700; }
+.unt-type-count { font-size: 11px; color: var(--text-mute); }
+/* master-detail внутри тела карточки: слева список (фикс. ширина), справа тело (резина) */
+.unt-wrap { display: flex; gap: 8px; }
+.unt-list-pane { width: 280px; flex-shrink: 0; min-width: 0; }
+/* список — ряд чипов найма кампании (вид чипов задаёт .upr-cat-body
+   из uprising.css, своё не трогаем) */
 /* выбранный чип — как найм кампании (campaign.css: #campaign-tab .sel) */
 #units-tab .upr-cat-body .upr-chip.sel { outline: 2px solid var(--accent);
   outline-offset: -2px; }
 /* тело справа: шапка (иконка-чип + имя + бейдж + правка) + таблица колонка:значение */
-.unt-detail { flex: 1; min-width: 0; overflow-y: auto;
-  border: 1px solid var(--border); background: var(--bg-card); padding: 10px 12px; }
+.unt-detail { flex: 1; min-width: 0;
+  border: 1px solid var(--border); background: var(--bg); padding: 10px 12px; }
 .unt-detail-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
 .unt-detail-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; font-size: 16px; font-weight: 700; }
@@ -38,6 +38,8 @@
 .unt-kv-key { width: 220px; flex-shrink: 0; font-size: 12px; font-weight: 700;
   color: var(--text-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .unt-kv-val { flex: 1; min-width: 0; font-size: 12px; overflow-wrap: anywhere; }
+/* подсказка пустого тела карточки (выбор в другом слоте) */
+.unt-empty-hint { font-size: 12px; color: var(--text-mute); padding: 8px 2px; }
 /* бейдж источника чипа: basis или DLC-оверлей (Legion/Resistance) —
    оверлей как .cmp-price-badge кампании */
 .unt-src-badge { position: absolute; right: 4%; bottom: 2px; display: flex;
