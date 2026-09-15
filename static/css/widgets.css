@@ -59,7 +59,9 @@
    приподнятая карточка без обводки, акцентная планка слева вместо рамки,
    глубокая тень отделяет от фона */
 .tip {
-  position: fixed; z-index: 300; max-width: 320px; background: var(--bg-elev);
+  position: fixed; z-index: 1600; max-width: 320px; background: var(--bg-elev);
+  /* выше модалок (1300) и тостов (1500): иначе в окне истории
+     подсказки рисовались под оверлеем, на заднем фоне */
   border: none; border-left: 3px solid var(--accent); border-radius: var(--radius);
   padding: 9px 12px; font-size: 12px; line-height: 1.5; color: var(--text);
   white-space: pre-wrap; pointer-events: none; box-shadow: 0 12px 32px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.4);
