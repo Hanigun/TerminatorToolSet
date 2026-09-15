@@ -7,12 +7,36 @@
 /* мини-прогресс конвертации иконок висит абсолютом под шапкой (классы
    .upr-conv из uprising.css) — якорь относительного позиционирования */
 #units-tab .swt-head { position: relative; }
+/* враппер витрины — якорь оверлея загрузки */
+.unt-main-wrap { flex: 1; min-height: 0; display: flex; position: relative; }
 /* контейнер витрины: секции слоёв друг под другом, скролл страницы */
 .unt-main { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; }
+/* оверлей загрузки — как кампания (.cmp-loading) и uprising (.upr-loading):
+   затемнение + спиннер по центру */
+.unt-loading { position: absolute; inset: 0; z-index: 50; display: flex;
+  align-items: center; justify-content: center; background: rgba(0,0,0,.45); }
+.unt-loading[hidden] { display: none; }
+.unt-loading-spin { width: 46px; height: 46px; border-radius: 50%;
+  border: 4px solid rgba(255,255,255,.25); border-top-color: #fff;
+  animation: spin .8s linear infinite; }
 /* шапка слоя: вдвое выше родной .swt-sec-head (4px 8px -> 8px 12px) */
 .unt-layer-head { padding: 8px 12px; }
-/* базовая игра — акцентная левая полоса вместо фиолетовой SWT */
+/* полосы слоёв по тону DLC: базовая игра — акцент, Legion — красный,
+   Resistance — тёмно-оранжевый, Evolution — фиолетовый SWT */
 .unt-layer-head.unt-layer-base { border-left-color: var(--accent); }
+.unt-layer-head.unt-layer-legion { border-left-color: #dc3530; }
+.unt-layer-head.unt-layer-resistance { border-left-color: #b45f06; }
+.unt-layer-head.unt-layer-evolution { border-left-color: #a06af5; }
+/* pill «сложить/разложить всё» в правом крайнем углу шапки слоя:
+   две кнопки в одну линию на одном уровне */
+.unt-all-wrap { flex: none; margin-left: auto; display: inline-flex;
+  align-items: stretch; border: 1px solid var(--border); border-radius: 3px;
+  overflow: hidden; }
+.unt-all-btn { display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 22px; padding: 0; border: none; background: transparent;
+  color: var(--text-mute); cursor: pointer; }
+.unt-all-btn + .unt-all-btn { border-left: 1px solid var(--border); }
+.unt-all-btn:hover { color: var(--accent); background: rgba(255,255,255,.06); }
 /* чип слоя: Base Game — акцентный с тёмным текстом, DLC — нейтральный.
    Скругление минимальное (3px, как острые углы программы). Вес селекторов —
    выше родного .swt-sec-head > span из swt.css, иначе его muted-цвет и капс
@@ -23,6 +47,14 @@
   text-transform: none; letter-spacing: 0; white-space: nowrap; }
 .swt-sec-head > span.unt-layer-chip-base { background: var(--accent);
   border-color: var(--accent); color: #14161a; }
+/* чипы слоёв DLC по тону: Legion — красный, Resistance — тёмно-оранжевый,
+   Evolution — фиолетовый (вес — выше родного .swt-sec-head > span) */
+.swt-sec-head > span.unt-layer-chip-legion { background: #dc3530;
+  border-color: #dc3530; color: #fff; }
+.swt-sec-head > span.unt-layer-chip-resistance { background: #b45f06;
+  border-color: #b45f06; color: #fff; }
+.swt-sec-head > span.unt-layer-chip-evolution { background: #a06af5;
+  border-color: #a06af5; color: #14161a; }
 /* короткий путь слоя (.../basis/scripts/species) — тем же весом, иначе
    капс из SWT превращает путь в верхний регистр */
 .swt-sec-head > span.unt-layer-path { flex: 1 1 auto; min-width: 0;
@@ -43,8 +75,12 @@
 .unt-src-mod { color: #7ec46a; }
 .unt-layer-head .unt-src-ico { margin-left: 0; }
 .unt-type-head .unt-src-ico { margin-left: 0; }
-/* карточка типа: базовая игра — акцентная полоса, как слой */
+/* карточки типов — полосы в тон своего слоя: базовая игра — акцент,
+   Legion — красный, Resistance — тёмно-оранжевый, Evolution — фиолетовый */
 .unt-type-card.unt-type-base { border-left-color: var(--accent); }
+.unt-type-card.unt-type-legion { border-left-color: #dc3530; }
+.unt-type-card.unt-type-resistance { border-left-color: #b45f06; }
+.unt-type-card.unt-type-evolution { border-left-color: #a06af5; }
 /* иконка класса в шапке типа — РОВНО размер заголовков кампании (28px) */
 .unt-type-icon { height: 28px; width: auto; display: block; flex: none; }
 .unt-type-icon-fb { width: 28px; height: 28px; display: inline-flex;

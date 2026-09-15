@@ -21,6 +21,24 @@ function untCatIcon(cat) {
 }
 // Шеврон сворачивания — РОВНО как в SWT (swt.js:1239, swtItemCard:855).
 var UNT_CHEV_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+// Иконки pill-кнопок «развернуть/свернуть всё» слоя: двойной шеврон
+// вниз (разложить) и вверх (сложить).
+var UNT_ALL_EXPAND_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 13l6 6 6-6M6 5l6 6 6-6"/></svg>';
+var UNT_ALL_COLLAPSE_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 11l6-6 6 6M6 19l6-6 6-6"/></svg>';
+// Тон слоя по имени DLC (подстрока, регистр не важен — папки называются
+// вольно: Legion, "We are legion", Resistance, Evolution…): legion —
+// красный, resistance — тёмно-оранжевый, evolution — фиолетовый (как SWT);
+// basis — акцент. Списка DLC в коде нет: всё найденное в dlc/*/basis
+// подхватывается слоями динамически, неизвестные — нейтрально (фиолет SWT).
+function untLayerTone(L) {
+  if (!L) return "";
+  if (L.key === "basis") return "base";
+  const s = ((L.label || "") + " " + (L.key || "")).toLowerCase();
+  if (s.indexOf("legion") !== -1) return "legion";
+  if (s.indexOf("resistance") !== -1) return "resistance";
+  if (s.indexOf("evolution") !== -1) return "evolution";
+  return "";
+}
 // Значок источника для шапок слоёв и типов — РОВНО значки вкладок дерева
 // и таббара (FOLDER_SVG/GAMEPAD_SVG/MOD_SVG, grid.js): папка, геймпад, куб.
 function untSrcBadge() {
@@ -162,11 +180,19 @@ function untDlcName(path) {
 // Слои хранят ТОЛЬКО строки своего файла: basis-слой — базу, каждый
 // DLC-слой — свой оверлей (один sysname виден в двух слоях, если файл
 // оверлея его переопределяет — зеркало вниз чинится записью в оба).
+// Оверлей загрузки вкладки — как cmpSetLoading/upr-loading у карт:
+// затемнение + спиннер поверх витрины, пока слои читаются.
+function untSetLoading(on) {
+  const el = $("#unt-loading");
+  if (el) el.hidden = !on;
+}
+
 async function renderUnits(force) {
   if (!state.units) state.units = untFreshState();
   if (state.units.loading && !force) return;
   const my = ++state.units.loadSeq;
   state.units.loading = true;
+  untSetLoading(true);
   const fresh = () => my === state.units.loadSeq;
   const root = untSrcRoot();
   const src = state.treeView;
@@ -303,7 +329,10 @@ async function renderUnits(force) {
       untImgSweepT = setTimeout(() => { untImgSweepT = 0; untReloadImages(); }, 5000);
     } catch (e) {}
   } finally {
-    if (fresh()) state.units.loading = false;
+    if (fresh()) {
+      state.units.loading = false;
+      untSetLoading(false);
+    }
   }
 }
 
@@ -382,9 +411,10 @@ function untLayerTotal(L) {
 function untLayerSec(L) {
   let open = L.open !== false;
   const isBase = L.key === "basis";
+  const tone = untLayerTone(L);
   const headEl = document.createElement("div");
   headEl.className = "swt-sec-head unt-layer-head" + (open ? "" : " swt-sec-closed")
-    + (isBase ? " unt-layer-base" : "");
+    + (tone ? " unt-layer-" + tone : "");
   headEl.dataset.layer = L.key;
   const chev = document.createElement("button");
   chev.className = "icon-btn swt-sec-chev";
@@ -404,7 +434,7 @@ function untLayerSec(L) {
   chev.innerHTML = UNT_CHEV_SVG;
   chev.onclick = e => { e.stopPropagation(); flip(); };
   const chip = document.createElement("span");
-  chip.className = "unt-layer-chip" + (isBase ? " unt-layer-chip-base" : "");
+  chip.className = "unt-layer-chip" + (tone ? " unt-layer-chip-" + tone : "");
   chip.textContent = isBase ? "Base Game" : (L.label || L.key);
   chip.title = isBase ? "Base Game" : (L.label || L.key);
   headEl.append(chev, chip);
@@ -424,6 +454,9 @@ function untLayerSec(L) {
     p.title = short;
     headEl.appendChild(p);
   }
+  // Pill «развернуть/свернуть всё» — в правом крайнем углу шапки, только
+  // на свои подменю (карточки типов этого слоя).
+  headEl.appendChild(untLayerAllWrap(L, bodyEl));
   headEl.addEventListener("click", e => {
     if (e.target.closest("input, select, button, label, .swt-cmd-combo")) return;
     flip();
@@ -432,6 +465,36 @@ function untLayerSec(L) {
   headEl.addEventListener("contextmenu", e => untLayerCtx(e, L.key));
   apply();
   return { headEl, bodyEl };
+}
+
+// Pill «развернуть/свернуть всё» слоя: две кнопки в одну линию на одном
+// уровне; действуют только на карточки типов СВОЕГО слоя (флаги _open +
+// синхронизация открытых карточек через card.__item, без перерисовки).
+function untLayerAllWrap(L, bodyEl) {
+  const wrap = document.createElement("span");
+  wrap.className = "unt-all-wrap";
+  const mk = expand => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "unt-all-btn";
+    b.title = expand ? (t("swt_expand_all") || "Развернуть все")
+                     : (t("swt_collapse_all") || "Свернуть все");
+    b.setAttribute("aria-label", b.title);
+    b.innerHTML = expand ? UNT_ALL_EXPAND_SVG : UNT_ALL_COLLAPSE_SVG;
+    b.onclick = e => {
+      e.stopPropagation();
+      UNT_CATS.forEach(cat => {
+        const data = (L.cats || {})[cat];
+        if (data) data._open = expand;
+      });
+      if (bodyEl) bodyEl.querySelectorAll(".swt-item").forEach(c => {
+        if (c.__item) untApplyTypeOpen(c, c.__item);
+      });
+    };
+    return b;
+  };
+  wrap.append(mk(true), mk(false));
+  return wrap;
 }
 
 // Применение флага раскрытия карточки типа — РОВНО swtApplyItemOpen
@@ -452,9 +515,10 @@ function untApplyTypeOpen(card, data) {
 // Иконка класса — РОВНО файлы кампании (UNT_CAT_ICONS, как CMP_CAT_ICONS).
 // Базовая игра — акцентная полоса (.unt-type-base), DLC — родной accent SWT.
 function untTypeCard(L, cat, data) {
+  const tone = untLayerTone(L);
   const card = document.createElement("div");
   card.className = "swt-item unt-type-card" + (data._open ? "" : " swt-item-closed")
-    + (L.key === "basis" ? " unt-type-base" : "");
+    + (tone ? " unt-type-" + tone : "");
   card.__item = data;
   card.dataset.layer = L.key;
   card.dataset.cat = cat;
