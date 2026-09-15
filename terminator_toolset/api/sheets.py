@@ -10,12 +10,13 @@ from flask import jsonify, request
 from ..domain.spreadsheet_ml import SpreadsheetError
 
 # species-файлы категорий + белые колонки статов для /api/species_stat
-# (правка cost/потребления/вместимости из попапа кампании; произвольные
+# (правка cost/потребления/вместимости/класса из попапа кампании; произвольные
 # колонки писать нельзя)
 _STAT_FILES = {"squads": "squads.xml", "tanks": "tanks.xml",
                "cars": "cars.xml", "helicopters": "helicopters.xml",
                "inventory_items": "inventory_items.xml"}
-_STAT_COLS = ("cost", "cp_cost", "supply_consumption", "people_capacity")
+_STAT_COLS = ("cost", "cp_cost", "supply_consumption", "people_capacity",
+              "unit_set")
 
 # -- синхронизация basis -> DLC внутри своего корня -----------------------
 # Две галочки на вкладке таблицы («⇄ DLC Legion», «⇄ DLC Resistance»)
@@ -558,7 +559,7 @@ def register_sheets(app, ctx):
     @app.route("/api/species_stat", methods=["POST"])
     def api_species_stat():
         """Запись статов юнита/предмета (cost/cp_cost/supply_consumption/
-        people_capacity) из попапа кампании — в species-файл, одной записью
+        people_capacity/unit_set) из попапа кампании — в species-файл, одной записью
         истории (как edit_cells). Файл — первый (base, затем DLC), где есть
         строка sysname: тот же порядок, что чтение цен, иначе шильдик
         и попап разъедутся с записью. В ответе path + cells — фронт обновляет

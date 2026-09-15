@@ -3320,8 +3320,8 @@ class Uprising:
         """Unit/item prices (cost column) by category: {cat: {sys: cost}}.
 
         Плюс stats: {cat: {sys: {cost, cp_cost, supply_consumption,
-        people_capacity}}} — для попапа кампании (правка cost/потребления/
-        вместимости с записью в species).
+        people_capacity, unit_set}}} — для попапа кампании (правка cost/
+        потребления/вместимости/класса с записью в species).
         Порядок base -> DLC и setdefault — как у цен: шильдик, попап
         и запись смотрят на одну и ту же строку.
         Результат кэшируется по max mtime species-файлов: повторное
@@ -3359,7 +3359,7 @@ class Uprising:
         """Тяжёлая половина prices: ElementTree-парсинг species-файлов.
         Чистая функция от корня — кэш выше решает, звать ли её."""
         stat_cols = ("cost", "cp_cost", "supply_consumption",
-                     "people_capacity")
+                     "people_capacity", "unit_set")
         out = {k: {} for k in files}
         stats = {k: {} for k in files}
         if root and os.path.isdir(root):
