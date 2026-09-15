@@ -12,7 +12,7 @@
 /* master-detail: слева список (фикс. ширина), справа тело (резина) */
 .unt-wrap { flex: 1; min-height: 0; display: flex; gap: 8px; }
 .unt-list-pane { width: 280px; flex-shrink: 0; display: flex; flex-direction: column;
-  min-height: 0; border: 1px solid var(--border); background: var(--bg-card); }
+  min-height: 0; border: none; background: transparent; }
 /* список — тело секции найма кампании (.upr-cat-body из uprising.css задаёт
    чипы, зазоры и фон); свой unt-класс ДОПОЛНИТЕЛЬНО — только скролл и
    растяжение в панели, вид чипов не трогаем */
