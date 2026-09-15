@@ -32,6 +32,7 @@ from terminator_toolset.api.project import register_project
 from terminator_toolset.api.shell import register_shell
 from terminator_toolset.api.sheets import register_sheets
 from terminator_toolset.api.swt import register_swt
+from terminator_toolset.api.units import register_units
 from terminator_toolset.api.uprising import register_uprising
 from terminator_toolset.api.updates import register_updates
 from terminator_toolset.domain import swt_editor as swt_mod
@@ -220,6 +221,7 @@ def create_app(config: Config, db: Database, base_dir: Optional[str] = None,
     register_compare(app, ctx)
     register_history(app, ctx)
     register_swt(app, ctx)
+    register_units(app, ctx)
     register_uprising(app, ctx)
     register_campaign(app, ctx)
     register_updates(app, ctx)
