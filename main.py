@@ -62,6 +62,9 @@ from terminator_toolset.infrastructure.single_instance import (
     forward_to_first as _forward_to_first,
 )
 from terminator_toolset.infrastructure.single_instance import (
+    first_alive as _first_alive,
+)
+from terminator_toolset.infrastructure.single_instance import (
     single_instance_lock as _single_instance_lock,
 )
 from terminator_toolset.infrastructure.single_instance import (
@@ -102,12 +105,19 @@ def main(browser: bool = False):
     # новый процесс ждёт выхода старого и стартует первым в оконном режиме.
     cli_args = [a for a in sys.argv[1:] if not a.startswith("-")]
     first, _mutex = _single_instance_lock()
-    if not first and _take_window_request():
+    if not first and (_take_window_request() or not _first_alive()):
+        # быстрый рестарт при умирающем первом процессе: мьютекс ещё держит
+        # зомби, а живого процесса уже нет — молча не выходим, ждём
+        # освобождения и стартуем первыми (иначе запуск «пропадает»: окна
+        # нет, а старый процесс ещё висит в диспетчере)
+        _log("second launch: previous process not alive, waiting for lock")
         for _ in range(20):
             time.sleep(0.5)
             first, _mutex = _single_instance_lock()
             if first:
                 break
+        if first:
+            _log("second launch: lock acquired, starting as first")
     if not first:
         _forward_to_first(cli_args)
         try:
