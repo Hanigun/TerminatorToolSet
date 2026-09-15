@@ -25,6 +25,8 @@ var UNT_CHEV_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" 
 // вниз (разложить) и вверх (сложить).
 var UNT_ALL_EXPAND_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 13l6 6 6-6M6 5l6 6 6-6"/></svg>';
 var UNT_ALL_COLLAPSE_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 11l6-6 6 6M6 19l6-6 6-6"/></svg>';
+// Иконка кнопки разворота длинного значения в многострочное поле.
+var UNT_EXPAND_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>';
 // Тон слоя по имени DLC (подстрока, регистр не важен — папки называются
 // вольно: Legion, "We are legion", Resistance, Evolution…): legion —
 // красный, resistance — тёмно-оранжевый, evolution — фиолетовый (как SWT);
@@ -170,9 +172,11 @@ function untSysJunk(sys) {
 }
 
 // Имя DLC-оверлея из пути (…/dlc/<Имя>/basis/…); нет совпадения — общее «DLC».
+// Папка на диске бывает строчной (resistance) — чип показываем с заглавной.
 function untDlcName(path) {
   const m = String(path || "").match(/dlc[\\/]+([^\\/]+)[\\/]+basis/i);
-  return (m && m[1]) || "DLC";
+  const raw = (m && m[1]) || "DLC";
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
 // Загрузка всех категорий через /api/units_list (api-хелпер из core.js):
@@ -847,8 +851,9 @@ async function untEnsureIcons() {
 }
 
 // Тело карточки типа: ВСЯ строка species-файла своего слоя без исключений
-// (все колонки файла, включая sysname) — каждый параметр сразу в своём
-// поле ввода, кнопки «Редактировать» нет. Тело показывает только свой
+// (все колонки файла, кроме sysname — он правится полем в шапке рядом
+// с иконкой) — каждый параметр сразу в своём поле ввода, кнопки
+// «Редактировать» нет. Тело показывает только свой
 // слот: если глобальный выбор (слой, класс, sysname) попал в эту карточку —
 // разбор строки, иначе подсказка. Строка читается и пишется в файл своего
 // слоя (basis или DLC-оверлей, без побочных эффектов и без зеркала вниз).
@@ -873,12 +878,13 @@ async function untPaintTypeDetail(box) {
     box.appendChild(d);
     return;
   }
-  // Шапка тела: иконка-чип кампании + sysname + короткий путь.
+  // Шапка тела: только иконка (без подложки карточки и декора слота —
+  // компактно) + редактируемый sysname + короткий путь. sysname из общего
+  // списка параметров убран — правится здесь, в шапке рядом с иконкой.
   const head = document.createElement("div");
   head.className = "unt-detail-head";
-  // Иконка тела — тот же чип кампании (cmpChip): чистая иконка
-  // .upr-chip.upr-card + .upr-chip-icon через uprChipIcon + cmpSpanChip
-  // + цена и декор слота, как в списке.
+  // Иконка тела — та же иконка кампании через uprChipIcon + cmpSpanChip,
+  // но голая: подложка .upr-card гасится в units.css (.unt-detail-icon).
   const dicho = document.createElement("span");
   dicho.className = "upr-chip upr-card unt-detail-icon";
   const diimg = document.createElement("img");
@@ -894,11 +900,16 @@ async function untPaintTypeDetail(box) {
   if (diimg.complete && diimg.naturalWidth && typeof cmpSpanChip === "function")
     cmpSpanChip(dicho, diimg);
   dicho.appendChild(diimg);
-  if (typeof vehDecor === "function") vehDecor(dicho, item.sys, cat, untSrcRoot());
   head.appendChild(dicho);
-  const nm = document.createElement("span");
-  nm.className = "unt-detail-name";
-  nm.textContent = item.sys;
+  // sysname — поле ввода в шапке (переименование едет выбором и списком,
+  // как col 0 в untDetailCommit); проводка — после чтения строки файла.
+  const nm = document.createElement("input");
+  nm.className = "unt-detail-sys";
+  nm.type = "text";
+  nm.spellcheck = false;
+  nm.autocomplete = "off";
+  nm.value = item.sys;
+  nm.placeholder = "sysname";
   head.appendChild(nm);
   head.oncontextmenu = e => untChipCtx(e, layerKey, cat, item.sys);
   box.appendChild(head);
@@ -928,15 +939,36 @@ async function untPaintTypeDetail(box) {
     box.appendChild(d);
     return;
   }
+  // Индекс колонки sysname — она правится полем в шапке, из списка пропускаем.
+  const sysIdx = columns.findIndex(c => String(c).trim().toLowerCase() === "sysname");
+  // Проводка поля шапки: переименование через тот же untDetailCommit.
+  if (sysIdx === -1) {
+    nm.disabled = true;
+  } else {
+    let headLast = sys;
+    nm.addEventListener("change", () => {
+      if (nm.value === headLast) return;
+      headLast = nm.value;
+      untDetailCommit(box, layerKey, cat, sys, rowIdx, sysIdx, nm).catch(() => {});
+    });
+    nm.addEventListener("keydown", ev => {
+      if (ev.key === "Enter") { ev.preventDefault(); nm.blur(); }
+      else if (ev.key === "Escape") {
+        ev.preventDefault();
+        nm.value = headLast;
+        nm.blur();
+      }
+    });
+  }
   const kv = document.createElement("div");
   kv.className = "unt-kv";
   columns.forEach((c, i) => {
+    if (i === sysIdx) return; // sysname — поле в шапке рядом с иконкой
     const r = document.createElement("div");
     r.className = "unt-kv-row";
     const k = document.createElement("span");
     k.className = "unt-kv-key";
     k.textContent = String(c);
-    k.title = String(c);
     const inp = document.createElement("input");
     inp.className = "unt-kv-inp";
     inp.type = "text";
@@ -946,27 +978,95 @@ async function untPaintTypeDetail(box) {
       ? String(values[i]) : "";
     inp.value = s;
     inp.dataset.col = String(i);
-    inp.title = s;
-    // Класс техники — то же комбо, что в кампании и таблице.
+    // Последнее закоммиченное значение строки: коммит только при отличии
+    // (change+blur иначе пишут дважды, сворот длинного поля — впустую).
+    let lastVal = s;
+    const commitNow = el => {
+      if (el.value === lastVal) return;
+      lastVal = el.value;
+      untDetailCommit(box, layerKey, cat, sys, rowIdx, i, el).catch(() => {});
+    };
+    let longTa = null;
+    const collapseLong = () => {
+      if (!longTa) return;
+      inp.value = longTa.value;
+      // change сам закоммитит, если значение правили
+      try { inp.dispatchEvent(new Event("change")); } catch (e2) {}
+      try { r.replaceChild(inp, longTa); } catch (e2) {}
+      longTa = null;
+      r.classList.remove("unt-kv-open");
+    };
+    const wireField = el => {
+      el.addEventListener("change", () => commitNow(el));
+      // blur добивает правки многострочного поля (у однострочника change
+      // уже сработал раньше — повтор гасится проверкой lastVal).
+      el.addEventListener("blur", () => commitNow(el));
+      el.addEventListener("keydown", ev => {
+        // Переносы строк в значения species не пишем: Enter всегда коммитит.
+        if (ev.key === "Enter") { ev.preventDefault(); el.blur(); }
+        else if (ev.key === "Escape") {
+          ev.preventDefault();
+          el.value = lastVal;
+          el.blur();
+          if (el.tagName === "TEXTAREA") collapseLong();
+        }
+      });
+    };
+    wireField(inp);
+    r.appendChild(k);
+    // Класс техники — то же комбо, что в кампании и таблице, но в своём
+    // держателе: makeUnitSetCombo чистит переданный контейнер
+    // (textContent="") — раньше туда уходила вся строка вместе с именем
+    // параметра, и меню выглядело криво.
     if (String(c) === "unit_set" && typeof makeUnitSetCombo === "function"
         && typeof unitSetChoices === "function") {
-      try { makeUnitSetCombo(r, inp, unitSetChoices([inp.value]), "unit_set"); }
+      const hold = document.createElement("span");
+      hold.className = "unt-kv-combo";
+      hold.appendChild(inp);
+      r.appendChild(hold);
+      try { makeUnitSetCombo(hold, inp, unitSetChoices([inp.value]), "unit_set"); }
       catch (e) { /* обычное поле без комбо */ }
-    }
-    inp.addEventListener("change", () => {
-      untDetailCommit(box, layerKey, cat, sys, rowIdx, i, inp).catch(() => {});
-    });
-    inp.addEventListener("keydown", ev => {
-      if (ev.key === "Enter") { ev.preventDefault(); inp.blur(); }
-      else if (ev.key === "Escape") {
-        ev.preventDefault();
-        inp.value = (i < values.length && values[i] !== undefined
-          && values[i] !== null) ? String(values[i]) : "";
-        inp.blur();
+    } else {
+      r.appendChild(inp);
+      // Длинные значения (перечисления): в строке — компактный однострочник,
+      // кнопка разворачивает многострочное поле для удобной правки.
+      if (s.length > 90) {
+        const tgl = document.createElement("button");
+        tgl.type = "button";
+        tgl.className = "unt-kv-expand";
+        tgl.title = t("unt_expand") || "Развернуть поле";
+        tgl.setAttribute("aria-label", tgl.title);
+        tgl.innerHTML = UNT_EXPAND_SVG;
+        tgl.onclick = e => {
+          e.stopPropagation();
+          if (longTa) {
+            collapseLong();
+            tgl.title = t("unt_expand") || "Развернуть поле";
+            try { inp.focus({ preventScroll: true }); } catch (e2) {}
+            return;
+          }
+          longTa = document.createElement("textarea");
+          longTa.className = inp.className + " unt-kv-ta";
+          longTa.spellcheck = false;
+          longTa.autocomplete = "off";
+          longTa.value = inp.value;
+          longTa.dataset.col = inp.dataset.col;
+          longTa.rows = 2;
+          wireField(longTa);
+          const grow = () => {
+            longTa.style.height = "auto";
+            longTa.style.height = Math.min(longTa.scrollHeight, 240) + "px";
+          };
+          longTa.addEventListener("input", grow);
+          r.replaceChild(longTa, inp);
+          r.classList.add("unt-kv-open");
+          tgl.title = t("unt_collapse") || "Свернуть поле";
+          grow();
+          try { longTa.focus(); } catch (e2) {}
+        };
+        r.appendChild(tgl);
       }
-    });
-    r.appendChild(k);
-    r.appendChild(inp);
+    }
     kv.appendChild(r);
   });
   box.appendChild(kv);
@@ -983,7 +1083,10 @@ async function untDetailCommit(box, layerKey, cat, sys, rowIdx, col, inp) {
     toast(t("unt_sub") || "error", "err");
     return;
   }
-  if (col === 0) {
+  // Переименование: col 0 либо колонка sysname (поле живёт в шапке тела,
+  // в списке её нет — индекс приходит из шапки).
+  const colName = String(((data && data.columns) || [])[col] || "").trim().toLowerCase();
+  if (col === 0 || colName === "sysname") {
     const to = String(nv || "").trim();
     if (!to || to === sys) {
       inp.value = sys;
@@ -1024,7 +1127,6 @@ async function untDetailCommit(box, layerKey, cat, sys, rowIdx, col, inp) {
   if (!j || !j.ok) return;
   // Цена и вместимость живут на чипах: правим кэши и красим списки заново.
   try {
-    const colName = String(((data && data.columns) || [])[col] || "");
     if (colName === "cost" && state.units.prices && state.units.prices[cat])
       state.units.prices[cat][sys] = nv;
     if (colName === "people_capacity" && typeof vehCapMap !== "undefined" && vehCapMap
