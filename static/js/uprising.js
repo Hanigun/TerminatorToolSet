@@ -2452,9 +2452,9 @@ function uprEditPop(chipEl, meta, items, i, onChange, isNew) {
     rowC.appendChild(cpInp);
   }
   // класс техники (unit_set) — то же комбо, что в таблице cars/tanks;
-  // смена класса + галка переноса двигает юнит в секцию нового класса.
+  // только запись пула доступности, без переносов между секциями.
   // Squads/heli уникальны — им поле не нужно, только cars/tanks.
-  let setInp = null, moveChk = null, secSel = null;
+  let setInp = null;
   if (["cars", "tanks"].indexOf(meta.cat) !== -1) {
     const rowU = mkRow(t("upr_f_unitset") || "Класс",
       t("upr_f_unitset_d") || "запись в unit_set species-файла");
@@ -2470,22 +2470,6 @@ function uprEditPop(chipEl, meta, items, i, onChange, isNew) {
       makeUnitSetCombo(setHold, setInp, unitSetChoices([setInp.value]), "unit_set");
     else setHold.appendChild(setInp);
     rowU.appendChild(setHold);
-    const rowM = mkRow(t("upr_f_move") || "Перенести",
-      t("upr_f_move_d") || "переместить юнит в секцию нового класса");
-    moveChk = document.createElement("input");
-    moveChk.type = "checkbox";
-    moveChk.checked = false;
-    rowM.appendChild(moveChk);
-    secSel = document.createElement("select");
-    [["auto", t("upr_f_section_auto") || "Авто"],
-     ["cars", "cars"], ["tanks", "tanks"]].forEach(([v, l]) => {
-      const o = document.createElement("option");
-      o.value = v;
-      o.textContent = l;
-      secSel.appendChild(o);
-    });
-    secSel.value = "auto";
-    rowM.appendChild(secSel);
   }
   // цена скрыта везде (uprPrice/uprising_prices остаются в коде на будущее)
   // кнопки
@@ -2504,7 +2488,6 @@ function uprEditPop(chipEl, meta, items, i, onChange, isNew) {
   pop.appendChild(btns);
 
   let closed = false;
-  let flyFrom = null, flyKey = "";
   const commit = async save => {
     if (closed) return;
     if (!save && isNew) {
@@ -2541,53 +2524,7 @@ function uprEditPop(chipEl, meta, items, i, onChange, isNew) {
         put("cost", prc);
         put("cp_cost", cpInp);
         put("unit_set", setInp);
-        // статы ждём: их внутренний рендер должен отработать ДО
-        // переноса и финального рендера, не посреди полёта чипа
         if (Object.keys(diff).length) await uprWriteStats(meta.cat, name, diff);
-        // перенос в секцию species-файла: sysname с количеством
-        // переезжает между колонками той же строки сектора.
-        // Только по галке — смена класса без неё лишь пишет unit_set
-        if (moveChk && moveChk.checked && secSel) {
-          let target = secSel.value;
-          if (target === "auto" && typeof speciesSection === "function")
-            target = speciesSection(name, state.uprising.syscats);
-          if ((target === "cars" || target === "tanks") && target !== meta.cat) {
-            const g = uprGroups().find(x => x.num === meta.num);
-            const rw = g && g.list[Math.min(meta.vi, g.list.length - 1)];
-            const ciOld = uprCatCol(meta.cat), ciNew = uprCatCol(target);
-            if (rw && ciOld !== -1 && ciNew !== -1) {
-              const newItems =
-                uprParseList(state.uprising.rows[rw.ri].values[ciNew] || "");
-              newItems.push({ name, n: it.n });
-              if (chipEl && chipEl.getBoundingClientRect) {
-                try { flyFrom = chipEl.getBoundingClientRect(); } catch (e) {}
-              }
-              items.splice(i, 1);
-              // сложность и выбор едут за юнитом в новую секцию
-              const mvKey = uprPickKey(meta.num, meta.vi, target, name);
-              if (uprUdiffs()[newKey] !== undefined) {
-                uprSetUdiff(mvKey, uprUdiffs()[newKey]);
-                uprSetUdiff(newKey, "");
-              }
-              state.uprising.pick.delete(newKey);
-              state.uprising.pick.add(mvKey);
-              const ok = await uprWriteCells([
-                { ri: rw.ri, ci: ciOld, items },
-                { ri: rw.ri, ci: ciNew, items: newItems },
-              ]);
-              if (ok) {
-                flyKey = mvKey;
-              } else {
-                // откат выбора: запись не легла, юнит остался в старой секции
-                state.uprising.pick.delete(mvKey);
-                state.uprising.pick.add(newKey);
-                // и в старый список — иначе onChange ниже persistил бы
-                // половинчатый перенос
-                items.splice(i, 0, { name, n: it.n });
-              }
-            }
-          }
-        }
         state.uprising.pick.delete(oldKey);
         state.uprising.pick.add(newKey);
       }
@@ -2597,13 +2534,6 @@ function uprEditPop(chipEl, meta, items, i, onChange, isNew) {
     document.removeEventListener("mousedown", outside, true);
     uprCloseEditPop();
     renderUprising();
-    if (flyFrom && flyKey) {
-      try {
-        const el = document.querySelector(
-          '.upr-chip[data-key="' + CSS.escape(flyKey) + '"]');
-        if (typeof chipFly === "function") chipFly(flyFrom, el);
-      } catch (e) { /* нет анимации — чип уже на месте */ }
-    }
   };
   const outside = e => {
     // выпадашка автокомплита живёт в body вне поповера — клик по ней не «мимо»

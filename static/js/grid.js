@@ -1439,50 +1439,6 @@ function makeUnitSetCombo(td, input, choices, title) {
   } catch (e) { /* noop: правка остаётся обычным input */ }
 }
 
-// секция карты при автопереносе — по species-файлу юнита, как сама игра:
-// tanks.xml -> tanks, cars.xml -> cars (syscats бэкенда). unit_set тут не
-// решает: у Bradley combat_vehicle, а лежит он в tanks — просто потому что
-// строка в tanks.xml; в cars.xml тоже есть combat_vehicle/tank/artillery
-// (HIMARS, турели, платформы) — и они едут в cars. sysname вне словарей —
-// "" (без переноса), а не угадайка по классу. Общее для попапов обеих карт.
-function speciesSection(sys, cats) {
-  const want = String(sys || "").trim().toLowerCase();
-  if (!want) return "";
-  try {
-    const c = cats || {};
-    const has = (k) => Array.isArray(c[k]) && c[k].some(
-      (n) => String(n || "").trim().toLowerCase() === want);
-    if (has("tanks")) return "tanks";
-    if (has("cars")) return "cars";
-  } catch (e) {}
-  return "";
-}
-// FLIP-перелёт чипа в новую секцию: из старого rect в свежий элемент,
-// 300ms ease-out, дальше элемент живёт сам (инлайн-стили чистятся).
-// Общее для попапов обеих карт.
-function chipFly(fromRect, toEl) {
-  try {
-    if (!fromRect || !toEl || !toEl.getBoundingClientRect) return;
-    const r = toEl.getBoundingClientRect();
-    const dx = fromRect.left + fromRect.width / 2 - (r.left + r.width / 2);
-    const dy = fromRect.top + fromRect.height / 2 - (r.top + r.height / 2);
-    if (!dx && !dy) return;
-    toEl.style.transition = "none";
-    toEl.style.transform = "translate(" + dx + "px," + dy + "px)";
-    toEl.style.zIndex = "60";
-    void toEl.offsetWidth;
-    toEl.style.transition = "transform .3s ease-out";
-    toEl.style.transform = "none";
-    setTimeout(() => {
-      try {
-        toEl.style.transition = "";
-        toEl.style.transform = "";
-        toEl.style.zIndex = "";
-      } catch (e) {}
-    }, 320);
-  } catch (e) { /* нет анимации — чип уже на месте */ }
-}
-
 // Фокус редактора ячейки без самопроизвольного скролла: нативный focus()
 // докручивает контейнер сам и не знает про липкую колонку sysname —
 // редактируемая ячейка уезжает влево под неё. Фокусим без скролла, доводим

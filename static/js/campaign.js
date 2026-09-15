@@ -1309,9 +1309,9 @@ function cmpEditPop(cellEl, sys, cat, items, i, isNew) {
     rowV.appendChild(capInp);
   }
   // класс техники (unit_set) — то же комбо, что в таблице cars/tanks;
-  // смена класса + галка переноса двигает юнит в секцию нового класса.
+  // только запись пула доступности, без переносов между секциями.
   // Squads/heli уникальны — им поле не нужно, только cars/tanks.
-  let setInp = null, moveChk = null, secSel = null;
+  let setInp = null;
   if (["cars", "tanks"].indexOf(cat) !== -1) {
     const rowU = mkRow(t("upr_f_unitset") || "Класс",
       t("upr_f_unitset_d") || "запись в unit_set species-файла");
@@ -1327,22 +1327,6 @@ function cmpEditPop(cellEl, sys, cat, items, i, isNew) {
       makeUnitSetCombo(setHold, setInp, unitSetChoices([setInp.value]), "unit_set");
     else setHold.appendChild(setInp);
     rowU.appendChild(setHold);
-    const rowM = mkRow(t("upr_f_move") || "Перенести",
-      t("upr_f_move_d") || "переместить юнит в секцию нового класса");
-    moveChk = document.createElement("input");
-    moveChk.type = "checkbox";
-    moveChk.checked = false;
-    rowM.appendChild(moveChk);
-    secSel = document.createElement("select");
-    [["auto", t("upr_f_section_auto") || "Авто"],
-     ["cars", "cars"], ["tanks", "tanks"]].forEach(([v, l]) => {
-      const o = document.createElement("option");
-      o.value = v;
-      o.textContent = l;
-      secSel.appendChild(o);
-    });
-    secSel.value = "auto";
-    rowM.appendChild(secSel);
   }
   const btns = document.createElement("div");
   btns.className = "upr-edit-btns";
@@ -1359,7 +1343,6 @@ function cmpEditPop(cellEl, sys, cat, items, i, isNew) {
   pop.appendChild(btns);
 
   let closed = false;
-  let flyFrom = null, flyUk = "";
   const commit = async save => {
     if (closed) return;
     if (!save && isNew) {
@@ -1385,38 +1368,7 @@ function cmpEditPop(cellEl, sys, cat, items, i, isNew) {
         put("supply_consumption", supInp);
         put("people_capacity", capInp);
         put("unit_set", setInp);
-        // статы ждём: их внутренний рендер должен отработать ДО
-        // переноса и финального рендера, не посреди полёта чипа
         if (Object.keys(diff).length) await cmpWriteStats(cat, name, diff);
-        // перенос в секцию species-файла: sysname с количеством
-        // переезжает между колонками той же строки shop_presets.
-        // Только по галке — смена класса без неё лишь пишет unit_set
-        if (moveChk && moveChk.checked && secSel) {
-          let target = secSel.value;
-          if (target === "auto" && typeof speciesSection === "function")
-            target = speciesSection(name, state.campaign.syscats);
-          if ((target === "cars" || target === "tanks") && target !== cat) {
-            const riM = cmpRowIdx(sys);
-            const ciOld = cmpCatCol(cat), ciNew = cmpCatCol(target);
-            if (riM !== -1 && ciOld !== -1 && ciNew !== -1) {
-              const newItems =
-                uprParseList(state.campaign.rows[riM].values[ciNew] || "");
-              newItems.push({ name, n: it.n });
-              if (cellEl && cellEl.getBoundingClientRect) {
-                try { flyFrom = cellEl.getBoundingClientRect(); } catch (e) {}
-              }
-              items.splice(i, 1);
-              const ok = await cmpWriteCells([
-                { ri: riM, ci: ciOld, items },
-                { ri: riM, ci: ciNew, items: newItems },
-              ]);
-              if (ok) flyUk = sys + "|" + target + "|" + (newItems.length - 1);
-              // отказ: запись откатилась, возвращаем юнит в старый список —
-              // иначе commitCell ниже persistил бы половинчатый перенос
-              else items.splice(i, 0, { name, n: it.n });
-            }
-          }
-        }
       }
       commitCell();
     }
@@ -1424,13 +1376,6 @@ function cmpEditPop(cellEl, sys, cat, items, i, isNew) {
     document.removeEventListener("mousedown", outside, true);
     uprCloseEditPop();
     renderCampaign();
-    if (flyFrom && flyUk) {
-      try {
-        const el = document.querySelector(
-          '.upr-chip[data-ukey="' + CSS.escape(flyUk) + '"]');
-        if (typeof chipFly === "function") chipFly(flyFrom, el);
-      } catch (e) { /* нет анимации — чип уже на месте */ }
-    }
   };
   const outside = e => {
     // выпадашки автокомплита и комбо классов живут в body вне поповера —
