@@ -12,9 +12,15 @@ var UNT_STAT_COLS = ["cost", "cp_cost", "supply_consumption", "people_capacity",
 
 // Единственный дефолт состояния вкладки (старт + закрытие вкладки):
 // cats[cat] = {path, columns, overlays, items:[{sys, src, path}]}, src — источник загрузки,
-// clip — буфер обмена таба {op, items:[{cat, sys, path, values?}]} или null.
+// clip — буфер обмена таба {op, items:[{cat, sys, path, values?}]} или null,
+// cat — выбранный класс селектора, sel — выбранный юнит (sysname) для тела,
+// iconMap — свои иконки категории (sysname -> data-URL webp, НЕ карта uprising),
+// iconsReady/iconsLoading/iconSeq — готовность/загрузка/поколение своего батча,
+// detSeq — поколение тела (защита от гонки чтений при быстрых кликах).
 function untFreshState() {
-  return { src: "", cats: {}, loading: false, loadSeq: 0, analyzing: false, clip: null };
+  return { src: "", cats: {}, loading: false, loadSeq: 0, analyzing: false, clip: null,
+    cat: "squads", sel: null, iconMap: {}, iconsReady: false, iconsLoading: false,
+    iconSeq: 0, detSeq: 0 };
 }
 
 // Корень текущего глобального источника (Проект | Игра | Мод), как у карты и кампании.
@@ -148,10 +154,27 @@ async function renderUnits(force) {
         items: Array.from(bySys.values()) };
     }
     if (!fresh()) return;
+    // Смена источника — чужие иконки и тело недействительны; внутри одного
+    // источника карту копим (батч добирает только недостающее, как кампания).
+    const srcChanged = state.units.src !== src;
     state.units.src = src;
     state.units.cats = cats;
+    if (srcChanged) {
+      state.units.iconMap = {};
+      state.units.iconsReady = false;
+    }
+    // Выбор живёт по sysname: класс чиним на первый непустой, sel сбрасываем
+    // только если строка пропала (CRUD/зеркало), иначе тело держит старое.
+    if (UNT_CATS.indexOf(state.units.cat) === -1 || !cats[state.units.cat])
+      state.units.cat = UNT_CATS.find(c => cats[c] && (cats[c].items || []).length) || "squads";
+    const curItems = ((cats[state.units.cat] || {}).items) || [];
+    if (state.units.sel && !curItems.some(x => x.sys === state.units.sel))
+      state.units.sel = null;
+    if (!state.units.sel && curItems.length) state.units.sel = curItems[0].sys;
     untPaintHeader(root, src);
     untPaint();
+    // Иконки текущего класса — своим батчем (карту uprising не трогаем).
+    untEnsureIcons(state.units.cat).catch(() => {});
   } finally {
     if (fresh()) state.units.loading = false;
   }
@@ -175,7 +198,9 @@ function untPaintHeader(root, src) {
   } catch (e) { /* переключатели красит древо */ }
 }
 
-// Витрина: сектор 0 «Общий пул», внутри категории-классы друг под другом.
+// Витрина master-detail (как найм в кампании): сверху селектор класса
+// (один открытый класс за раз, выбор — в state.units.cat), ниже слева
+// вертикальный список юнитов класса, справа — тело с параметрами.
 function untPaint() {
   const main = $("#unt-main");
   if (!main) return;
@@ -189,46 +214,22 @@ function untPaint() {
     main.appendChild(d);
     return;
   }
-  main.appendChild(untSecBlock(total, cats));
-}
-
-// Сектор-пул (образец edSecBlock): заголовок + категории друг под другом.
-function untSecBlock(total, cats) {
+  if (UNT_CATS.indexOf(state.units.cat) === -1 || !cats[state.units.cat])
+    state.units.cat = UNT_CATS.find(c => cats[c]) || "squads";
+  const cat = state.units.cat;
+  main.appendChild(untCatBar(cats, total));
   const wrap = document.createElement("div");
-  wrap.className = "unt-sec";
-  wrap.dataset.sec = "0";
+  wrap.className = "unt-wrap";
+  const pane = document.createElement("div");
+  pane.className = "unt-list-pane";
   const head = document.createElement("div");
-  head.className = "unt-sector-head";
-  const name = document.createElement("span");
-  name.className = "unt-sector-name";
-  name.textContent = (t("unt_pool_all") || "Общий пул") + " · " + total;
-  head.appendChild(name);
-  wrap.appendChild(head);
-  // Правая кнопка по заголовку сектора — меню сектора (заменить/копировать/вставить/очистить).
-  head.oncontextmenu = e => untSecCtx(e);
-  UNT_CATS.forEach(cat => {
-    const data = cats[cat];
-    if (!data) return;
-    wrap.appendChild(untCatBlock(cat, data.items));
-  });
-  return wrap;
-}
-
-// Блок категории-класса (образец edCatBlock): заголовок + чипы + «+» последней.
-function untCatBlock(cat, items) {
-  const sec = document.createElement("div");
-  sec.className = "unt-cat";
-  const title = document.createElement("div");
-  title.className = "unt-cat-title";
-  // Заголовки — иконками UnitSet, как карта и кампания; нет хелпера — текстом.
-  if (typeof uprCatTitle === "function") uprCatTitle(title, cat, " · " + items.length);
-  else title.textContent = (t("unt_class_" + cat) || cat) + " · " + items.length;
-  sec.appendChild(title);
-  const bwrap = document.createElement("div");
-  bwrap.className = "unt-cat-body";
-  bwrap.dataset.cat = cat;
-  items.forEach(it => bwrap.appendChild(untChip(it, cat)));
-  // Кнопка «+» всегда последняя в ряду (добавление строк — в T6).
+  head.className = "unt-list-head";
+  const title = document.createElement("span");
+  title.className = "unt-list-title";
+  title.id = "unt-list-title";
+  pane.appendChild(head);
+  head.appendChild(title);
+  // Кнопка «+» в шапке списка — добавление в текущий класс.
   const add = document.createElement("button");
   add.type = "button";
   add.className = "unt-chip-add";
@@ -244,52 +245,250 @@ function untCatBlock(cat, items) {
     ev.stopPropagation();
     untAddUnit(cat).catch(() => {});
   };
-  bwrap.appendChild(add);
-  sec.appendChild(bwrap);
-  // Правая кнопка по фону ряда или заголовку — меню категории.
-  bwrap.oncontextmenu = e => {
-    if (e.target.closest && e.target.closest(".unt-chip")) return;
+  head.appendChild(add);
+  // Правая кнопка по шапке — меню сектора, по фону списка — меню категории.
+  head.oncontextmenu = e => untSecCtx(e);
+  const list = document.createElement("div");
+  list.className = "unt-list";
+  list.id = "unt-list";
+  list.oncontextmenu = e => {
+    if (e.target.closest && e.target.closest(".unt-row")) return;
     untCatCtx(e, cat);
   };
-  title.oncontextmenu = e => untCatCtx(e, cat);
-  return sec;
+  pane.appendChild(list);
+  const detail = document.createElement("div");
+  detail.className = "unt-detail";
+  detail.id = "unt-detail";
+  wrap.appendChild(pane);
+  wrap.appendChild(detail);
+  main.appendChild(wrap);
+  untPaintList();
+  untPaintDetail();
 }
 
-// Чип юнита: иконка через общий хелпер карты (мгновенный плейсхолдер
-// категории + фоновая подмена реальной) + бейдж источника (basis/DLC).
-function untChip(it, cat) {
-  const chip = document.createElement("span");
-  chip.className = "unt-chip unt-card" + (UNT_VEH_CATS[cat] ? " veh" : "");
-  chip.title = it.sys + "\n" + (it.path || "");
+// Селектор класса: выпадающий список шести species-классов
+// (подписи — unt_class_*, как заголовки старой витрины).
+function untCatBar(cats, total) {
+  const bar = document.createElement("div");
+  bar.className = "unt-catbar";
+  bar.oncontextmenu = e => untSecCtx(e);
+  const lab = document.createElement("span");
+  lab.className = "unt-catbar-label";
+  lab.textContent = (t("unt_pool_all") || "Общий пул") + " · " + total;
+  bar.appendChild(lab);
+  const sel = document.createElement("select");
+  sel.className = "unt-cat-sel";
+  sel.title = lab.textContent;
+  UNT_CATS.forEach(c => {
+    if (!cats[c]) return;
+    const o = document.createElement("option");
+    o.value = c;
+    o.textContent = (t("unt_class_" + c) || c) + " · " + ((cats[c].items || []).length);
+    if (c === state.units.cat) o.selected = true;
+    sel.appendChild(o);
+  });
+  sel.onchange = () => {
+    if (!state.units) return;
+    state.units.cat = sel.value;
+    state.units.sel = null;
+    state.units.iconsReady = false;
+    untPaint();
+    untEnsureIcons(state.units.cat).catch(() => {});
+  };
+  bar.appendChild(sel);
+  return bar;
+}
+
+// Список юнитов выбранного класса: строка = слот/иконка + sysname + бейдж
+// basis/DLC. Выбор — клик, попап — двойной клик, меню — правая кнопка.
+function untPaintList() {
+  const list = $("#unt-list");
+  if (!list) return;
+  const st = list.scrollTop;
+  list.innerHTML = "";
+  const cat = state.units.cat;
+  const data = untCatData(cat);
+  const items = ((data && data.items) || []).slice();
+  if (state.units.sel && !items.some(x => x.sys === state.units.sel))
+    state.units.sel = null;
+  if (!state.units.sel && items.length) state.units.sel = items[0].sys;
+  const title = $("#unt-list-title");
+  if (title) title.textContent = (t("unt_class_" + cat) || cat) + " · " + items.length;
+  items.forEach(it => list.appendChild(untRow(it, cat)));
+  list.scrollTop = st;
+}
+
+// Строка списка: иконка через общий хелпер карты (мгновенный плейсхолдер
+// категории + спиннер upr-loading + подмена реальной из СВОЕЙ карты
+// state.units.iconMap — карту uprising не трогаем). Техника — слот veh,
+// сквады — слот inf (подложка unitslot_main_inf.webp, как слоты техники).
+function untRow(it, cat) {
+  const row = document.createElement("div");
+  row.className = "unt-row unt-chip unt-card"
+    + (UNT_VEH_CATS[cat] ? " veh" : cat === "squads" ? " inf" : "");
+  if (it.sys === state.units.sel) row.classList.add("sel");
+  row.dataset.sys = it.sys;
+  row.title = it.sys + "\n" + (it.path || "");
   const img = document.createElement("img");
   img.className = "unt-chip-icon";
   img.draggable = false;
   img.loading = "lazy";
   img.alt = it.sys;
-  if (typeof uprChipIcon === "function") uprChipIcon(img, chip, it.sys, cat);
+  if (typeof uprChipIcon === "function")
+    uprChipIcon(img, row, it.sys, cat,
+      { map: state.units.iconMap, ready: state.units.iconsReady });
   else if (typeof uprPlaceholderUrl === "function") {
     img.src = uprPlaceholderUrl(cat, it.sys) || "";
     if (!img.src) img.classList.add("noicon");
   } else img.classList.add("noicon");
-  chip.appendChild(img);
-  // Слот техники: sysname поверх фона (классы и раскладка — из units.css).
-  if (UNT_VEH_CATS[cat]) {
-    const sys = document.createElement("span");
-    sys.className = "unt-chip-veh-sys";
-    sys.textContent = it.sys;
-    chip.appendChild(sys);
-  }
+  row.appendChild(img);
+  const nm = document.createElement("span");
+  nm.className = "unt-row-sys";
+  nm.textContent = it.sys;
+  row.appendChild(nm);
   const badge = document.createElement("span");
   badge.className = "unt-src-badge";
   badge.textContent = it.src || "basis";
-  chip.appendChild(badge);
-  // Клик — попап-редактор строки, правая кнопка — меню чипа.
-  chip.addEventListener("click", ev => {
+  row.appendChild(badge);
+  // Клик — выбор и тело; двойной клик и кнопка в теле — попап untEditUnit.
+  row.addEventListener("click", ev => {
     ev.stopPropagation();
-    untEditUnit(cat, it.sys, chip).catch(() => {});
+    untSelect(cat, it.sys);
   });
-  chip.addEventListener("contextmenu", e => untChipCtx(e, cat, it.sys));
-  return chip;
+  row.addEventListener("dblclick", ev => {
+    ev.stopPropagation();
+    untEditUnit(cat, it.sys, row).catch(() => {});
+  });
+  row.addEventListener("contextmenu", e => untChipCtx(e, cat, it.sys));
+  return row;
+}
+
+// Выбор строки: подсветка без полной перерисовки списка (иконки
+// не перезапрашиваются) + перерисовка тела.
+function untSelect(cat, sys) {
+  if (!state.units) return;
+  if (state.units.cat === cat && state.units.sel === sys) return;
+  state.units.cat = cat;
+  state.units.sel = sys;
+  document.querySelectorAll("#unt-list .unt-row").forEach(r => {
+    r.classList.toggle("sel", r.dataset.sys === sys);
+  });
+  untPaintDetail();
+}
+
+// Иконки текущего класса своим батчем (образец cmpEnsureIcons): имена без
+// иконок — одним запросом /api/uprising_icons_data, затем только перерисовка
+// списка (тело от иконок не зависит). Флаг готовности свой — uprIconsReady
+// и uprIconMap карты не трогаем.
+async function untEnsureIcons(cat) {
+  if (!state.units) return;
+  const my = ++state.units.iconSeq;
+  const data = untCatData(cat);
+  const map = state.units.iconMap || {};
+  const names = (((data && data.items) || []).map(x => x.sys) || [])
+    .filter(s => s && !map[s]);
+  if (!names.length) {
+    state.units.iconsReady = true;
+    untPaintList();
+    return;
+  }
+  state.units.iconsLoading = true;
+  const root = untSrcRoot();
+  try {
+    const r = await api("/api/uprising_icons_data", { method: "POST",
+      body: JSON.stringify({ root, names }), timeout: 60000 });
+    const j = await r.json();
+    if (my !== state.units.iconSeq) return;
+    if (!state.units || state.units.cat !== cat) return;
+    if (j && j.ok) {
+      Object.assign(state.units.iconMap, j.icons || {});
+      state.units.iconsReady = true;
+      untPaintList();
+    }
+  } catch (e) { /* чипы добирают одиночными через uprChipIcon */ }
+  finally {
+    if (state.units && my === state.units.iconSeq) state.units.iconsLoading = false;
+  }
+}
+
+// Тело справа: ВСЕ параметры выбранного юнита из species-строки без
+// исключений (колонка: значение по всем колонкам файла, включая sysname).
+// Строка читается из выигравшего файла витрины (basis/DLC-зеркало уже смёржено).
+async function untPaintDetail() {
+  const box = $("#unt-detail");
+  if (!box || !state.units) return;
+  const my = ++state.units.detSeq;
+  const cat = state.units.cat;
+  const sys = state.units.sel;
+  box.innerHTML = "";
+  const item = sys ? untFindItem(cat, sys) : null;
+  if (!item) {
+    const d = document.createElement("div");
+    d.className = "swt-empty";
+    d.textContent = t("cpg_pick") || t("unt_sub") || "";
+    box.appendChild(d);
+    return;
+  }
+  // Шапка тела: sysname + бейдж источника + кнопка «Редактировать».
+  const head = document.createElement("div");
+  head.className = "unt-detail-head";
+  const nm = document.createElement("span");
+  nm.className = "unt-detail-name";
+  nm.textContent = item.sys;
+  nm.title = item.path || "";
+  head.appendChild(nm);
+  const badge = document.createElement("span");
+  badge.className = "unt-src-badge unt-detail-badge";
+  badge.textContent = item.src || "basis";
+  head.appendChild(badge);
+  const editB = document.createElement("button");
+  editB.type = "button";
+  editB.className = "btn sm accent";
+  editB.textContent = t("unt_edit") || "Редактировать";
+  editB.onclick = ev => {
+    ev.stopPropagation();
+    untEditUnit(cat, item.sys, editB).catch(() => {});
+  };
+  head.appendChild(editB);
+  head.oncontextmenu = e => untChipCtx(e, cat, item.sys);
+  box.appendChild(head);
+  const pathRow = document.createElement("div");
+  pathRow.className = "unt-detail-path";
+  pathRow.textContent = item.path || "";
+  pathRow.title = item.path || "";
+  box.appendChild(pathRow);
+  // Параметры: читаем строку выигравшего файла (без побочных эффектов,
+// как добор оверлеев в renderUnits).
+  const got = await untReadRows(item.path);
+  if (my !== state.units.detSeq || state.units.sel !== sys || state.units.cat !== cat)
+    return;
+  const data = untCatData(cat);
+  const columns = (got && got.columns && got.columns.length)
+    ? got.columns : ((data && data.columns) || []);
+  let values = [];
+  if (got) {
+    const ri = untFindRow(got.rows, sys);
+    if (ri !== -1) values = (got.rows[ri].values || []).slice();
+  }
+  const kv = document.createElement("div");
+  kv.className = "unt-kv";
+  columns.forEach((c, i) => {
+    const r = document.createElement("div");
+    r.className = "unt-kv-row";
+    const k = document.createElement("span");
+    k.className = "unt-kv-key";
+    k.textContent = String(c);
+    const v = document.createElement("span");
+    v.className = "unt-kv-val";
+    const s = (i < values.length && values[i] !== undefined && values[i] !== null)
+      ? String(values[i]) : "";
+    v.textContent = s;
+    v.title = s;
+    r.appendChild(k);
+    r.appendChild(v);
+    kv.appendChild(r);
+  });
+  box.appendChild(kv);
 }
 
 // Анализ: сводка-счётчики по классам (без конвертации иконок — это T5-витрина).
@@ -662,6 +861,9 @@ async function untEditUnit(cat, sys, anchorEl) {
       }
     }
     close();
+    // Переименование ушло вниз — выбор едет на новое имя, иначе валидация
+    // renderUnits сбросит тело на первую строку класса.
+    if (newSys !== sys && state.units) state.units.sel = newSys;
     // Оверлеи читались мимо живых сессий — перечитать витрину категории.
     await renderUnits(true).catch(() => {});
     if (ok) toast(t("saved") || "Сохранено", "ok");
@@ -723,6 +925,8 @@ async function untAddUnit(cat, preset) {
   } catch (e) { j = null; }
   if (!j || !j.ok) { toast((j && j.error) || "error", "err"); return null; }
   if (cat === "squads") await untCheckSquadRefs(vals, d.columns);
+  // Выбор — на добавленную строку (валидация renderUnits его сохранит).
+  if (state.units) { state.units.cat = cat; state.units.sel = vals[0]; }
   await renderUnits(true).catch(() => {});
   toast(t("saved") || "Сохранено", "ok");
   return vals[0];
