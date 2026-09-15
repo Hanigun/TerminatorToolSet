@@ -2376,6 +2376,16 @@ function gaShowBusy() {
   if (st) st.textContent = txt;
 }
 
+function gaPollStart() {
+  gaPollStop();
+  gaPollTick();
+  gaPollTimer = setInterval(gaPollTick, 600);
+}
+
+function gaPollStop() {
+  if (gaPollTimer) { clearInterval(gaPollTimer); gaPollTimer = null; }
+}
+
 async function gaPollTick() {
   let j = null;
   try {
