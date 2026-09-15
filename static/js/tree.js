@@ -182,7 +182,7 @@ function updateToolButtons() {
     fn => fn.toLowerCase() === "shop_presets.xml"));
   const hasSwt = trees.some(tr => treeHasFile(tr,
     fn => fn.toLowerCase().endsWith(".swt")));
-  for (const id of ["#btn-uprising", "#landing-uprising", "#btn-campaign", "#landing-campaign"]) {
+  for (const id of ["#btn-uprising", "#landing-uprising", "#btn-campaign", "#landing-campaign", "#btn-units", "#landing-units"]) {
     const b = $(id);
     if (b) b.disabled = !hasUpr;
   }
@@ -923,6 +923,11 @@ async function setSrc(v) {
     if (path) await openCampaign(path, { activate: false });
     else cmpPaintNofile();
   }
+  // редактор юнитов — так же фоном из нового корня (T5: только чтение, dirty нет —
+  // подтверждения не нужно, витрина просто перечитывается)
+  if (state.tabs.some(tb => tb.id === "units") && typeof renderUnits === "function") {
+    try { await renderUnits(true); } catch (e) { /* шапка уже показала ошибку */ }
+  }
 }
 
 // дерево из сайдбара — тот же глобальный источник
@@ -985,6 +990,7 @@ function paintSrcSwitches() {
   };
   paintSeg("#upr-src");
   paintSeg("#cmp-src");
+  paintSeg("#unt-src");
   paintCmpSrc();
 }
 

@@ -526,13 +526,18 @@ function closeTab(tabId) {
     // rebuilding)
     if (tab.type !== "compare" && tab.type !== "create-mod"
         && tab.type !== "unpacker" && tab.type !== "swt" && tab.type !== "uprising"
-        && tab.type !== "uprising-rnd" && tab.type !== "campaign") {
+        && tab.type !== "uprising-rnd" && tab.type !== "campaign"
+        && tab.type !== "units") {
       const panel = $(`.tab-panel[data-tab-id="${tabId}"]`);
       if (panel) panel.remove();
     }
     if (tab.type === "swt") state.swt = swtFreshState();
     if (tab.type === "uprising") state.uprising = uprFreshState();
     if (tab.type === "campaign") state.campaign = cmpFreshState();
+    // Панель юнитов статическая, как карта: состояние сбрасываем через фабрику.
+    if (tab.type === "units" && typeof untFreshState === "function") {
+      state.units = untFreshState();
+    }
 
     updateSidebarVisibility();
   };
