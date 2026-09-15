@@ -1226,9 +1226,10 @@ function cmpEditPop(cellEl, sys, cat, items, i, isNew) {
   if (!(state.campaign.sysnames || []).length) cmpLoadMeta();
   const commitCell = () => {
     const ri = cmpRowIdx(sys), ci = cmpCatCol(cat);
-    if (ri === -1 || ci === -1) return;
-    cmpWriteCells([{ ri, ci, val: uprJoinList(items.filter(x => x.name)) }])
-      .then(() => renderCampaign());
+    if (ri === -1 || ci === -1) return Promise.resolve(false);
+    // без .then(render): рендер один, в конце commit — иначе второй
+    // перерисов убивал FLIP-перелёт чипа в новую секцию на старте
+    return cmpWriteCells([{ ri, ci, val: uprJoinList(items.filter(x => x.name)) }]);
   };
   const pop = document.createElement("div");
   pop.className = "upr-edit-pop";
@@ -1384,7 +1385,9 @@ function cmpEditPop(cellEl, sys, cat, items, i, isNew) {
         put("supply_consumption", supInp);
         put("people_capacity", capInp);
         put("unit_set", setInp);
-        if (Object.keys(diff).length) cmpWriteStats(cat, name, diff);
+        // статы ждём: их внутренний рендер должен отработать ДО
+        // переноса и финального рендера, не посреди полёта чипа
+        if (Object.keys(diff).length) await cmpWriteStats(cat, name, diff);
         // перенос в секцию нового класса: sysname с количеством
         // переезжает между колонками той же строки shop_presets.
         // Только по галке — смена класса без неё лишь пишет unit_set

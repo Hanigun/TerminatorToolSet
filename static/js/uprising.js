@@ -2541,7 +2541,9 @@ function uprEditPop(chipEl, meta, items, i, onChange, isNew) {
         put("cost", prc);
         put("cp_cost", cpInp);
         put("unit_set", setInp);
-        if (Object.keys(diff).length) uprWriteStats(meta.cat, name, diff);
+        // статы ждём: их внутренний рендер должен отработать ДО
+        // переноса и финального рендера, не посреди полёта чипа
+        if (Object.keys(diff).length) await uprWriteStats(meta.cat, name, diff);
         // перенос в секцию нового класса: sysname с количеством
         // переезжает между колонками той же строки сектора.
         // Только по галке — смена класса без неё лишь пишет unit_set
