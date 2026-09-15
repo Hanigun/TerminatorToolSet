@@ -891,6 +891,13 @@ function untRow(layerKey, it, cat) {
     untSelect(layerKey, cat, it.sys);
   });
   row.addEventListener("contextmenu", e => untChipCtx(e, layerKey, cat, it.sys));
+  // подсветка перехода «Расширенные» (untOpenUnit): переживает перерисовки
+  // списков — батч иконок пересоздаёт чипы, метка живёт в state до сброса
+  const fl = state.units && state.units.flashSys;
+  if (fl && fl.layer === layerKey && fl.cat === cat && fl.sys === it.sys) {
+    row.classList.add("unt-row-flash");
+    setTimeout(() => { try { row.classList.remove("unt-row-flash"); } catch (e) {} }, 3000);
+  }
   return row;
 }
 
@@ -970,19 +977,48 @@ async function untOpenUnit(cat, sys) {
   untPaint();
   untSelect(layerKey, cat, sys);
   // чип — перебором по dataset (sysname в селектор не экранируем)
-  let row = null;
-  document.querySelectorAll(".unt-list").forEach(list => {
-    if (row || list.dataset.layer !== layerKey || list.dataset.cat !== cat) return;
-    list.querySelectorAll(".unt-row").forEach(r => {
-      if (!row && r.dataset.sys === sys) row = r;
+  let list = null, row = null;
+  document.querySelectorAll(".unt-list").forEach(li => {
+    if (row || li.dataset.layer !== layerKey || li.dataset.cat !== cat) return;
+    li.querySelectorAll(".unt-row").forEach(r => {
+      if (!row && r.dataset.sys === sys) { list = li; row = r; }
     });
   });
   if (!row) return;
-  try { row.scrollIntoView({ block: "nearest" }); } catch (e) { /* уже виден */ }
   row.classList.remove("unt-row-flash");
   void row.offsetWidth;   // перезапуск анимации при повторных кликах
   row.classList.add("unt-row-flash");
-  setTimeout(() => row.classList.remove("unt-row-flash"), 3000);
+  // метка для untRow: батч иконок пересоздаёт чипы — вспышка должна
+  // пережить перерисовки списков
+  state.units.flashSys = { layer: layerKey, cat, sys };
+  setTimeout(() => {
+    try { row.classList.remove("unt-row-flash"); } catch (e) {}
+    try { if (state.units) state.units.flashSys = null; } catch (e) {}
+  }, 3000);
+  // докрутка с повторами: в момент перехода иконки ещё не встали (lazy +
+  // подмена реальной), геометрия списка плывёт — крутить надо и страницу,
+  // и сам список, пока чип не окажется в зоне видимости обоих
+  const scrollRow = () => {
+    let box = null, lbox = null;
+    try {
+      if (!row.isConnected) return true;
+      box = row.getBoundingClientRect();
+      lbox = list.getBoundingClientRect();
+    } catch (e) { return true; }
+    const inList = box.top >= lbox.top - 4 && box.bottom <= lbox.bottom + 4;
+    const inView = box.top >= 0 && box.bottom <= window.innerHeight;
+    if (inList && inView) return true;
+    try { row.scrollIntoView({ block: "center" }); } catch (e) { /* уже виден */ }
+    return false;
+  };
+  scrollRow();
+  try {
+    requestAnimationFrame(() => {
+      if (scrollRow()) return;
+      setTimeout(scrollRow, 400);
+      setTimeout(scrollRow, 1500);
+    });
+  } catch (e) { /* rAF недоступен — первый скролл уже сделан */ }
 }
 
 // Иконки всех слоёв своим батчем (образец cmpEnsureIcons): имена без
