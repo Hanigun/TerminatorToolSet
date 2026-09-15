@@ -2281,12 +2281,6 @@ function gaPaint() {
   const done = !!(gaState && gaState.downloaded == 1 && gaState.has_dir);
   const dot = $("#btn-gameassets-dot");
   if (dot) dot.hidden = !done;
-  const st = $("#ga-state");
-  if (st) {
-    st.textContent = done
-      ? (t("ga_ready") || "Done") + (gaState.version ? " " + gaState.version : "")
-      : "";
-  }
   // попап открыт — перерисовать (состояние/прогресс могли смениться)
   const p = $("#ga-pop");
   if (p && !p.hidden) gaPopRender();
