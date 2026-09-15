@@ -271,6 +271,15 @@ async function init() {
     const p = await pickFolder();
     if (p) { $("#set-mod-path").value = p; syncPathClear(); }
   });
+  // иконка папки логов в ряду категорий настроек (справа): открыть Logs
+  const logsBtn = $("#btn-open-logs");
+  if (logsBtn) logsBtn.addEventListener("click", async () => {
+    try {
+      const r = await api("/api/open_logs", { method: "POST", body: "{}" });
+      const j = await r.json();
+      if (!j.ok) toast(j.error || "error", "err");
+    } catch (e) { toast(String((e && e.message) || e), "err"); }
+  });
   // open the UI in the default system browser
   $("#btn-open-browser").onclick = async () => {
     try {

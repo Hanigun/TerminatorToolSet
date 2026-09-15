@@ -122,6 +122,9 @@
 /* вкладки в разработке (настройки карты): серые, не кликаются */
 .st-tab:disabled { color: var(--text-faint, #5a6068); opacity: 0.55; cursor: not-allowed; }
 .st-tab:disabled:hover { color: var(--text-faint, #5a6068); }
+/* распорка: уводит иконку папки логов к правому краю ряда категорий */
+.settings-tabs .st-spacer { flex: 1 1 auto; }
+.st-logs-btn { align-self: center; }
 .settings-page { display: flex; flex-direction: column; gap: 12px; }
 .settings-page[hidden] { display: none; }
 .settings-hint { font-size: 11px; color: var(--text-mute); margin-top: -6px; }

@@ -90,6 +90,18 @@ def register_files(app, ctx):
         data = request.get_json(silent=True) or {}
         return jsonify(mods.reveal(data.get("path", "")))
 
+    # (owned by Mods: reveal логи)
+    @app.route("/api/open_logs", methods=["POST"])
+    def api_open_logs():
+        """Открыть папку Logs в проводнике (иконка в шапке категорий настроек)."""
+        from ..infrastructure.filesystem import pick_app_dir
+        logdir = os.path.join(pick_app_dir(), "Logs")
+        try:
+            os.makedirs(logdir, exist_ok=True)
+        except OSError as e:  # noqa: BLE001
+            return jsonify({"ok": False, "error": str(e)})
+        return jsonify(mods.reveal(logdir))
+
     @app.route("/api/recents")
     def api_recents():
         out = []
