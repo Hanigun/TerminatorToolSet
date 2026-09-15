@@ -26,6 +26,20 @@ import sys
 # достаточно. Ставится ДО любых импортов, способных дёрнуть clr.
 os.environ.setdefault("PYTHONNET_RUNTIME", "netfx")
 
+# Тихий Chromium: WebView2 пишет в stderr свои внутренние ERROR при выходе
+# (известная безвредная гонка «Failed to unregister class Chrome_WidgetWin_0.
+# Error = 1411» — класс окна уже снят, Chromium ругается в пустоту; порядок
+# destroy-раньше-kill в close_window убрал один триггер, но остались другие
+# пути выхода: крестик титлбара, safety-net os._exit, teardown splash-окна).
+# WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS подхватывает сам загрузчик WebView2
+# при создании окружения — действует на все окна и наследуется дочерними
+# процессами (включая self-restart). Ставится ДО создания WebView2.
+_extra_wv_args = os.environ.get("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "")
+if "--disable-logging" not in _extra_wv_args:
+    os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = (
+        (_extra_wv_args + " --disable-logging --log-level=3").strip())
+del _extra_wv_args
+
 import threading
 import time
 import webbrowser
