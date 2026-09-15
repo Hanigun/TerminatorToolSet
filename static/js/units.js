@@ -21,10 +21,10 @@ function untCatIcon(cat) {
 }
 // Шеврон сворачивания — РОВНО как в SWT (swt.js:1239, swtItemCard:855).
 var UNT_CHEV_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
-// Иконки pill-кнопок «развернуть/свернуть всё» слоя: двойной шеврон
-// вниз (разложить) и вверх (сложить).
-var UNT_ALL_EXPAND_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 13l6 6 6-6M6 5l6 6 6-6"/></svg>';
-var UNT_ALL_COLLAPSE_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 11l6-6 6 6M6 19l6-6 6-6"/></svg>';
+// Иконки pill-кнопок «развернуть/свернуть всё» слоя: стрелки вниз
+// (разложить) и вверх (сложить).
+var UNT_ALL_EXPAND_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>';
+var UNT_ALL_COLLAPSE_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
 // Иконка кнопки разворота длинного значения в многострочное поле.
 var UNT_EXPAND_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>';
 // Иконка кнопки предпросмотра картинки поля (колонки image/pic).
@@ -54,7 +54,7 @@ function untIsPicCol(c) {
 // колонки в файле слоя. Ввод везде свободный.
 var UNT_COMBO_COLS = ["unit_set", "unit_class", "driving_class", "category",
   "passable_type", "crusher_class", "crusher_class_broken", "crushable_class",
-  "sprite_type", "defence", "chassis_type", "crew", "unit_type"];
+  "sprite_type", "defence", "chassis_type", "crew", "unit_type", "exp_levels"];
 // Все значения колонки в файле слоя для меню (комментарии-строки мимо).
 function untColValues(got, i) {
   const out = [];
@@ -1029,68 +1029,43 @@ async function untPaintTypeDetail(box) {
     const k = document.createElement("span");
     k.className = "unt-kv-key";
     k.textContent = String(c);
-    const inp = document.createElement("input");
-    inp.className = "unt-kv-inp";
-    inp.type = "text";
-    inp.spellcheck = false;
-    inp.autocomplete = "off";
     const s = (i < values.length && values[i] !== undefined && values[i] !== null)
       ? String(values[i]) : "";
-    inp.value = s;
-    inp.dataset.col = String(i);
     // Меню перечисления для колонки (комбо важнее чипов: колонка из
     // UNT_COMBO_COLS со списком — всегда комбо, даже со запятой).
     const combo = (typeof makeUnitSetCombo === "function")
       ? untComboFor(c, untColValues(got, i)) : null;
-    // Последнее закоммиченное значение строки: коммит только при отличии
-    // (change+blur иначе пишут дважды, сворот длинного поля — впустую).
-    let lastVal = s;
-    const commitNow = el => {
-      if (el.value === lastVal) return;
-      lastVal = el.value;
+    // Контекст строки: последнее закоммиченное значение (коммит только при
+    // отличии — change+blur иначе пишут дважды) и превращения поля.
+    const ctx = { box, layerKey, cat, sys, rowIdx, got, c, i, lastVal: s };
+    ctx.commit = el => {
+      if (el.value === ctx.lastVal) return;
+      ctx.lastVal = el.value;
       untDetailCommit(box, layerKey, cat, sys, rowIdx, i, el).catch(() => {});
     };
-    let longTa = null;
-    const collapseLong = () => {
-      if (!longTa) return;
-      inp.value = longTa.value;
-      // change сам закоммитит, если значение правили
-      try { inp.dispatchEvent(new Event("change")); } catch (e2) {}
-      try { r.replaceChild(inp, longTa); } catch (e2) {}
-      longTa = null;
-      r.classList.remove("unt-kv-open");
-    };
-    const wireField = el => {
-      el.addEventListener("change", () => commitNow(el));
-      // blur добивает правки многострочного поля (у однострочника change
-      // уже сработал раньше — повтор гасится проверкой lastVal).
-      el.addEventListener("blur", () => commitNow(el));
-      el.addEventListener("keydown", ev => {
+    r.appendChild(k);
+    if (combo) {
+      // Колонка-перечисление — то же комбо, что в кампании и таблице, но
+      // в своём держателе: makeUnitSetCombo чистит переданный контейнер
+      // (textContent="") — раньше туда уходила вся строка вместе с именем
+      // параметра, и меню выглядело криво.
+      const inp = document.createElement("input");
+      inp.className = "unt-kv-inp";
+      inp.type = "text";
+      inp.spellcheck = false;
+      inp.autocomplete = "off";
+      inp.value = s;
+      inp.dataset.col = String(i);
+      inp.addEventListener("change", () => ctx.commit(inp));
+      inp.addEventListener("keydown", ev => {
         // Переносы строк в значения species не пишем: Enter всегда коммитит.
-        if (ev.key === "Enter") { ev.preventDefault(); el.blur(); }
+        if (ev.key === "Enter") { ev.preventDefault(); inp.blur(); }
         else if (ev.key === "Escape") {
           ev.preventDefault();
-          el.value = lastVal;
-          el.blur();
-          if (el.tagName === "TEXTAREA") collapseLong();
+          inp.value = ctx.lastVal;
+          inp.blur();
         }
       });
-    };
-    wireField(inp);
-    r.appendChild(k);
-    // Перечисление через запятую — чипами вместо поля ввода: каждый элемент
-    // свой чип, в файл уходит строка с запятой (разделитель исходного
-    // значения). Колонки с меню (combo) чипами не трогаем.
-    if (!combo && s.indexOf(",") !== -1) {
-      untChipsField(r, i, s, commitNow);
-      kv.appendChild(r);
-      return;
-    }
-    // Колонка-перечисление — то же комбо, что в кампании и таблице, но
-    // в своём держателе: makeUnitSetCombo чистит переданный контейнер
-    // (textContent="") — раньше туда уходила вся строка вместе с именем
-    // параметра, и меню выглядело криво.
-    if (combo) {
       const hold = document.createElement("span");
       hold.className = "unt-kv-combo";
       hold.appendChild(inp);
@@ -1098,64 +1073,143 @@ async function untPaintTypeDetail(box) {
       try { makeUnitSetCombo(hold, inp, combo.choices, combo.title); }
       catch (e) { /* обычное поле без комбо */ }
     } else {
-      r.appendChild(inp);
-      // Длинные одиночные значения: в строке — компактный однострочник,
-      // кнопка разворачивает многострочное поле для удобной правки.
-      if (s.length > 90) {
-        const tgl = untFieldBtn(UNT_EXPAND_SVG, "unt_expand");
-        tgl.onclick = e => {
-          e.stopPropagation();
-          if (longTa) {
-            collapseLong();
-            tgl.title = t("unt_expand");
-            try { inp.focus({ preventScroll: true }); } catch (e2) {}
-            return;
-          }
-          longTa = document.createElement("textarea");
-          longTa.className = inp.className + " unt-kv-ta";
-          longTa.spellcheck = false;
-          longTa.autocomplete = "off";
-          longTa.value = inp.value;
-          longTa.dataset.col = inp.dataset.col;
-          longTa.rows = 2;
-          wireField(longTa);
-          const grow = () => {
-            longTa.style.height = "auto";
-            longTa.style.height = Math.min(longTa.scrollHeight, 240) + "px";
-          };
-          longTa.addEventListener("input", grow);
-          r.replaceChild(longTa, inp);
-          r.classList.add("unt-kv-open");
-          tgl.title = t("unt_collapse");
-          grow();
-          try { longTa.focus(); } catch (e2) {}
-        };
-        r.appendChild(tgl);
-      }
-      // Колонки картинок (image/pic): кнопка предпросмотра — той же фабрикой
-      // кнопок, в том же ряду после поля.
-      if (untIsPicCol(c)) {
-        const pv = untFieldBtn(UNT_EYE_SVG, "unt_preview");
-        pv.classList.add("unt-kv-preview");
-        pv.onclick = e => {
-          e.stopPropagation();
-          untPicPreview(pv, untPicUrl(cat, sys, c, inp.value));
-        };
-        r.appendChild(pv);
-      }
+      // Обычное поле: текст, чипы и превращения между ними.
+      untPaintRowField(r, ctx, s);
     }
     kv.appendChild(r);
   });
   box.appendChild(kv);
 }
 
-// Перечисление через запятую — чипами: каждый элемент свой чип с минимальным
-// зазором, без запятых и без аутлайна. В файл уходит строка с запятой
-// (разделитель — как в исходном значении: ", " или ","): commit пишет
-// склейку через скрытое поле штатным untDetailCommit.
+// Поле обычной строки-параметра (не комбо): текст, чипы и превращения
+// между ними. r — строка (первый ребёнок — имя k, дальше только поле:
+// всё после имени здесь сносится и строится заново); ctx — контекст строки
+// (cat/sys/c/i/lastVal/commit); s — значение.
+function untPaintRowField(r, ctx, s) {
+  while (r.children.length > 1) {
+    try { r.lastChild.remove(); } catch (e) { break; }
+  }
+  const { cat, sys, c, i } = ctx;
+  ctx.lastVal = s;
+  // Перечисление — чипами (запятая возвращается в файл при записи).
+  if (s.indexOf(",") !== -1) {
+    untChipsField(r, ctx, s, false);
+    return;
+  }
+  const inp = document.createElement("input");
+  inp.className = "unt-kv-inp";
+  inp.type = "text";
+  inp.spellcheck = false;
+  inp.autocomplete = "off";
+  inp.value = s;
+  inp.dataset.col = String(i);
+  let longTa = null;
+  const collapseLong = () => {
+    if (!longTa) return;
+    inp.value = longTa.value;
+    // change сам закоммитит, если значение правили
+    try { inp.dispatchEvent(new Event("change")); } catch (e2) {}
+    try { r.replaceChild(inp, longTa); } catch (e2) {}
+    longTa = null;
+    r.classList.remove("unt-kv-open");
+  };
+  // Запятая + пробел в обычном поле — превращение в перечисление с чипами:
+  // значение пишется, строка перестраивается чипами, фокус — в добавление
+  // следующего пункта (набираешь «пункт, » — и дальше набираешь уже в чипах).
+  const toChips = el => {
+    if (el.value.indexOf(", ") === -1) return;
+    ctx.commit(el);
+    untPaintRowField(r, ctx, el.value);
+    untChipsFocusAdd(r);
+  };
+  const wireField = el => {
+    el.addEventListener("change", () => ctx.commit(el));
+    // blur добивает правки многострочного поля (у однострочника change
+    // уже сработал раньше — повтор гасится проверкой lastVal).
+    el.addEventListener("blur", () => ctx.commit(el));
+    el.addEventListener("input", ev => {
+      if (ev.isComposing) return; // IME-набор не рвём превращением
+      toChips(el);
+    });
+    el.addEventListener("keydown", ev => {
+      // Переносы строк в значения species не пишем: Enter всегда коммитит.
+      if (ev.key === "Enter") { ev.preventDefault(); el.blur(); }
+      else if (ev.key === "Escape") {
+        ev.preventDefault();
+        el.value = ctx.lastVal;
+        el.blur();
+        if (el.tagName === "TEXTAREA") collapseLong();
+      }
+    });
+  };
+  wireField(inp);
+  r.appendChild(inp);
+  // Длинные одиночные значения: в строке — компактный однострочник,
+  // кнопка разворачивает многострочное поле для удобной правки.
+  if (s.length > 90) {
+    const tgl = untFieldBtn(UNT_EXPAND_SVG, "unt_expand");
+    tgl.onclick = e => {
+      e.stopPropagation();
+      if (longTa) {
+        collapseLong();
+        tgl.title = t("unt_expand");
+        try { inp.focus({ preventScroll: true }); } catch (e2) {}
+        return;
+      }
+      longTa = document.createElement("textarea");
+      longTa.className = inp.className + " unt-kv-ta";
+      longTa.spellcheck = false;
+      longTa.autocomplete = "off";
+      longTa.value = inp.value;
+      longTa.dataset.col = inp.dataset.col;
+      longTa.rows = 2;
+      wireField(longTa);
+      const grow = () => {
+        longTa.style.height = "auto";
+        longTa.style.height = Math.min(longTa.scrollHeight, 240) + "px";
+      };
+      longTa.addEventListener("input", grow);
+      r.replaceChild(longTa, inp);
+      r.classList.add("unt-kv-open");
+      tgl.title = t("unt_collapse");
+      grow();
+      try { longTa.focus(); } catch (e2) {}
+    };
+    r.appendChild(tgl);
+  }
+  // Колонки картинок (image/pic): кнопка предпросмотра — той же фабрикой
+  // кнопок, в том же ряду после поля.
+  if (untIsPicCol(c)) {
+    const pv = untFieldBtn(UNT_EYE_SVG, "unt_preview");
+    pv.classList.add("unt-kv-preview");
+    pv.onclick = e => {
+      e.stopPropagation();
+      untPicPreview(pv, untPicUrl(cat, sys, c, inp.value));
+    };
+    r.appendChild(pv);
+  }
+}
+// Открыть добавление пункта перечисления (фокус в новое поле): после
+// превращения «текст -> чипы» пользователь продолжает набирать следующий
+// пункт уже в чипах, не кликая «+».
+function untChipsFocusAdd(r) {
+  try {
+    const add = r.querySelector(".unt-chip-add");
+    if (add) add.click();
+  } catch (e) { /* добавление откроют вручную */ }
+}
+// Перечисление чипами: каждый элемент свой чип с минимальным зазором,
+// без запятых и без аутлайна. В файл уходит строка с запятой (разделитель —
+// как в исходном значении: ", " или ","): commit пишет склейку через
+// скрытое поле штатным untDetailCommit.
 // Клик по чипу — инлайн-правка (Enter/мимо — сохранить, пустое — убрать,
-// Esc — отмена); × — убрать; + — добавить (Enter — сохранить и следующее).
-function untChipsField(r, i, s, commit) {
+// Esc — отмена); × — убрать; + — добавить (Enter — сохранить и следующее,
+// Backspace в пустом добавлении — убрать последний чип).
+// Удаления, после которых запятой не осталось (0-1 пункт): невидимая
+// запятая удалена — пункт снова обычный (строка перестраивается текстом).
+function untChipsField(r, ctx, s, focusAdd) {
+  const { i } = ctx;
+  const commit = el => ctx.commit(el);
   const sep = s.indexOf(", ") !== -1 ? ", " : ",";
   let items = s.split(",").map(x => x.trim()).filter(x => x !== "");
   const hidden = document.createElement("input");
@@ -1170,6 +1224,24 @@ function untChipsField(r, i, s, commit) {
     hidden.value = items.join(sep);
     commit(hidden);
   };
+  // Обычный пункт вместо чипов: запятой больше нет — перестроить строку
+  // текстом и отдать фокус в поле.
+  const toPlain = () => {
+    hidden.value = items.join(sep);
+    commit(hidden);
+    untPaintRowField(r, ctx, hidden.value);
+    try {
+      const inp = r.querySelector(".unt-kv-inp");
+      if (inp) inp.focus({ preventScroll: true });
+    } catch (e) { /* фокус не критичен */ }
+  };
+  // Любое удаление: остался 0-1 пункт — в обычный текст, иначе чипы.
+  const mutated = () => {
+    if (items.length <= 1) toPlain();
+    else { save(); paint(); }
+  };
+  const splitVal = v => String(v || "").split(",").map(x => x.trim())
+    .filter(x => x !== "");
   const paint = () => {
     box.innerHTML = "";
     items.forEach((it, idx) => {
@@ -1186,8 +1258,7 @@ function untChipsField(r, i, s, commit) {
       x.textContent = "×";
       x.onclick = () => {
         items.splice(idx, 1);
-        save();
-        paint();
+        mutated();
       };
       chip.append(tx, x);
       box.appendChild(chip);
@@ -1210,14 +1281,13 @@ function untChipsField(r, i, s, commit) {
     const fin = ok => {
       if (done) return;
       done = true;
-      const v = ed.value.trim();
-      if (ok) {
-        if (v === "") items.splice(idx, 1);
-        else if (v !== it) items[idx] = v;
-        else { paint(); return; }
-        save();
-      }
-      paint();
+      if (!ok) { paint(); return; }
+      const parts = splitVal(ed.value);
+      if (parts.length === 1 && parts[0] === it) { paint(); return; }
+      // Правка с запятой — в несколько пунктов; без запятой (пусто или один
+      // пункт) — удаление смотрит, не остался ли пункт обычным.
+      items.splice(idx, 1, ...parts);
+      mutated();
     };
     ed.addEventListener("blur", () => fin(true));
     ed.addEventListener("keydown", ev => {
@@ -1240,7 +1310,8 @@ function untChipsField(r, i, s, commit) {
       done = true;
       const v = ed.value.trim();
       if (ok && v !== "") {
-        items.push(v);
+        // Добавление с запятой — сразу несколько пунктов.
+        splitVal(v).forEach(p => items.push(p));
         save();
       }
       paint();
@@ -1253,6 +1324,14 @@ function untChipsField(r, i, s, commit) {
         if (fin(true)) addChip();
       }
       else if (ev.key === "Escape") { ev.preventDefault(); fin(false); }
+      // Backspace в пустом добавлении рядом с чипами — убрать последний
+      // чип; ушла последняя запятая — пункт снова обычный.
+      else if (ev.key === "Backspace" && ed.value === "" && items.length) {
+        ev.preventDefault();
+        done = true;
+        items.pop();
+        mutated();
+      }
     });
     const anchor = box.querySelector(".unt-chip-add");
     if (anchor) box.insertBefore(ed, anchor);
@@ -1260,6 +1339,7 @@ function untChipsField(r, i, s, commit) {
     try { ed.focus(); } catch (e2) {}
   };
   paint();
+  if (focusAdd) untChipsFocusAdd(r);
 }
 
 // URL превью картинки поля: сырой ключ колонки резолвит /api/units_pic
