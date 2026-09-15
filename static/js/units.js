@@ -103,9 +103,15 @@ async function openUnits(opts) {
 }
 
 // Привязка кнопок шапки и сегмента-источника (зовётся из init один раз).
+// Обновить — как кампания (#cmp-reload): досмотр недогруженных иконок
+// на месте + добивка цен + перечитывание слоёв.
 function setupUnits() {
   const rel = $("#unt-reload");
-  if (rel) rel.onclick = () => { renderUnits(true).catch(() => {}); };
+  if (rel) rel.onclick = () => {
+    untReloadImages();
+    untEnsurePrices().catch(() => {});
+    renderUnits(true).catch(() => {});
+  };
   const ana = $("#unt-analyze");
   if (ana) ana.onclick = () => { untAnalyze().catch(() => {}); };
   const grd = $("#unt-open-grid");
@@ -240,6 +246,16 @@ async function renderUnits(force) {
       });
       layers.push(L);
     });
+    if (!prev.size) {
+      // Первый вход на вкладку: всё сложено, кроме 3 верхних слоёв
+      // (базовая игра и DLC-оверлеи); карточки типов сложены все.
+      layers.forEach((L, i) => {
+        L.open = i < 3;
+        Object.keys((L && L.cats) || {}).forEach(c => {
+          if (L.cats[c]) L.cats[c]._open = false;
+        });
+      });
+    }
     // Смена источника — чужие иконки и тело недействительны; внутри одного
     // источника карту копим (батч добирает только недостающее, как кампания).
     const srcChanged = state.units.src !== src;
@@ -280,6 +296,12 @@ async function renderUnits(force) {
     // цены (cost) — тем же /api/uprising_prices, что кампания.
     untEnsureIcons().catch(() => {});
     untEnsurePrices().catch(() => {});
+    // Досмотр зависших иконок (рваный коннект без error): один проход
+    // через 5с после отрисовки, как cmpImgSweepT у кампании.
+    try {
+      if (untImgSweepT) clearTimeout(untImgSweepT);
+      untImgSweepT = setTimeout(() => { untImgSweepT = 0; untReloadImages(); }, 5000);
+    } catch (e) {}
   } finally {
     if (fresh()) state.units.loading = false;
   }
@@ -386,6 +408,14 @@ function untLayerSec(L) {
   chip.textContent = isBase ? "Base Game" : (L.label || L.key);
   chip.title = isBase ? "Base Game" : (L.label || L.key);
   headEl.append(chev, chip);
+  // Счётчик и иконка — слева вплотную к чипу, путь — вправо во всю
+  // оставшуюся ширину (flex:1 в CSS).
+  const sum = document.createElement("span");
+  sum.className = "unt-layer-sum";
+  sum.textContent = "· " + untLayerTotal(L);
+  sum.title = chip.textContent;
+  headEl.appendChild(sum);
+  headEl.appendChild(untSrcBadge());
   const short = untLayerShortPath(L);
   if (short) {
     const p = document.createElement("span");
@@ -394,12 +424,6 @@ function untLayerSec(L) {
     p.title = short;
     headEl.appendChild(p);
   }
-  const sum = document.createElement("span");
-  sum.className = "unt-layer-sum";
-  sum.textContent = "· " + untLayerTotal(L);
-  sum.title = chip.textContent;
-  headEl.appendChild(sum);
-  headEl.appendChild(untSrcBadge());
   headEl.addEventListener("click", e => {
     if (e.target.closest("input, select, button, label, .swt-cmd-combo")) return;
     flip();
@@ -622,9 +646,9 @@ function untRow(layerKey, it, cat) {
   row.dataset.cat = cat;
   const pv = untPrice(cat, it.sys);
   const dn = (typeof uprUnitName === "function") ? uprUnitName(it.sys) : it.sys;
+  // Подсказка чипа — только имя и цена, без пути файла.
   row.title = (dn !== it.sys ? dn + "\n" : "") + it.sys
-    + (pv === "" ? "" : "\n" + (t("cpg_cost") || "Cost") + ": " + pv)
-    + (it.path ? "\n" + it.path : "");
+    + (pv === "" ? "" : "\n" + (t("cpg_cost") || "Cost") + ": " + pv);
   const img = document.createElement("img");
   img.className = "upr-chip-icon";
   img.draggable = false;
@@ -811,14 +835,12 @@ async function untPaintTypeDetail(box) {
   const nm = document.createElement("span");
   nm.className = "unt-detail-name";
   nm.textContent = item.sys;
-  nm.title = item.path || "";
   head.appendChild(nm);
   head.oncontextmenu = e => untChipCtx(e, layerKey, cat, item.sys);
   box.appendChild(head);
   const pathRow = document.createElement("div");
   pathRow.className = "unt-detail-path";
   pathRow.textContent = item.path || "";
-  pathRow.title = item.path || "";
   box.appendChild(pathRow);
   // Параметры: читаем строку файла своего слоя (без побочных эффектов,
   // как добор оверлеев в renderUnits).
@@ -948,28 +970,120 @@ async function untDetailCommit(box, layerKey, cat, sys, rowIdx, col, inp) {
   untPaintAllLists();
 }
 
-// Анализ: сводка-счётчики по классам (без конвертации иконок — это T5-витрина).
+// Все sysname витрины для анализа иконок (все слои и классы).
+function untIconNames() {
+  const names = new Set();
+  ((state.units && state.units.layers) || []).forEach(L => {
+    UNT_CATS.forEach(cat => {
+      ((((L.cats || {})[cat] || {}).items) || []).forEach(x => {
+        if (x && x.sys) names.add(x.sys);
+      });
+    });
+  });
+  return [...names];
+}
+
+// Досмотр недогруженных иконок списков (рваный коннект без error/onload) —
+// РОВНО uprReloadImages (uprising.js), но по #unt-main и со СВОЕЙ картой
+// иконок: застрял на плейсхолдере или висит реальная — прогнать через
+// uprChipIcon заново; возвращает число перезапущенных.
+function untReloadImages() {
+  const main = $("#unt-main");
+  if (!main || typeof uprChipIcon !== "function") return 0;
+  const ready = !!(state.units && state.units.iconsReady);
+  const map = (state.units && state.units.iconMap) || {};
+  let n = 0;
+  main.querySelectorAll("img.upr-chip-icon").forEach(img => {
+    if (!img.isConnected) return;
+    const name = img.dataset.uprName || "";
+    if (!name) return;
+    const real = !!img.dataset.uprReal;
+    let ok = false;
+    try { ok = img.complete && img.naturalWidth > 0; } catch (e) {}
+    if (ok && real) return;
+    if (!real && !ready) return; // батч ещё летит — он всё закроет
+    try {
+      const chip = (img.closest && img.closest(".upr-chip")) || img.parentNode;
+      delete img.dataset.uprReal;
+      uprChipIcon(img, chip, name, img.dataset.uprCat || "", { map, ready });
+      n++;
+    } catch (e) {}
+  });
+  return n;
+}
+let untImgSweepT = 0;
+
+// Анализ — РОВНО как кампания (cmpAnalyze): дожатие недостающих иконок
+// чанками через /api/uprising_convert с мини-прогрессом под шапкой, затем
+// сброс карт в памяти и перерисовка списков.
 async function untAnalyze() {
   if (!state.units) state.units = untFreshState();
   if (state.units.analyzing) return;
+  if (!((state.units.layers || []).length)) await renderUnits().catch(() => {});
   state.units.analyzing = true;
   const btn = $("#unt-analyze");
   const label = t("unt_analyze") || "Анализ";
   if (btn) { btn.disabled = true; btn.textContent = label + "…"; }
   try {
-    if (!state.units.src) await renderUnits();
-    const parts = [];
-    UNT_CATS.forEach(cat => {
-      const d = untCatData(cat);
-      const n = ((d && d.items) || []).length;
-      if (n > 0) parts.push((t("unt_class_" + cat) || cat) + ": " + n);
-    });
-    toast(parts.length ? parts.join(" · ") : label, parts.length ? "ok" : "");
+    const names = untIconNames();
+    const CH = 150;
+    const acc = { converted: 0, ready: 0, missing: 0, failed: 0 };
+    let okAll = true, lastErr = "";
+    if (names.length) untConvShow(names.length);
+    for (let i = 0; i < names.length; i += CH) {
+      const r = await api("/api/uprising_convert", { method: "POST",
+        body: JSON.stringify({ root: untSrcRoot(), names: names.slice(i, i + CH) }) });
+      const j = await r.json();
+      if (j && j.ok) {
+        acc.converted += j.converted || 0;
+        acc.ready += j.ready || 0;
+        acc.missing += j.missing || 0;
+        acc.failed += j.failed || 0;
+      } else { okAll = false; lastErr = (j && j.error) || "error"; break; }
+      untConvPaint(Math.min(i + CH, names.length), names.length);
+    }
+    if (okAll) {
+      // индекс webp перестраивается по mtime сам; сбрасываем карты в памяти
+      state.units.iconMap = {};
+      state.units.iconsReady = false;
+      state.units.iconSeq++;
+      untEnsureIcons().catch(() => {});
+      untEnsurePrices().catch(() => {});
+      untPaintAllLists();
+      const parts = [];
+      if (acc.converted) parts.push("+" + acc.converted);
+      if (acc.ready) parts.push("=" + acc.ready);
+      if (acc.failed) parts.push("!" + acc.failed);
+      toast((t("swt_analyzed_tt") || "Готово") +
+        (parts.length ? " (" + parts.join(" ") + ")" : ""), "ok");
+    } else toast(lastErr, "err");
   } catch (e) { toast(String((e && e.message) || e), "err"); }
   finally {
     state.units.analyzing = false;
+    untConvHide();
     if (btn) { btn.disabled = false; btn.textContent = label; }
   }
+}
+
+// Мини-прогресс конвертации иконок — те же классы/вид, что upr-conv
+// (cmpConvShow/cmpConvPaint/cmpConvHide у кампании).
+function untConvShow(total) {
+  const w = $("#unt-conv");
+  if (!w) return;
+  w.hidden = false;
+  untConvPaint(0, total);
+}
+function untConvPaint(done, total) {
+  const f = $("#unt-conv-fill"), tx = $("#unt-conv-txt");
+  const pct = total > 0 ? Math.min(100, Math.round(done / total * 100)) : 100;
+  if (f) f.style.width = pct + "%";
+  if (tx) tx.textContent = (t("upr_conv_icons") || "Иконки") +
+    ": " + done + "/" + total;
+}
+function untConvHide() {
+  if (state.units && state.units.analyzing) return;
+  const w = $("#unt-conv");
+  if (w) w.hidden = true;
 }
 
 // Открыть species-файл в гриде через существующий механизм (первый загруженный класс).

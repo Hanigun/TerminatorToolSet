@@ -4,6 +4,9 @@
    swt-item-chev/swt-item-body из swt.css): здесь их НЕ дублируем. */
 /* обёртка сегмента-источника «Проект | Игра | Мод»: не даёт шапке сжать сегмент */
 .unt-src-wrap { position: relative; flex-shrink: 0; }
+/* мини-прогресс конвертации иконок висит абсолютом под шапкой (классы
+   .upr-conv из uprising.css) — якорь относительного позиционирования */
+#units-tab .swt-head { position: relative; }
 /* контейнер витрины: секции слоёв друг под другом, скролл страницы */
 .unt-main { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; }
 /* шапка слоя: вдвое выше родной .swt-sec-head (4px 8px -> 8px 12px) */
@@ -29,12 +32,17 @@
 /* сводка слоя в шапке секции */
 .swt-sec-head > span.unt-layer-sum { font-size: 11px; font-weight: 400;
   color: var(--text-mute); text-transform: none; letter-spacing: 0; }
-/* иконка источника (Проект | Игра | Мод) в шапках слоёв и типов */
+/* иконка источника (Проект | Игра | Мод) в шапках слоёв и типов —
+   цвета РОВНО как чип происхождения на вкладках (.tab-origin, tabs.css):
+   проект — акцент, игра — синий, мод — зелёный */
 .unt-src-ico { flex: none; display: inline-flex; align-items: center;
   color: var(--text-mute); margin-left: auto; }
 .unt-src-ico svg { width: 14px; height: 14px; display: block; }
+.unt-src-project { color: var(--accent); }
+.unt-src-game { color: var(--blue); }
+.unt-src-mod { color: #7ec46a; }
 .unt-layer-head .unt-src-ico { margin-left: 0; }
-.unt-type-head .unt-src-ico { margin-left: auto; }
+.unt-type-head .unt-src-ico { margin-left: 0; }
 /* карточка типа: базовая игра — акцентная полоса, как слой */
 .unt-type-card.unt-type-base { border-left-color: var(--accent); }
 /* иконка класса в шапке типа — РОВНО размер заголовков кампании (28px) */
