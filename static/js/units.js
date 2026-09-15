@@ -48,13 +48,33 @@ function untIsPicCol(c) {
   return /(image|pic)/i.test(String(c || ""));
 }
 // Колонки-перечисления с выпадающим меню (как unit_set): unit_set и
-// unit_class — проверенными наборами игры/мода из grid.js, остальные
-// очевидные (driving_class, category, проходимость, разрушаемость,
-// спрайт, защита, шасси, экипаж, тип) — всеми встреченными значениями
-// колонки в файле слоя. Ввод везде свободный.
+// unit_class — проверенными наборами игры/мода из grid.js, экипаж —
+// динамически из отрядов витрины (все слои), остальные очевидные
+// (driving_class, category, проходимость, спрайт, защита, шасси, тип,
+// уровни) — всеми встреченными значениями колонки в файле слоя.
+// Крашеров (crusher_*/crushable_*) в меню нет — обычные поля.
+// Ввод везде свободный.
 var UNT_COMBO_COLS = ["unit_set", "unit_class", "driving_class", "category",
-  "passable_type", "crusher_class", "crusher_class_broken", "crushable_class",
-  "sprite_type", "defence", "chassis_type", "crew", "unit_type", "exp_levels"];
+  "passable_type", "sprite_type", "defence", "chassis_type", "crew",
+  "unit_type", "exp_levels"];
+// Экипаж — динамическое меню из отрядов витрины (все слои: basis и DLC) +
+// встреченное в файле (свой экипаж мода тоже попадает в список).
+// Печать в поле фильтрует список (автозаполнение комбо).
+function untCrewChoices(extraVals) {
+  const seen = new Set();
+  try {
+    ((state.units && state.units.layers) || []).forEach(L => {
+      (((L.cats || {}).squads || {}).items || []).forEach(x => {
+        if (x && x.sys) seen.add(x.sys);
+      });
+    });
+    (extraVals || []).forEach(v => {
+      v = String(v ?? "").trim();
+      if (v) seen.add(v);
+    });
+  } catch (e) { /* меню без значений */ }
+  return [...seen].sort();
+}
 // Все значения колонки в файле слоя для меню (комментарии-строки мимо).
 function untColValues(got, i) {
   const out = [];
@@ -80,6 +100,8 @@ function untComboFor(c, fileVals) {
       return { choices: unitSetChoices(fileVals), title: name };
     if (name === "unit_class" && typeof unitClassChoices === "function")
       return { choices: unitClassChoices(fileVals), title: name };
+    if (name === "crew")
+      return { choices: untCrewChoices(fileVals), title: name };
   } catch (e) { /* ниже — только значения файла */ }
   // Проверенного набора игры для колонки нет — только встреченные в файле;
   // меню из одного текущего значения не строим.
@@ -1893,6 +1915,20 @@ async function untDelUnit(cat, sys) {
   return ok;
 }
 
+// Дублировать юнит в том же слое: строка-источник копируется дословно,
+// имя уникализируется (имя_2, имя_3, …) через untAddUnit-пресет; выбор едет
+// на дубликат. Один клик вместо «копировать + вставить + переименовать».
+async function untDupUnit(cat, sys, layerKey) {
+  const item = untFindLayerItem(layerKey, cat, sys) || untFindItem(cat, sys);
+  if (!item || !item.path) { toast(t("unt_sub") || "error", "err"); return; }
+  const got = await untReadRows(item.path);
+  if (!got) { toast(item.path, "err"); return; }
+  const ri = untFindRow(got.rows, sys);
+  if (ri === -1) { toast(sys, "err"); return; }
+  const vals = (got.rows[ri].values || []).slice();
+  await untAddUnit(cat, vals, layerKey);
+}
+
 // Копировать/вырезать в буфер таба. Вырезание удаляет строку сразу (образец
 // карты); значения резов храним в буфере, копии подтягиваем лениво при вставке.
 async function untCopyUnit(cat, sys, cut) {
@@ -2110,6 +2146,8 @@ function untChipCtx(e, layerKey, cat, sys) {
       fn: () => { untCopyUnit(cat, sys, false).catch(() => {}); } },
     { label: t("ctx_cut") || "Вырезать", icon: "cut",
       fn: () => { untCopyUnit(cat, sys, true).catch(() => {}); } },
+    { label: t("unt_duplicate") || "Дублировать", icon: "copy",
+      fn: () => { untDupUnit(cat, sys, layerKey).catch(() => {}); } },
     { sep: true },
     { label: t("unt_delete") || "Удалить", icon: "delete", danger: true,
       fn: () => { untDelUnit(cat, sys).catch(() => {}); } },
