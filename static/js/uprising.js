@@ -2487,6 +2487,9 @@ function uprEditPop(chipEl, meta, items, i, onChange, isNew) {
     secSel.value = "auto";
     rowM.appendChild(secSel);
   }
+  // класс на момент открытия — смена значения сама двигает юнит,
+  // даже без галки (галка = принудительный перенос в выбранную секцию)
+  const origSet = setInp ? setInp.value : "";
   // цена скрыта везде (uprPrice/uprising_prices остаются в коде на будущее)
   // кнопки
   const btns = document.createElement("div");
@@ -2543,8 +2546,11 @@ function uprEditPop(chipEl, meta, items, i, onChange, isNew) {
         put("unit_set", setInp);
         if (Object.keys(diff).length) uprWriteStats(meta.cat, name, diff);
         // перенос в секцию нового класса: sysname с количеством
-        // переезжает между колонками той же строки сектора
-        if (moveChk && moveChk.checked && secSel) {
+        // переезжает между колонками той же строки сектора.
+        // Триггер — галка или смена класса (без галки — в автосекцию)
+        const classChanged = setInp &&
+          setInp.value.trim() !== String(origSet || "").trim();
+        if (moveChk && secSel && (moveChk.checked || classChanged)) {
           let target = secSel.value;
           if (target === "auto" && typeof unitSetAutoSection === "function")
             target = unitSetAutoSection(setInp ? setInp.value : "");
