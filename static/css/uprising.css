@@ -445,7 +445,7 @@ button.upr-map-btn.rnd {
   min-width: 146px; }
 .upr-chip-veh-sys { display: block; max-width: 100%; margin: 0 auto;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  text-align: center; font-size: 11px; color: #9fb3c8;
+  text-align: center; font-size: 11px; font-weight: 700; color: #c9d8e8;
   pointer-events: none; user-select: none; }
 .upr-chip-veh-cap { display: block; position: absolute;
   /* оверлей вне потока: слева — от L-выреза (~17% ширины), справа — до
