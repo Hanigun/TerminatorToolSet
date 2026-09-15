@@ -47,6 +47,46 @@ function untFieldBtn(svg, key) {
 function untIsPicCol(c) {
   return /(image|pic)/i.test(String(c || ""));
 }
+// Колонки-перечисления с выпадающим меню (как unit_set): unit_set и
+// unit_class — проверенными наборами игры/мода из grid.js, остальные
+// очевидные (driving_class, category, проходимость, разрушаемость,
+// спрайт, защита, шасси, экипаж, тип) — всеми встреченными значениями
+// колонки в файле слоя. Ввод везде свободный.
+var UNT_COMBO_COLS = ["unit_set", "unit_class", "driving_class", "category",
+  "passable_type", "crusher_class", "crusher_class_broken", "crushable_class",
+  "sprite_type", "defence", "chassis_type", "crew", "unit_type"];
+// Все значения колонки в файле слоя для меню (комментарии-строки мимо).
+function untColValues(got, i) {
+  const out = [];
+  const seen = new Set();
+  try {
+    ((got && got.rows) || []).forEach(row => {
+      const vs = (row && row.values) || [];
+      const v = String(i < vs.length && vs[i] !== undefined && vs[i] !== null
+        ? vs[i] : "").trim();
+      if (!v || v.charAt(0) === "#" || seen.has(v)) return;
+      seen.add(v);
+      out.push(v);
+    });
+  } catch (e) { /* меню без значений файла */ }
+  return out;
+}
+// {choices, title} меню колонки-перечисления либо null (обычное поле).
+function untComboFor(c, fileVals) {
+  const name = String(c || "");
+  if (UNT_COMBO_COLS.indexOf(name) === -1) return null;
+  try {
+    if (name === "unit_set" && typeof unitSetChoices === "function")
+      return { choices: unitSetChoices(fileVals), title: name };
+    if (name === "unit_class" && typeof unitClassChoices === "function")
+      return { choices: unitClassChoices(fileVals), title: name };
+  } catch (e) { /* ниже — только значения файла */ }
+  // Проверенного набора игры для колонки нет — только встреченные в файле;
+  // меню из одного текущего значения не строим.
+  const uniq = [...new Set((fileVals || []).map(v => String(v)))];
+  if (uniq.length < 2) return null;
+  return { choices: uniq.sort(), title: name };
+}
 // Тон слоя по имени DLC (подстрока, регистр не важен — папки называются
 // вольно: Legion, "We are legion", Resistance, Evolution…): legion —
 // красный, resistance — тёмно-оранжевый, evolution — фиолетовый (как SWT);
@@ -998,6 +1038,10 @@ async function untPaintTypeDetail(box) {
       ? String(values[i]) : "";
     inp.value = s;
     inp.dataset.col = String(i);
+    // Меню перечисления для колонки (комбо важнее чипов: колонка из
+    // UNT_COMBO_COLS со списком — всегда комбо, даже со запятой).
+    const combo = (typeof makeUnitSetCombo === "function")
+      ? untComboFor(c, untColValues(got, i)) : null;
     // Последнее закоммиченное значение строки: коммит только при отличии
     // (change+blur иначе пишут дважды, сворот длинного поля — впустую).
     let lastVal = s;
@@ -1036,23 +1080,22 @@ async function untPaintTypeDetail(box) {
     r.appendChild(k);
     // Перечисление через запятую — чипами вместо поля ввода: каждый элемент
     // свой чип, в файл уходит строка с запятой (разделитель исходного
-    // значения). Комбо unit_set чипами не трогаем.
-    if (String(c) !== "unit_set" && s.indexOf(",") !== -1) {
+    // значения). Колонки с меню (combo) чипами не трогаем.
+    if (!combo && s.indexOf(",") !== -1) {
       untChipsField(r, i, s, commitNow);
       kv.appendChild(r);
       return;
     }
-    // Класс техники — то же комбо, что в кампании и таблице, но в своём
-    // держателе: makeUnitSetCombo чистит переданный контейнер
+    // Колонка-перечисление — то же комбо, что в кампании и таблице, но
+    // в своём держателе: makeUnitSetCombo чистит переданный контейнер
     // (textContent="") — раньше туда уходила вся строка вместе с именем
     // параметра, и меню выглядело криво.
-    if (String(c) === "unit_set" && typeof makeUnitSetCombo === "function"
-        && typeof unitSetChoices === "function") {
+    if (combo) {
       const hold = document.createElement("span");
       hold.className = "unt-kv-combo";
       hold.appendChild(inp);
       r.appendChild(hold);
-      try { makeUnitSetCombo(hold, inp, unitSetChoices([inp.value]), "unit_set"); }
+      try { makeUnitSetCombo(hold, inp, combo.choices, combo.title); }
       catch (e) { /* обычное поле без комбо */ }
     } else {
       r.appendChild(inp);

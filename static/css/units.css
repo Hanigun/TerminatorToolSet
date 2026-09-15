@@ -168,12 +168,18 @@ body.unt-resizing { user-select: none; cursor: col-resize; }
   font-family: var(--font); }
 .unt-kv-inp:focus { border-color: var(--accent); outline: none; }
 .unt-kv-inp:disabled { opacity: .6; }
-/* держатель комбо unit_set: имя параметра остаётся в строке (makeUnitSetCombo
-   чистит свой контейнер), комбо — на всё оставшееся место */
+/* держатель комбо перечисления: имя параметра остаётся в строке
+   (makeUnitSetCombo чистит свой контейнер), комбо — на всё оставшееся место */
 .unt-kv-combo { flex: 1; min-width: 0; display: flex; }
-.unt-kv-combo .unit-combo { width: 100%; }
-.unt-kv-combo .unt-kv-inp { border-radius: 3px 0 0 3px; border-right: none; }
-.unt-kv-combo .unit-combo-btn { border-radius: 0 3px 3px 0; border-color: var(--border); }
+.unt-kv-combo .unit-combo { width: 100%; gap: 6px; }
+/* стрелка меню — РОВНО как кнопки поля (превью/разворот): отдельный квадрат
+   26px, а не пристыкованный хвостовик таблицы (вес — выше .unit-combo-btn
+   из grid.css; таблица и кампания свои стрелки сохраняют) */
+.unt-kv-combo .unit-combo-btn { flex: none; width: 26px; height: 26px;
+  align-self: center; background: transparent; border: 1px solid var(--border);
+  border-radius: 3px; color: var(--text-mute); }
+.unt-kv-combo .unit-combo-btn:hover { color: var(--accent);
+  border-color: var(--accent); background: transparent; }
 /* кнопка разворота длинного значения в многострочное поле */
 .unt-kv-expand { flex: none; align-self: center; width: 26px; height: 26px;
   display: inline-flex; align-items: center; justify-content: center;
