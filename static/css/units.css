@@ -184,9 +184,11 @@ body.unt-resizing { user-select: none; cursor: col-resize; }
 /* развёрнутое длинное значение: авторастяжение до 240px, дальше свой скролл */
 .unt-kv-ta { resize: vertical; min-height: 56px; max-height: 240px;
   line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-/* перечисление чипами: минимальный зазор, без запятых, без аутлайна везде */
+/* перечисление чипами: тот же фон-подложка, что у полей (.unt-kv-inp);
+   минимальный зазор, без запятых, без аутлайна везде */
 .unt-chips { flex: 1; min-width: 0; display: flex; flex-wrap: wrap;
-  gap: 3px; align-items: center; padding: 2px 0; }
+  gap: 3px; align-items: center; padding: 2px 4px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 3px; }
 .unt-chip { display: inline-flex; align-items: center; gap: 2px;
   padding: 3px 3px 3px 8px; background: var(--bg-elev); border: none;
   border-radius: 3px; font-size: 12px; font-family: var(--mono);
