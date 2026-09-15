@@ -228,6 +228,43 @@ class Uprising:
         except Exception:  # noqa: BLE001
             return []
 
+    def _live_sheet_rows(self, path):
+        """Живые строки species-файла из открытой сессии, а не с диска.
+
+        prices()/capacity() парсят файлы напрямую — после undo/redo
+        (только память, без записи на диск) они показывали бы неоткаченные
+        значения. Сессии нет — None, вызывающий читает диск как раньше."""
+        try:
+            s = self._store.sessions.get(self._store.normal(path or ""))
+        except Exception:  # noqa: BLE001
+            return None
+        if s is None:
+            return None
+        try:
+            names = s.worksheet.column_names() or []
+            rows = [{i: str(h or "") for i, h in enumerate(names)}]
+            for r in s.worksheet.rows:
+                cells = {}
+                for i in range(len(names)):
+                    try:
+                        v = r.cell_value(i)
+                    except Exception:  # noqa: BLE001
+                        v = ""
+                    cells[i] = str(v or "")
+                rows.append(cells)
+            return rows
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _paths_dirty(self, paths):
+        """Есть ли среди путей сессии с незаписанными правками: их mtime
+        на диске врёт, кэш по mtime отдавал бы дооткатное."""
+        try:
+            dirty = self._store.dirty
+            return any(self._store.normal(p or "") in dirty for p in paths)
+        except Exception:  # noqa: BLE001
+            return False
+
     def _species_paths(self, root):
         """((name, path) base) + {name: [DLC overlay paths]} species files
         (units, items, upgrade presets and gun/armor/engine details)."""
@@ -3347,7 +3384,7 @@ class Uprising:
         key = os.path.normcase(root or "") + "|" + "|".join(
             os.path.normcase(p) for p in all_paths)
         ent = self.price_cache.get(key)
-        if ent and ent["mt"] == mt:
+        if ent and ent["mt"] == mt and not self._paths_dirty(all_paths):
             return ent["res"]
         res = self._prices_build(root, files)
         self.price_cache[key] = {"mt": mt, "res": res}
@@ -3373,8 +3410,10 @@ class Uprising:
                     # через _parse_sheet (ElementTree): самозакрытые
                     # <Cell/> без Data — пустые ячейки, regex-вариант глотал
                     # их вместе со следующей ячейкой и колонки съезжали
-                    # (у inventory_items cost читался пустым — без шильдика)
-                    rows = self._parse_sheet(p)
+                    # (у inventory_items cost читался пустым — без шильдика).
+                    # Живая сессия первее диска: иначе undo/redo species
+                    # (память без записи) не было бы видно в ценах/статах.
+                    rows = self._live_sheet_rows(p) or self._parse_sheet(p)
                     if not rows:
                         continue
                     heads = rows[0]
@@ -3433,7 +3472,7 @@ class Uprising:
         key = os.path.normcase(root or "") + "|" + "|".join(
             os.path.normcase(p) for p in all_paths)
         ent = self.cap_cache.get(key)
-        if ent and ent["mt"] == mt:
+        if ent and ent["mt"] == mt and not self._paths_dirty(all_paths):
             return ent["res"]
         res = self._capacity_build(root, files)
         self.cap_cache[key] = {"mt": mt, "res": res}
@@ -3453,7 +3492,8 @@ class Uprising:
                 for p in paths:
                     if not os.path.isfile(p):
                         continue
-                    rows = self._parse_sheet(p)
+                    # живая сессия первее диска (см. _prices_build)
+                    rows = self._live_sheet_rows(p) or self._parse_sheet(p)
                     if not rows:
                         continue
                     heads = rows[0]
