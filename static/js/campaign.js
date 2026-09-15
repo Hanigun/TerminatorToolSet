@@ -179,20 +179,39 @@ async function openCampaign(path, opts) {
   }
   if (!opts || opts.activate !== false) activateTab("campaign");
   if (!path && state.campaign.loading) return;
+  // область карты + спиннер — ДО медленного поиска/загрузки: #cmp-loading
+  // лежит внутри #cmp-wrap, и пока wrap скрыт — спиннер не виден вообще
+  // (та же ловушка, что была в openUprising до её починки).
+  try {
+    $("#cmp-wrap").hidden = false;
+    $("#cmp-nofile").hidden = true;
+  } catch (e) { /* DOM ещё не готов — cmpLoad сам покажет */ }
+  cmpSetLoading(true);
   if (!path) path = await cmpFindFile();
   if (!path) {
+    cmpSetLoading(false);
     cmpPaintNofile();
     return;
   }
   if (state.campaign.path && normPath(path) === normPath(state.campaign.path) &&
-      state.campaign.rows) return;
+      state.campaign.rows) { cmpSetLoading(false); return; }
   state.campaign.path = path;
   const seq = ++state.campaign.loadSeq;
   state.campaign.loading = true;
   try {
     await cmpLoad(seq);
+  } catch (e) {
+    // cmpLoad сам тостит сетевые сбои; здесь — страховка от синхронного
+    // броска: иначе спиннер остался бы навсегда
+    if (seq === state.campaign.loadSeq) {
+      cmpSetLoading(false);
+      toast(String((e && e.message) || e), "err");
+    }
   } finally {
-    if (seq === state.campaign.loadSeq) state.campaign.loading = false;
+    if (seq === state.campaign.loadSeq) {
+      state.campaign.loading = false;
+      cmpSetLoading(false);
+    }
   }
   cmpLoadMapImg($("#cmp-map-img"), 0);
   $("#cmp-file").textContent = path;
