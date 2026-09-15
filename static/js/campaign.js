@@ -1343,9 +1343,6 @@ function cmpEditPop(cellEl, sys, cat, items, i, isNew) {
     secSel.value = "auto";
     rowM.appendChild(secSel);
   }
-  // класс на момент открытия — смена значения сама двигает юнит,
-  // даже без галки (галка = принудительный перенос в выбранную секцию)
-  const origSet = setInp ? setInp.value : "";
   const btns = document.createElement("div");
   btns.className = "upr-edit-btns";
   const delB = document.createElement("button");
@@ -1390,10 +1387,8 @@ function cmpEditPop(cellEl, sys, cat, items, i, isNew) {
         if (Object.keys(diff).length) cmpWriteStats(cat, name, diff);
         // перенос в секцию нового класса: sysname с количеством
         // переезжает между колонками той же строки shop_presets.
-        // Триггер — галка или смена класса (без галки — в автосекцию)
-        const classChanged = setInp &&
-          setInp.value.trim() !== String(origSet || "").trim();
-        if (moveChk && secSel && (moveChk.checked || classChanged)) {
+        // Только по галке — смена класса без неё лишь пишет unit_set
+        if (moveChk && moveChk.checked && secSel) {
           let target = secSel.value;
           if (target === "auto" && typeof unitSetAutoSection === "function")
             target = unitSetAutoSection(setInp ? setInp.value : "");
