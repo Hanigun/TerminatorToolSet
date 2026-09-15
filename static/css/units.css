@@ -122,6 +122,14 @@
   grid-column: 1 / -1; justify-self: start; padding: 0; }
 /* рамок выделения на юнитах нет: выбранный виден только в теле справа */
 #units-tab .upr-cat-body .upr-chip.sel { outline: none; }
+/* вспышка чипа при переходе «Расширенные» из попапа карт —
+   как set-flash пути мода в настройках (dialogs.css) */
+@keyframes unt-row-flash {
+  0%, 100% { box-shadow: none; background: transparent; }
+  50% { box-shadow: 0 0 0 2px var(--accent); background: rgba(232,184,75,.12); }
+}
+#units-tab .upr-cat-body .upr-chip.unt-row-flash {
+  animation: unt-row-flash .9s ease-in-out 3; border-radius: 6px; }
 /* ресайзер ширины списка — клон .cmp-resizer кампании */
 .unt-resizer {
   flex: 0 0 6px; align-self: stretch; padding: 0; margin: 0 8px 0 0;

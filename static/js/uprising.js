@@ -1787,7 +1787,9 @@ function uprChipIcon(img, chip, name, cat, src) {
   const pending = (typeof uprPendingIcons !== "undefined")
     && uprPendingIcons.has(name);
   const du = icons[name] || "";
-  if (chip) chip.classList.add("upr-loading");
+  // иконка уже в памяти (data-URL) — встанет мгновенно, спиннер не нужен:
+  // иначе каждый перерендер (закрытие попапа, выбор) мигает спиннерами
+  if (chip && !du) chip.classList.add("upr-loading");
   const showReal = url => {
     img.dataset.uprReal = "1";
     if (!img.dataset.uprBase) img.dataset.uprBase = url;
@@ -2500,6 +2502,15 @@ function uprEditPop(chipEl, meta, items, i, onChange, isNew) {
   // кнопки
   const btns = document.createElement("div");
   btns.className = "upr-edit-btns";
+  // «Расширенные» — первой в ряду (CSS прижимает влево): уход в редактор
+  // юнитов с выбором этого юнита; закрытие — как «Отмена»
+  const advB = document.createElement("button");
+  advB.className = "btn sm ghost upr-adv-btn";
+  advB.title = t("upr_advanced") || "Расширенные";
+  advB.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.65 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08A1.7 1.7 0 0 0 10.12 3V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03z"/></svg>';
+  const advT = document.createElement("span");
+  advT.textContent = t("upr_advanced") || "Расширенные";
+  advB.appendChild(advT);
   const delB = document.createElement("button");
   delB.className = "btn sm danger";
   delB.textContent = t("delete") || "Удалить";
@@ -2509,7 +2520,7 @@ function uprEditPop(chipEl, meta, items, i, onChange, isNew) {
   const okB = document.createElement("button");
   okB.className = "btn sm accent";
   okB.textContent = t("save") || "Сохранить";
-  btns.append(delB, canB, okB);
+  btns.append(advB, delB, canB, okB);
   pop.appendChild(btns);
 
   let closed = false;
@@ -2573,6 +2584,15 @@ function uprEditPop(chipEl, meta, items, i, onChange, isNew) {
   };
   canB.onclick = e => { e.stopPropagation(); commit(false); };
   okB.onclick = e => { e.stopPropagation(); commit(true); };
+  advB.onclick = e => {
+    e.stopPropagation();
+    const name = (nm.value || "").trim() || (it.name || "");
+    if (typeof uprEditPopCloser === "function") {
+      try { uprEditPopCloser(); } catch (err) { /* попап уже закрыт */ }
+    }
+    if (name && typeof untOpenUnit === "function") untOpenUnit(meta.cat, name);
+    else if (typeof openUnits === "function") openUnits();
+  };
   [nm, cnt, dinp, prc, cpInp, setInp].forEach(el => {
     if (!el) return;
     el.addEventListener("keydown", ev => {

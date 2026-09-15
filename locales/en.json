@@ -802,6 +802,7 @@
   "guard_no_dest": "Set the project or mod path in settings",
   "hk_save_force": "Save with destination popup",
   "upr_f_sysname": "System name",
+  "upr_advanced": "Advanced",
   "upr_f_from": "sysname from ",
   "upr_f_count": "Count",
   "upr_f_count_d": "how many units, minimum 1",

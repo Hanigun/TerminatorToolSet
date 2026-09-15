@@ -802,6 +802,7 @@
   "guard_no_dest": "请在设置中指定项目或模组路径",
   "hk_save_force": "保存并选择位置(弹窗)",
   "upr_f_sysname": "系统名",
+  "upr_advanced": "高级",
   "upr_f_from": "sysname 来自 ",
   "upr_f_count": "数量",
   "upr_f_count_d": "单位数量,最少 1",

@@ -860,7 +860,8 @@ function untRow(layerKey, it, cat) {
   img.draggable = false;
   img.loading = "lazy";
   img.alt = "";
-  row.classList.add("upr-loading");
+  // спиннером владеет общий хелпер uprChipIcon (ставит только при реальном
+  // ожидании иконки) — без дубля здесь, иначе мигание при каждом рендере
   if (typeof uprChipIcon === "function")
     uprChipIcon(img, row, it.sys, cat,
       { map: state.units.iconMap, ready: state.units.iconsReady });
@@ -935,6 +936,53 @@ function untSelect(layerKey, cat, sys) {
   state.units.cat = cat;
   state.units.sel = sys;
   document.querySelectorAll("#unt-main .unt-detail").forEach(untPaintTypeDetail);
+}
+
+// Переход из попапа карт («Расширенные» в cmpEditPop/uprEditPop): открыть
+// вкладку, выбрать юнит, раскрыть его слой и категорию, докрутить список
+// до чипа и подсветить вспышкой (как set-flash пути мода в настройках).
+async function untOpenUnit(cat, sys) {
+  if (!cat || !sys) return;
+  try { await openUnits(); } catch (e) { return; }
+  if (!state.units) return;
+  // openUnits не ждёт загрузку — ждём готовых слоёв (с таймаутом)
+  let guard = 0;
+  while (state.units.loading && guard++ < 150) {
+    await new Promise(r => setTimeout(r, 100));
+  }
+  if (!(state.units.layers || []).length) {
+    try { await renderUnits(); } catch (e) { /* вкладка уже открыта */ }
+  }
+  const layers = state.units.layers || [];
+  let layerKey = null;
+  for (const L of layers) {
+    let hit = null;
+    try { hit = untFindLayerItem(L.key, cat, sys); } catch (e) { /* слой битый — дальше */ }
+    if (hit) { layerKey = L.key; break; }
+  }
+  // юнита нет в редакторе (битый sysname на карте) — вкладка уже открыта,
+  // молча выходим без выбора
+  if (!layerKey) return;
+  const L = layers.find(x => x.key === layerKey);
+  const data = L && (L.cats || {})[cat];
+  if (L) L.open = true;
+  if (data) data._open = true;
+  untPaint();
+  untSelect(layerKey, cat, sys);
+  // чип — перебором по dataset (sysname в селектор не экранируем)
+  let row = null;
+  document.querySelectorAll(".unt-list").forEach(list => {
+    if (row || list.dataset.layer !== layerKey || list.dataset.cat !== cat) return;
+    list.querySelectorAll(".unt-row").forEach(r => {
+      if (!row && r.dataset.sys === sys) row = r;
+    });
+  });
+  if (!row) return;
+  try { row.scrollIntoView({ block: "nearest" }); } catch (e) { /* уже виден */ }
+  row.classList.remove("unt-row-flash");
+  void row.offsetWidth;   // перезапуск анимации при повторных кликах
+  row.classList.add("unt-row-flash");
+  setTimeout(() => row.classList.remove("unt-row-flash"), 3000);
 }
 
 // Иконки всех слоёв своим батчем (образец cmpEnsureIcons): имена без

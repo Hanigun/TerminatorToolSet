@@ -802,6 +802,7 @@
   "guard_no_dest": "Projekt- oder Modpfad in Einstellungen setzen",
   "hk_save_force": "Speichern mit Auswahl (Popup)",
   "upr_f_sysname": "Systemname",
+  "upr_advanced": "Erweitert",
   "upr_f_from": "sysname aus ",
   "upr_f_count": "Anzahl",
   "upr_f_count_d": "wie viele Einheiten, mindestens 1",
