@@ -165,13 +165,21 @@ class GameAssets:
         if not (isinstance(meta, dict) and meta.get("url")):
             fresh = self._check_guarded()
             if not (isinstance(fresh, dict) and fresh.get("ok")):
-                self._set_progress(state="error",
-                                   error=str(fresh.get("error") or "check failed"))
+                err = str(fresh.get("error") or "check failed")
+                try:
+                    self._log.error("game_assets check failed: %s", err)
+                except Exception:  # noqa: BLE001
+                    pass
+                self._set_progress(state="error", error=err)
                 return
             meta = fresh.get("available") or {}
         url = str(meta.get("url") or "")
         version = str(meta.get("version") or "")
         if not url:
+            try:
+                self._log.error("game_assets download failed: nothing to download")
+            except Exception:  # noqa: BLE001
+                pass
             self._set_progress(state="error", error="nothing to download")
             return
         self._download_job(url, version)
@@ -208,16 +216,24 @@ class GameAssets:
             if not target:
                 raise OSError("no program dir")
             # замена целиком: старый GameAssets сносим, кладём свежий
-            # (содержимое root, не сам root — иначе GameAssets/GameAssets)
+            # (содержимое root, не сам root — иначе GameAssets/GameAssets).
+            # Повторное скачивание падало с WinError 183: rmtree с
+            # ignore_errors молча не удалял занятую папку, а copytree без
+            # dirs_exist_ok отказывался класть в существующую.
             try:
                 shutil.rmtree(target, ignore_errors=True)
             except Exception:  # noqa: BLE001
                 pass
-            try:
-                os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
-            except OSError:
-                pass
-            shutil.copytree(root, target)
+            if os.path.isdir(target):
+                # Windows держит файлы (открыты/лок): снос не удался —
+                # докладываем поверх, а не падаем «уже существует»
+                shutil.copytree(root, target, dirs_exist_ok=True)
+            else:
+                try:
+                    os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
+                except OSError:
+                    pass
+                shutil.copytree(root, target)
             try:
                 self._config.set("game_assets_downloaded", 1)
             except Exception:  # noqa: BLE001
@@ -228,6 +244,12 @@ class GameAssets:
                 pass
             self._set_progress(state="done", done=self._progress.get("total", 0))
         except Exception as e:  # noqa: BLE001
+            # текст ошибки видит и попап, и шильдик-тост: дублируем в лог,
+            # иначе причина видна только на экране (Logs/errors.log)
+            try:
+                self._log.error("game_assets download failed: %s", e)
+            except Exception:  # noqa: BLE001
+                pass
             self._set_progress(state="error", error=str(e))
         finally:
             try:
