@@ -1439,11 +1439,23 @@ function makeUnitSetCombo(td, input, choices, title) {
   } catch (e) { /* noop: правка остаётся обычным input */ }
 }
 
-// класс unit_set -> секция карты при автопереносе: танковые классы
-// (tank/artillery) в tanks, остальное в cars. Общее для попапов обеих карт.
-function unitSetAutoSection(cls) {
-  const v = String(cls || "").trim().toLowerCase();
-  return (v === "tank" || v === "tanks" || v === "artillery") ? "tanks" : "cars";
+// секция карты при автопереносе — по species-файлу юнита, как сама игра:
+// tanks.xml -> tanks, cars.xml -> cars (syscats бэкенда). unit_set тут не
+// решает: у Bradley combat_vehicle, а лежит он в tanks — просто потому что
+// строка в tanks.xml; в cars.xml тоже есть combat_vehicle/tank/artillery
+// (HIMARS, турели, платформы) — и они едут в cars. sysname вне словарей —
+// "" (без переноса), а не угадайка по классу. Общее для попапов обеих карт.
+function speciesSection(sys, cats) {
+  const want = String(sys || "").trim().toLowerCase();
+  if (!want) return "";
+  try {
+    const c = cats || {};
+    const has = (k) => Array.isArray(c[k]) && c[k].some(
+      (n) => String(n || "").trim().toLowerCase() === want);
+    if (has("tanks")) return "tanks";
+    if (has("cars")) return "cars";
+  } catch (e) {}
+  return "";
 }
 // FLIP-перелёт чипа в новую секцию: из старого rect в свежий элемент,
 // 300ms ease-out, дальше элемент живёт сам (инлайн-стили чистятся).

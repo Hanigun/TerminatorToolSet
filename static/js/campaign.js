@@ -1388,13 +1388,13 @@ function cmpEditPop(cellEl, sys, cat, items, i, isNew) {
         // статы ждём: их внутренний рендер должен отработать ДО
         // переноса и финального рендера, не посреди полёта чипа
         if (Object.keys(diff).length) await cmpWriteStats(cat, name, diff);
-        // перенос в секцию нового класса: sysname с количеством
+        // перенос в секцию species-файла: sysname с количеством
         // переезжает между колонками той же строки shop_presets.
         // Только по галке — смена класса без неё лишь пишет unit_set
         if (moveChk && moveChk.checked && secSel) {
           let target = secSel.value;
-          if (target === "auto" && typeof unitSetAutoSection === "function")
-            target = unitSetAutoSection(setInp ? setInp.value : "");
+          if (target === "auto" && typeof speciesSection === "function")
+            target = speciesSection(name, state.campaign.syscats);
           if ((target === "cars" || target === "tanks") && target !== cat) {
             const riM = cmpRowIdx(sys);
             const ciOld = cmpCatCol(cat), ciNew = cmpCatCol(target);

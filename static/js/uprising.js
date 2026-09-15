@@ -2544,13 +2544,13 @@ function uprEditPop(chipEl, meta, items, i, onChange, isNew) {
         // статы ждём: их внутренний рендер должен отработать ДО
         // переноса и финального рендера, не посреди полёта чипа
         if (Object.keys(diff).length) await uprWriteStats(meta.cat, name, diff);
-        // перенос в секцию нового класса: sysname с количеством
+        // перенос в секцию species-файла: sysname с количеством
         // переезжает между колонками той же строки сектора.
         // Только по галке — смена класса без неё лишь пишет unit_set
         if (moveChk && moveChk.checked && secSel) {
           let target = secSel.value;
-          if (target === "auto" && typeof unitSetAutoSection === "function")
-            target = unitSetAutoSection(setInp ? setInp.value : "");
+          if (target === "auto" && typeof speciesSection === "function")
+            target = speciesSection(name, state.uprising.syscats);
           if ((target === "cars" || target === "tanks") && target !== meta.cat) {
             const g = uprGroups().find(x => x.num === meta.num);
             const rw = g && g.list[Math.min(meta.vi, g.list.length - 1)];
