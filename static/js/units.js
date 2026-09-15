@@ -728,33 +728,44 @@ async function untAddUnit(cat, preset) {
   return vals[0];
 }
 
-// Удаление строки (подтверждение + /api/delete_row по реальному пути копии).
+// Удаление строки ВО ВСЕХ копиях (basis + DLC-оверлеи, зеркало вниз):
+// одиночка с дублем sysname иначе всплывает обратно после перечитывания.
+// Цели — через untResolveTargets (как untReplaceSys), подтверждение одно,
+// сообщение перечисляет файлы-копии.
 async function untDelUnit(cat, sys) {
   const item = untFindItem(cat, sys);
   if (!item || !item.path) { toast(t("unt_sub") || "error", "err"); return false; }
+  const targets = await untResolveTargets(cat, sys);
+  if (!targets.length) { toast(sys, "err"); return false; }
   const c = await askConfirm({
     title: (t("unt_delete") || "Удалить") + ": " + sys,
-    message: (item.src || "basis") + " · " + (item.path || ""),
+    message: targets.map(tg => tg.path).join("\n"),
     buttons: [
       { id: "ok", label: t("unt_delete") || t("delete") || "Удалить", kind: "danger" },
       { id: "cancel", label: t("cancel") || "Отмена", kind: "ghost" },
     ],
   });
   if (c !== "ok") return false;
-  const got = await untReadRows(item.path);
-  if (!got) { toast(item.path, "err"); return false; }
-  const ri = untFindRow(got.rows, sys);
-  if (ri === -1) { toast(sys, "err"); return false; }
-  let j = null;
-  try {
-    const r = await api("/api/delete_row", { method: "POST",
-      body: JSON.stringify({ path: item.path, row: ri, save: true }) });
-    j = await r.json();
-  } catch (e) { j = null; }
-  if (!j || !j.ok) { toast((j && j.error) || "error", "err"); return false; }
+  let ok = true;
+  for (const tg of targets) {
+    const got = await untReadRows(tg.path);
+    if (!got) { ok = false; continue; }
+    const ri = untFindRow(got.rows, sys);
+    if (ri === -1) continue;
+    let j = null;
+    try {
+      const r = await api("/api/delete_row", { method: "POST",
+        body: JSON.stringify({ path: tg.path, row: ri, save: true }) });
+      j = await r.json();
+    } catch (e) { j = null; }
+    if (!j || !j.ok) {
+      toast((j && j.error) || tg.path, "err");
+      ok = false;
+    }
+  }
   await renderUnits(true).catch(() => {});
-  toast(t("saved") || "Сохранено", "ok");
-  return true;
+  if (ok) toast(t("saved") || "Сохранено", "ok");
+  return ok;
 }
 
 // Копировать/вырезать в буфер таба. Вырезание удаляет строку сразу (образец

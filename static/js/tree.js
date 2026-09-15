@@ -175,16 +175,29 @@ function treeHasFile(tree, test) {
 
 // кнопки инструментов активны только когда есть с чем работать:
 // Uprising Map Editor и Редактор Компании — когда хоть в одном источнике
-// есть shop_presets.xml, SWT Editor — когда есть .swt файлы.
+// есть shop_presets.xml, Редактор юнитов — когда есть species-файлы
+// (классы вкладки Units: squads/cars/tanks/helicopters/inventory_items/humans),
+// SWT Editor — когда есть .swt файлы. Магазин species не покрывает:
+// проект может держать species без shop_presets и наоборот.
 function updateToolButtons() {
   const trees = [state.fullTree, state.gameTree, state.modTree];
   const hasUpr = trees.some(tr => treeHasFile(tr,
     fn => fn.toLowerCase() === "shop_presets.xml"));
   const hasSwt = trees.some(tr => treeHasFile(tr,
     fn => fn.toLowerCase().endsWith(".swt")));
-  for (const id of ["#btn-uprising", "#landing-uprising", "#btn-campaign", "#landing-campaign", "#btn-units", "#landing-units"]) {
+  // Набор species-файлов — по UNT_CATS вкладки Units (units.js), без новых
+  // API-вызовов: те же деревья, что рядом считают hasUpr/hasSwt.
+  const UNT_SPECIES_FILES = new Set(["squads.xml", "cars.xml", "tanks.xml",
+    "helicopters.xml", "inventory_items.xml", "humans.xml"]);
+  const hasSpecies = trees.some(tr => treeHasFile(tr,
+    fn => UNT_SPECIES_FILES.has(fn.toLowerCase())));
+  for (const id of ["#btn-uprising", "#landing-uprising", "#btn-campaign", "#landing-campaign"]) {
     const b = $(id);
     if (b) b.disabled = !hasUpr;
+  }
+  for (const id of ["#btn-units", "#landing-units"]) {
+    const b = $(id);
+    if (b) b.disabled = !hasSpecies;
   }
   for (const id of ["#btn-swt", "#landing-swt"]) {
     const b = $(id);
