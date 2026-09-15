@@ -28,6 +28,30 @@ function setUndoRedoButtons(canUndo, canRedo) {
   if (br) br.disabled = !canRedo;
 }
 
+// ---------- реестр страниц истории (глобально для любых страниц) ----------
+// Новая страница одним вызовом получает undo/redo, журнал и кнопки без
+// правок ядра: registerHistPage("units", { paths: untHistPaths,
+// repaint: untRepaintUndo, hint: () => state.units,
+// sync: untSyncUndoButtons, clean: untMarkClean }).
+// paths() — файлы страницы для журнала и undo; repaint() — перекрасить
+// страницу после серверного изменения; hint() — объект под redoHint;
+// sync() — обновить кнопки undo/redo; clean() — снять грязность.
+const histPageProviders = {};
+function registerHistPage(id, provider) {
+  if (id && provider) histPageProviders[id] = provider;
+}
+function histPageProvider() {
+  try {
+    const tab = state.tabs.find(tb => tb.id === state.activeTabId);
+    if (tab) {
+      if (histPageProviders[tab.id]) return histPageProviders[tab.id];
+      if (histPageProviders[tab.type]) return histPageProviders[tab.type];
+    }
+    if (histPageProviders[state.activeTabId]) return histPageProviders[state.activeTabId];
+  } catch (e) { /* без поставщика — штатные ветки ниже */ }
+  return null;
+}
+
 // Fast in-place application of an undo/redo patch: only cell patches skip
 // the full re-render; structural ones (row/column) reload the grid.
 async function applyUndoPatch(patch) {
@@ -146,6 +170,15 @@ async function runUndoRedo(endpoint, okMsg, noneMsg) {
     path = state.campaign.path;
     isCampaign = true;
   }
+  // страницы из реестра (юниты и любые будущие): мультиистория через общий
+  // роутер — файл с самой свежей записью, кнопки — ИЛИ по файлам страницы
+  const prov = histPageProvider();
+  if (prov && typeof prov.paths === "function" && typeof prov.repaint === "function") {
+    await mapUndoRedo(endpoint,
+      (typeof prov.hint === "function" && prov.hint()) || {},
+      prov.paths, prov.repaint, okMsg, noneMsg);
+    return;
+  }
   if (!path) { toast(t("no_file")); return; }
   // карты — мультиистория (карта + species): свой роутер, общий POST ниже
   // им не нужен (иначе один клик отменял бы сразу две записи)
@@ -211,6 +244,13 @@ async function redoCurrent() {
 // (карты — карта + species-правки попапа, иначе их откат к началу
 // и журнал молча пропускали бы unit_set/cost)
 function histTargets() {
+  // страницы из реестра — первыми: журнал видит их файлы без правок ядра
+  const prov = histPageProvider();
+  if (prov && typeof prov.paths === "function") {
+    try {
+      return (prov.paths() || []).map(p => ({ side: null, path: p }));
+    } catch (e) { return []; }
+  }
   if (state.activeTabId === "uprising" && state.uprising.path) {
     return [{ side: null, path: state.uprising.path }].concat(
       Object.keys(state.uprising.statPaths || {})
@@ -246,6 +286,14 @@ function histTargets() {
 // перерисовать активную страницу после серверного изменения файла
 // (восстановление записи истории, полный откат к стоку)
 async function histRepaintContext(path, side) {
+  // страницы из реестра: перекрасить своим repaint, журнал правил диск —
+  // память перечитана = чисто
+  const prov = histPageProvider();
+  if (prov && typeof prov.repaint === "function") {
+    try { await prov.repaint(); } catch (e) {}
+    try { if (typeof prov.clean === "function") prov.clean(); } catch (e) {}
+    return;
+  }
   if (state.activeTabId === "uprising" && path) {
     // restore из журнала пишет файл на диск: память перечитана = чисто
     await uprRepaintUndo();
@@ -343,7 +391,11 @@ async function openHistory() {
       uprRepaintUndo();
       setUndoRedoButtons(false, false);
     }
-    else await cmpSyncUndoButtons();
+    else {
+      const prov0 = histPageProvider();
+      if (prov0 && typeof prov0.sync === "function") await prov0.sync();
+      else await cmpSyncUndoButtons();
+    }
     toast(t("hist_cleared"), "ok");
     openHistory(); // refresh the list in place
   };

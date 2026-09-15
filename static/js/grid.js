@@ -383,6 +383,10 @@ async function activateTab(tabId) {
     paintSyncBoxes();
     // SWT живёт на локальном стеке undo (не серверном): кнопки — по нему
     if (tab.type === "swt") swtSyncUndoButtons();
+    // юниты — серверная история своих species-файлов: кнопки — по ней
+    if (tab.type === "units" && typeof untSyncUndoButtons === "function") {
+      untSyncUndoButtons().catch(() => {});
+    }
     // no file open -> no path in the header
     const fp = $("#file-path");
     fp.textContent = "";
@@ -558,7 +562,10 @@ function closeTab(tabId) {
       if (choice === "save") {
         // saveActive, а не saveCurrent: у карты/SWT нет currentFile —
         // прямое сохранение молча ничего не писало
-        if (state.activeTabId === tabId) await saveActive();
+        if (tab.type === "units" && typeof untSaveGuarded === "function") {
+          await untSaveGuarded(false);
+        }
+        else if (state.activeTabId === tabId) await saveActive();
         else {
           const sr = await api("/api/save", { method: "POST",
             body: JSON.stringify({ path: tab.path, ...syncFlagsFor(tab) }) });
@@ -594,6 +601,11 @@ function tabSessionPaths(tab) {
   if (tab.type === "file" && tab.path) out.push(tab.path);
   else if (tab.type === "uprising" && state.uprising && state.uprising.path) out.push(state.uprising.path);
   else if (tab.type === "campaign" && state.campaign && state.campaign.path) out.push(state.campaign.path);
+  else if (tab.type === "units" && typeof untHistPaths === "function") {
+    try {
+      untHistPaths().forEach(p => { if (p) out.push(p); });
+    } catch (e) { /* сессий юнитов нет */ }
+  }
   else if (tab.type === "compare") {
     // стороны сравнения правят сессии файлов напрямую: «закрыть без
     // сохранения» обязано откатить их тоже, иначе правки переживут закрытие
@@ -615,6 +627,11 @@ function pathInUseElsewhere(path, excludeId) {
     if (tb.type === "file" && normPath(tb.path || "") === np) return true;
     if (tb.id === "uprising" && state.uprising && normPath(state.uprising.path || "") === np) return true;
     if (tb.id === "campaign" && state.campaign && normPath(state.campaign.path || "") === np) return true;
+    if (tb.id === "units" && typeof untHistPaths === "function") {
+      try {
+        if (untHistPaths().some(p => normPath(p || "") === np)) return true;
+      } catch (e) { /* не наше */ }
+    }
     if (tb.type === "compare") {
       const sides = [];
       if (state.compare && !state.compare.preview) sides.push(state.compare.left, state.compare.right);
@@ -2223,6 +2240,9 @@ async function saveActive(popup) {
   if (state.activeTabId === "uprising") return uprSaveGuarded(!!popup);
   if (state.activeTabId === "campaign") return cmpSaveGuarded(!!popup);
   if (state.activeTabId === "compare") return saveCompareGuarded(!!popup);
+  if (state.activeTabId === "units" && typeof untSaveGuarded === "function") {
+    return untSaveGuarded(!!popup);
+  }
   return saveCurrent(!!popup);
 }
 

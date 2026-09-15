@@ -169,7 +169,8 @@ function untLayerShortPath(L) {
 function untFreshState() {
   return { src: "", layers: [], loading: false, loadSeq: 0, analyzing: false, clip: null,
     cat: "squads", sel: null, selLayer: null, iconMap: {}, iconsReady: false, iconsLoading: false,
-    iconSeq: 0, prices: {}, stats: {}, pricesReady: false, pricesLoading: false };
+    iconSeq: 0, prices: {}, stats: {}, pricesReady: false, pricesLoading: false,
+    dirty: false, dirtyPaths: {}, redoHint: "" };
 }
 
 // Корень текущего глобального источника (Проект | Игра | Мод), как у карты и кампании.
@@ -184,6 +185,58 @@ function untSrcRoot() {
 // setSrc сам перечитает открытую вкладку юнитов (см. tree.js), здесь только зовём.
 async function untSwitchSrc(v) {
   if (typeof setSrc === "function") await setSrc(v);
+}
+
+// Вкладка юнитов в таб-баре (дискета красится через неё).
+function untTab() {
+  try { return state.tabs.find(tb => tb.id === "units"); }
+  catch (e) { return null; }
+}
+// Грязность страницы (образец uprMarkDirty/uprMarkClean): правка идёт
+// в память — на вкладке красная дискета; явное сохранение гасит
+// (таб-бар сам даёт зелёную вспышку).
+function untMarkDirty(path) {
+  if (!state.units) state.units = untFreshState();
+  state.units.dirty = true;
+  if (path) state.units.dirtyPaths[path] = true;
+  const tb = untTab();
+  if (tb && !tb.dirty) { tb.dirty = true; renderTabBar(); }
+}
+function untMarkClean() {
+  if (state.units) { state.units.dirty = false; state.units.dirtyPaths = {}; }
+  const tb = untTab();
+  if (tb) { tb.dirty = false; tb.saved = true; renderTabBar(); }
+}
+// Файлы истории страницы — все species-файлы слоёв (basis + DLC-оверлеи):
+// undo/redo берут файл с самой свежей записью, кнопки — ИЛИ.
+function untHistPaths() {
+  try {
+    const out = [];
+    const push = p => { if (p && out.indexOf(p) === -1) out.push(p); };
+    ((state.units && state.units.layers) || []).forEach(L => {
+      UNT_CATS.forEach(c => {
+        const ld = ((L.cats || {})[c]) || {};
+        push(ld.path);
+        (((ld.items) || [])).forEach(x => { if (x) push(x.path); });
+      });
+    });
+    return out;
+  } catch (e) { return []; }
+}
+async function untSyncUndoButtons() {
+  try {
+    const rs = await Promise.all(untHistPaths().map(p =>
+      api("/api/history?path=" + encodeURIComponent(p))
+        .then(r => r.json()).catch(() => null)));
+    setUndoRedoButtons(rs.some(j => j && j.ok && j.can_undo),
+      rs.some(j => j && j.ok && j.can_redo));
+  } catch (e) {}
+}
+// Перечитать витрину после undo/redo (dirty не трогаем: откат — тоже
+// несохранённое изменение); кнопки — ИЛИ по всем файлам страницы.
+async function untRepaintUndo() {
+  await renderUnits(true).catch(() => {});
+  await untSyncUndoButtons();
 }
 
 // Открытие вкладки (шаблон openUprising/openCampaign: вкладка → таббар → активация → загрузка).
@@ -208,6 +261,9 @@ async function openUnits(opts) {
 // Обновить — как кампания (#cmp-reload): досмотр недогруженных иконок
 // на месте + добивка цен + перечитывание слоёв.
 function setupUnits() {
+  // реестр истории — здесь же (init бежит после всех скриптов): страница
+  // в ядре undo/redo и журнала без правок history.js
+  untRegisterHistPage();
   const rel = $("#unt-reload");
   if (rel) rel.onclick = () => {
     untReloadImages();
@@ -1496,7 +1552,7 @@ async function untDetailCommit(box, layerKey, cat, sys, rowIdx, col, inp) {
     untPaintAllLists();
     document.querySelectorAll("#unt-main .unt-detail").forEach(untPaintTypeDetail);
     untEnsureIcons().catch(() => {});
-    toast(t("saved") || "Сохранено", "ok");
+    // без тоста «Сохранено»: переименование ушло в память, знак — дискета
     return;
   }
   inp.disabled = true;
@@ -1651,7 +1707,9 @@ async function untWriteCells(path, cells, summary) {
     return { ok: false, error: "no path" };
   }
   try {
-    const body = { path, cells: cells || [], save: true };
+    // save:false — правка только в память (образец cmpWriteCells): на диск
+    // пишет явное сохранение, Enter в поле тоже лишь красит дискету.
+    const body = { path, cells: cells || [], save: false };
     if (summary) body.summary = String(summary).slice(0, 160);
     const r = await api("/api/edit_cells", { method: "POST",
       body: JSON.stringify(body) });
@@ -1664,6 +1722,12 @@ async function untWriteCells(path, cells, summary) {
         if (typeof syncFileTabsCells === "function" && j.changed)
           syncFileTabsCells(path, cells || [], 0);
       } catch (e) { /* таблица обновится при открытии */ }
+      // В память, не на диск: красная дискета + кнопки undo/redo (новая
+      // правка гасит чужой redo-хвост — флаги читаем с сервера свежими).
+      if (j.changed) {
+        try { untMarkDirty(path); } catch (e) {}
+        try { await untSyncUndoButtons(); } catch (e) {}
+      }
     }
     return j;
   } catch (e) {
@@ -1671,6 +1735,58 @@ async function untWriteCells(path, cells, summary) {
     return { ok: false, error: String((e && e.message) || e) };
   }
 }
+
+// Явное сохранение грязных species-файлов (кнопка шапки, Ctrl+S/Ctrl+Shift+S):
+// каждый файл — через общий guardedSave: защищённая игра спрашивает
+// «в проект/мод» обычным попапом, иначе тихая запись сессии на диск.
+// Дискета гаснет зелёной вспышкой только когда всё записано.
+async function untSaveGuarded(popup) {
+  if (!state.units) return;
+  const paths = Object.keys(state.units.dirtyPaths || {});
+  if (!paths.length) return;
+  for (const path of paths) {
+    await guardedSave("file", path, async target => {
+      if (target) {
+        const j = await saveAsTo(path, "file", target);
+        if (j.ok && j.saved) {
+          delete state.units.dirtyPaths[path];
+          toast((t("saved") || "Сохранено") + " → " + j.dst, "ok");
+          try { await noteExternalTreeChange(target); } catch (e) {}
+        }
+        else toast((j.error || "error"), "err");
+        return;
+      }
+      let j = null;
+      try {
+        const r = await api("/api/save", { method: "POST",
+          body: JSON.stringify({ path }) });
+        j = await r.json();
+      } catch (e) { j = null; }
+      if (!j || !j.ok) { toast((j && j.error) || "error", "err"); return; }
+      delete state.units.dirtyPaths[path];
+    }, popup);
+  }
+  if (!Object.keys(state.units.dirtyPaths || {}).length) {
+    untMarkClean();
+    toast(t("saved") || "Сохранено", "ok");
+  }
+  await renderUnits(true).catch(() => {});
+}
+
+// Страница в глобальном реестре истории: undo/redo, журнал и кнопки
+// работают без правок ядра — как для любой будущей страницы.
+function untRegisterHistPage() {
+  try {
+    if (typeof registerHistPage === "function") registerHistPage("units", {
+      paths: untHistPaths,
+      repaint: untRepaintUndo,
+      hint: () => (state.units || {}),
+      sync: untSyncUndoButtons,
+      clean: untMarkClean,
+    });
+  } catch (e) { /* ядро истории ещё не загружено */ }
+}
+untRegisterHistPage();
 
 // ==================== S6: редактор, CRUD, меню ====================
 // Витрина читается мимо живых сессий (оверлеи — через /api/file без побочных
@@ -1860,12 +1976,15 @@ async function untAddUnit(cat, preset, layerKey) {
   }
   let j = null;
   try {
+    // в память, не на диск: знак правки — красная дискета вкладки
     const r = await api("/api/add_row", { method: "POST",
-      body: JSON.stringify({ path, values: vals, save: true }) });
+      body: JSON.stringify({ path, values: vals, save: false }) });
     j = await r.json();
   } catch (e) { j = null; }
   if (!j || !j.ok) { toast((j && j.error) || "error", "err"); return null; }
   if (cat === "squads") await untCheckSquadRefs(vals, (d && d.columns) || []);
+  try { untMarkDirty(path); } catch (e) {}
+  try { await untSyncUndoButtons(); } catch (e) {}
   // Выбор — на добавленную строку в её слое (валидация renderUnits сохранит).
   if (state.units) {
     state.units.cat = cat;
@@ -1873,7 +1992,6 @@ async function untAddUnit(cat, preset, layerKey) {
     state.units.sel = vals[0];
   }
   await renderUnits(true).catch(() => {});
-  toast(t("saved") || "Сохранено", "ok");
   return vals[0];
 }
 
@@ -1904,16 +2022,18 @@ async function untDelUnit(cat, sys) {
     let j = null;
     try {
       const r = await api("/api/delete_row", { method: "POST",
-        body: JSON.stringify({ path: tg.path, row: ri, save: true }) });
+        body: JSON.stringify({ path: tg.path, row: ri, save: false }) });
       j = await r.json();
     } catch (e) { j = null; }
     if (!j || !j.ok) {
       toast((j && j.error) || tg.path, "err");
       ok = false;
+    } else {
+      try { untMarkDirty(tg.path); } catch (e) {}
     }
   }
+  try { await untSyncUndoButtons(); } catch (e) {}
   await renderUnits(true).catch(() => {});
-  if (ok) toast(t("saved") || "Сохранено", "ok");
   return ok;
 }
 
@@ -1948,7 +2068,7 @@ async function untCopyUnit(cat, sys, cut) {
     let j = null;
     try {
       const r = await api("/api/delete_row", { method: "POST",
-        body: JSON.stringify({ path: item.path, row: ri, save: true }) });
+        body: JSON.stringify({ path: item.path, row: ri, save: false }) });
       j = await r.json();
     } catch (e) { j = null; }
     if (!j || !j.ok) {
@@ -1956,6 +2076,8 @@ async function untCopyUnit(cat, sys, cut) {
       state.units.clip = null;
       return;
     }
+    try { untMarkDirty(item.path); } catch (e) {}
+    try { await untSyncUndoButtons(); } catch (e) {}
     await renderUnits(true).catch(() => {});
   }
   toast(t("ctx_copied") || "Скопировано", "ok");
@@ -1999,15 +2121,16 @@ async function untPasteClip(targetCat, targetLayerKey) {
     let j = null;
     try {
       const r = await api("/api/add_row", { method: "POST",
-        body: JSON.stringify({ path, values: vals, save: true }) });
+        body: JSON.stringify({ path, values: vals, save: false }) });
       j = await r.json();
     } catch (e) { j = null; }
     if (!j || !j.ok) { toast((j && j.error) || "error", "err"); continue; }
     if (tcat === "squads") await untCheckSquadRefs(vals, columns);
+    try { untMarkDirty(path); } catch (e) {}
     n++;
   }
+  try { await untSyncUndoButtons(); } catch (e) {}
   await renderUnits(true).catch(() => {});
-  if (n) toast(t("saved") || "Сохранено", "ok");
 }
 
 // Вставить буфер в свой слой: каждый элемент — в свой класс, но в файл
@@ -2041,15 +2164,16 @@ async function untPasteClipToLayer(layerKey) {
     let j = null;
     try {
       const r = await api("/api/add_row", { method: "POST",
-        body: JSON.stringify({ path, values: vals, save: true }) });
+        body: JSON.stringify({ path, values: vals, save: false }) });
       j = await r.json();
     } catch (e) { j = null; }
     if (!j || !j.ok) { toast((j && j.error) || "error", "err"); continue; }
     if (tcat === "squads") await untCheckSquadRefs(vals, columns);
+    try { untMarkDirty(path); } catch (e) {}
     n++;
   }
+  try { await untSyncUndoButtons(); } catch (e) {}
   await renderUnits(true).catch(() => {});
-  if (n) toast(t("saved") || "Сохранено", "ok");
 }
 
 // Очистка категории слоя (layerKey) или всей категории (сводно, меню сектора):
@@ -2092,13 +2216,15 @@ async function untClearCat(cat, layerKey) {
     rows.sort((a, b) => b - a);
     for (const ri of rows) {
       try {
-        await api("/api/delete_row", { method: "POST",
-          body: JSON.stringify({ path, row: ri, save: true }) });
+        const r = await api("/api/delete_row", { method: "POST",
+          body: JSON.stringify({ path, row: ri, save: false }) });
+        const j = await r.json();
+        if (j && j.ok) { try { untMarkDirty(path); } catch (e) {} }
       } catch (e) { /* пропускаем, идём дальше */ }
     }
   }
+  try { await untSyncUndoButtons(); } catch (e) {}
   await renderUnits(true).catch(() => {});
-  toast(t("saved") || "Сохранено", "ok");
 }
 
 // Замена sysname (меню сектора): переименование батчем по всем копиям.
@@ -2132,7 +2258,6 @@ async function untReplaceSys() {
     if (!j || !j.ok) ok = false;
   }
   await renderUnits(true).catch(() => {});
-  if (ok) toast(t("saved") || "Сохранено", "ok");
 }
 
 // Меню чипа (образец uprChipCtx): добавить/копировать/вырезать/
@@ -2235,13 +2360,15 @@ function untLayerCtx(e, layerKey) {
           rows.sort((a, b) => b - a);
           for (const ri of rows) {
             try {
-              await api("/api/delete_row", { method: "POST",
-                body: JSON.stringify({ path: ld.path, row: ri, save: true }) });
+              const r = await api("/api/delete_row", { method: "POST",
+                body: JSON.stringify({ path: ld.path, row: ri, save: false }) });
+              const j = await r.json();
+              if (j && j.ok) { try { untMarkDirty(ld.path); } catch (e) {} }
             } catch (ex) { /* пропускаем, идём дальше */ }
           }
         }
+        try { await untSyncUndoButtons(); } catch (e) {}
         await renderUnits(true).catch(() => {});
-        toast(t("saved") || "Сохранено", "ok");
       } },
   ]);
 }
@@ -2304,14 +2431,16 @@ function untSecCtx(e) {
             rows.sort((a, b) => b - a);
             for (const ri of rows) {
               try {
-                await api("/api/delete_row", { method: "POST",
-                  body: JSON.stringify({ path: entry[0], row: ri, save: true }) });
+                const r = await api("/api/delete_row", { method: "POST",
+                  body: JSON.stringify({ path: entry[0], row: ri, save: false }) });
+                const j = await r.json();
+                if (j && j.ok) { try { untMarkDirty(entry[0]); } catch (e) {} }
               } catch (ex) { /* пропускаем, идём дальше */ }
             }
           }
         }
+        try { await untSyncUndoButtons(); } catch (e) {}
         await renderUnits(true).catch(() => {});
-        toast(t("saved") || "Сохранено", "ok");
       } },
   ]);
 }
