@@ -181,11 +181,23 @@ function swtAutocomplete(inp, items, onPick, opts) {
     render();
     // словарей ещё нет (фоновая загрузка при открытии не успела/упала) —
     // догружаем и перерисовываем список, когда придут; фокус ещё в поле —
-    // открываемся заново (маркер уже стоит, петли нет)
+    // панель пересоздаём ТИХО (без полного open): полный open через
+    // swtAcClose убивает чужую панель, её осиротевший .then открывает свою,
+    // убивая нашу — вечная микротаск-петля open→then→open без отрисовки
+    // («не отвечает»). Здесь словари уже загружены (ok), новый ensure не
+    // нужен и новый .then не вешаем — петле не из чего состоять.
     swtEnsureSources().then(ok => {
       if (!ok) return;
-      if (panel && panel.isConnected) render();
-      else if (document.activeElement === inp) open();
+      if (panel && panel.isConnected) { render(); return; }
+      if (document.activeElement !== inp) return;
+      if (panel) { try { panel.remove(); } catch (e) {} }
+      panel = document.createElement("div");
+      panel.className = "swt-ac-panel";
+      panel.__inp = inp;
+      document.body.appendChild(panel);
+      active = -1;
+      swtAcOpenEl = panel;
+      render();
     });
   };
 
