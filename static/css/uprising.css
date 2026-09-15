@@ -416,8 +416,6 @@ button.upr-map-btn.rnd {
 #uprising-tab .upr-cat-body .upr-chip.upr-card,
 .upr-cat-body.upr-cfg-ed-drop .upr-chip.upr-card {
   padding: 0; border: none; }
-/* ховер иконки юнита: пунктирный outline */
-.upr-card:hover { outline: 1px dashed var(--border); }
 .upr-card.picked { outline: 2px solid var(--accent); }
 .upr-chip-icon {
   display: block; user-select: none; pointer-events: none;
@@ -550,6 +548,9 @@ button.upr-map-btn.rnd {
 .upr-price-val { flex: none; min-width: 52px; text-align: right;
   color: var(--text); font-size: 12.5px; font-weight: 600; }
 .upr-edit-btns { display: flex; gap: 6px; justify-content: flex-end; }
+/* «Расширенные» в попапе юнита — первой, прижата к левому краю ряда */
+.upr-edit-btns .upr-adv-btn { margin-right: auto; }
+.upr-adv-btn svg { vertical-align: -2px; margin-right: 5px; }
 /* раздвижная боковая панель сектора */
 .upr-resizer {
   flex: 0 0 6px; align-self: stretch; padding: 0;
