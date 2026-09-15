@@ -121,31 +121,40 @@ class GameAssets:
 
     # -- download ---------------------------------------------------
     def download(self):
+        # POST отвечает сразу: и проверка воркера, и скачивание идут
+        # в фоне, фронт кажет прогресс через polling (иначе кнопка висит
+        # на статичной «Проверке...», пока сеть думает).
         with self._lock:
-            if self._progress.get("state") in ("downloading", "extracting"):
+            if self._progress.get("state") in ("checking", "downloading",
+                                               "extracting"):
                 return {"ok": False, "error": "already downloading"}
-            self._progress = {"state": "downloading", "done": 0, "total": 0,
+            self._progress = {"state": "checking", "done": 0, "total": 0,
                               "error": ""}
+        th = threading.Thread(target=self._check_and_download_job,
+                              daemon=True, name="ga-dl")
+        th.start()
+        return {"ok": True, "started": True}
+
+    def _check_and_download_job(self):
+        """Фон: спросить воркер о свежем архиве, затем скачать/распаковать."""
         meta = self._meta
         if not (isinstance(meta, dict) and meta.get("url")):
             fresh = self.check()
             if not (isinstance(fresh, dict) and fresh.get("ok")):
                 self._set_progress(state="error",
                                    error=str(fresh.get("error") or "check failed"))
-                return fresh
+                return
             meta = fresh.get("available") or {}
         url = str(meta.get("url") or "")
         version = str(meta.get("version") or "")
         if not url:
             self._set_progress(state="error", error="nothing to download")
-            return {"ok": False, "error": "nothing to download"}
-        th = threading.Thread(target=self._download_job, args=(url, version),
-                              daemon=True, name="ga-dl")
-        th.start()
-        return {"ok": True, "started": True, "version": version}
+            return
+        self._download_job(url, version)
 
     def _download_job(self, url, version):
         staging = tempfile.mkdtemp(prefix="tts_gameassets_")
+        self._set_progress(state="downloading", done=0)
         try:
             req = urllib.request.Request(
                 url, headers={"User-Agent": "TerminatorToolSet"})

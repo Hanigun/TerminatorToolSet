@@ -2325,7 +2325,8 @@ function gaPopRender() {
   p.innerHTML = h;
   const dl = $("#gap-dl");
   if (dl) dl.onclick = gaDownload;
-  if (prog.state === "downloading" || prog.state === "extracting") gaPollStart();
+  if (prog.state === "checking" || prog.state === "downloading"
+    || prog.state === "extracting") gaPollStart();
 }
 
 // строка состояния в попапе: версия скачанного или текст ошибки
@@ -2356,7 +2357,21 @@ async function gaDownload() {
     if (dl) dl.disabled = false;
     return;
   }
+  // POST вернулся сразу — бар показываем тут же (сначала крутится
+  // на проверке, затем живые проценты из polling)
+  gaShowBusy();
   gaPollStart();
+}
+
+// бар в режиме ожидания: виден сразу, полоска бежит (фаза проверки)
+function gaShowBusy() {
+  const bar = $("#gap-progress"), fill = $("#gap-fill"), pct = $("#gap-pct");
+  const st = $("#gap-state");
+  if (bar) bar.hidden = false;
+  if (fill) { fill.style.width = "100%"; fill.classList.add("indet"); }
+  const txt = t("ga_checking") || "…";
+  if (pct) pct.textContent = txt;
+  if (st) st.textContent = txt;
 }
 
 async function gaPollTick() {
@@ -2370,8 +2385,16 @@ async function gaPollTick() {
   if (gaState) gaState.progress = pr;
   const bar = $("#gap-progress"), fill = $("#gap-fill"), pct = $("#gap-pct");
   const st = $("#gap-state"), dlb = $("#gap-dl");
-  if (pr.state === "downloading" || pr.state === "extracting") {
+  if (pr.state === "checking") {
+    // проверка воркера: реальные проценты ещё неизвестны — полоска бежит
     if (bar) bar.hidden = false;
+    if (fill) { fill.style.width = "100%"; fill.classList.add("indet"); }
+    const txt = t("ga_checking") || "…";
+    if (pct) pct.textContent = txt;
+    if (st) st.textContent = txt;
+  } else if (pr.state === "downloading" || pr.state === "extracting") {
+    if (bar) bar.hidden = false;
+    if (fill) fill.classList.remove("indet");
     const total = pr.total || 0, done = pr.done || 0;
     const pc = total > 0 ? Math.min(99, Math.floor(done * 100 / total)) : 0;
     if (fill) fill.style.width = (pr.state === "extracting" ? 100 : pc) + "%";
