@@ -4,6 +4,21 @@
 // Категории-классы вкладки: пять species-файлов + humans как справочник пехоты.
 // Порядок — как найм в кампании: сначала отряды и техника, затем предметы и пехота.
 var UNT_CATS = ["squads", "cars", "tanks", "helicopters", "inventory_items", "humans"];
+// Иконки заголовков секций — ДОСЛОВНО карта CMP_CAT_ICONS кампании
+// (campaign.js:145-154): squads=infantry, cars=light_vehicle, tanks=tank,
+// helicopters=heli, inventory_items=supply_vehicle. Текст остаётся в
+// title/alt, нет файла — откат на текстовую подпись. humans без иконки —
+// всегда текстовая подпись.
+var UNT_CAT_ICONS = {
+  squads: "infantry.webp",
+  cars: "light_vehicle.webp",
+  tanks: "tank.webp",
+  helicopters: "heli.webp",
+  inventory_items: "supply_vehicle.webp",
+};
+function untCatIcon(cat) {
+  return "/assets/campaign/UnitSet/" + (UNT_CAT_ICONS[cat] || "");
+}
 // Иконки строк и тела — РОВНО чипы кампании (cmpChip, campaign.js):
 // чистая иконка .upr-chip.upr-card + .upr-chip-icon, без слотов veh/inf
 // и подложек.
@@ -201,7 +216,8 @@ function untPaintHeader(root, src) {
 
 // Витрина master-detail (как найм в кампании): сверху селектор класса
 // (один открытый класс за раз, выбор — в state.units.cat), ниже слева
-// вертикальный список юнитов класса, справа — тело с параметрами.
+// секция найма кампании (div.cmp-sec > div.upr-cat-title с иконкой +
+// div.upr-cat-body), справа — тело с параметрами.
 function untPaint() {
   const main = $("#unt-main");
   if (!main) return;
@@ -223,40 +239,39 @@ function untPaint() {
   wrap.className = "unt-wrap";
   const pane = document.createElement("div");
   pane.className = "unt-list-pane";
-  const head = document.createElement("div");
-  head.className = "unt-list-head";
-  const title = document.createElement("span");
-  title.className = "unt-list-title";
-  title.id = "unt-list-title";
-  pane.appendChild(head);
-  head.appendChild(title);
-  // Кнопка «+» в шапке списка — добавление в текущий класс.
-  const add = document.createElement("button");
-  add.type = "button";
-  add.className = "unt-chip-add";
-  add.title = t("unt_add") || "Добавить";
-  const addImg = document.createElement("img");
-  addImg.className = "unt-chip-add-icon";
-  addImg.src = "/assets/UprisingMap/add_unit.webp";
-  addImg.alt = "";
-  addImg.draggable = false;
-  addImg.onerror = () => { add.textContent = "+"; };
-  add.appendChild(addImg);
-  add.onclick = ev => {
-    ev.stopPropagation();
-    untAddUnit(cat).catch(() => {});
-  };
-  head.appendChild(add);
-  // Правая кнопка по шапке — меню сектора, по фону списка — меню категории.
-  head.oncontextmenu = e => untSecCtx(e);
+  // Секция — РОВНО как найм кампании (campaign.js:773-809): шапка-иконка +
+  // тело-ряд; скролл/вертикаль — своим unt-классом ДОПОЛНИТЕЛЬНО
+  // (id живёт на теле, вид чипов задаёт upr-cat-body).
+  const sec = document.createElement("div");
+  sec.className = "cmp-sec";
+  const title = document.createElement("div");
+  title.className = "upr-cat-title";
+  const label = t("unt_class_" + cat) || cat;
+  title.title = label;
+  if (UNT_CAT_ICONS[cat]) {
+    const timg = document.createElement("img");
+    timg.className = "cmp-sec-icon";
+    timg.src = untCatIcon(cat);
+    timg.alt = label;
+    timg.draggable = false;
+    timg.onerror = () => {
+      try { title.textContent = label; } catch (e) {}
+    };
+    title.appendChild(timg);
+  } else title.textContent = label;
+  // ПКМ по шапке — меню сектора (как было по шапке списка).
+  title.oncontextmenu = e => untSecCtx(e);
+  sec.appendChild(title);
   const list = document.createElement("div");
-  list.className = "unt-list";
+  list.className = "upr-cat-body unt-list";
   list.id = "unt-list";
+  list.dataset.cat = cat;
+  // ПКМ по пустому месту ряда — меню категории (как вставка в кампании).
   list.oncontextmenu = e => {
-    if (e.target.closest && e.target.closest(".unt-row")) return;
-    untCatCtx(e, cat);
+    if (e.target === list) untCatCtx(e, cat);
   };
-  pane.appendChild(list);
+  sec.appendChild(list);
+  pane.appendChild(sec);
   const detail = document.createElement("div");
   detail.className = "unt-detail";
   detail.id = "unt-detail";
@@ -300,34 +315,52 @@ function untCatBar(cats, total) {
   return bar;
 }
 
-// Список юнитов выбранного класса: строка = слот/иконка + sysname + бейдж
-// basis/DLC. Выбор — клик, попап — двойной клик, меню — правая кнопка.
+// Список юнитов выбранного класса — РОВНО ряд найма кампании
+// (campaign.js:810-839): чипы + кнопка «+» последней в ряду.
+// Выбор — клик, попап — двойной клик, меню — правая кнопка
+// (чип — untChipCtx, пустое место ряда — untCatCtx).
 function untPaintList() {
   const list = $("#unt-list");
   if (!list) return;
   const st = list.scrollTop;
-  list.innerHTML = "";
   const cat = state.units.cat;
+  list.dataset.cat = cat;
+  list.innerHTML = "";
   const data = untCatData(cat);
   const items = ((data && data.items) || []).slice();
   if (state.units.sel && !items.some(x => x.sys === state.units.sel))
     state.units.sel = null;
   if (!state.units.sel && items.length) state.units.sel = items[0].sys;
-  const title = $("#unt-list-title");
-  if (title) title.textContent = (t("unt_class_" + cat) || cat) + " · " + items.length;
   items.forEach(it => list.appendChild(untRow(it, cat)));
+  // Плюс последним в ряду — как .upr-chip-add на карте Uprising и в кампании.
+  const add = document.createElement("button");
+  add.className = "upr-chip-add";
+  add.title = t("unt_add") || "Добавить";
+  add.setAttribute("aria-label", t("unt_add") || "Добавить");
+  const addImg = document.createElement("img");
+  addImg.className = "upr-chip-add-icon";
+  addImg.src = "/assets/UprisingMap/add_unit.webp";
+  addImg.alt = "";
+  addImg.draggable = false;
+  add.appendChild(addImg);
+  if (typeof uprAddBtn === "function") uprAddBtn(add, addImg);
+  add.onclick = ev => {
+    ev.stopPropagation();
+    untAddUnit(cat).catch(() => {});
+  };
+  list.appendChild(add);
   list.scrollTop = st;
 }
 
-// Строка списка — РОВНО чип кампании (cmpChip, campaign.js:901-929):
+// Чип списка — РОВНО чип кампании (cmpChip, campaign.js:901-930):
 // чистая иконка .upr-chip.upr-card + .upr-chip-icon через общий хелпер
 // карты (мгновенный плейсхолдер категории + спиннер upr-loading +
 // подмена реальной из СВОЕЙ карты state.units.iconMap — карту uprising
 // не трогаем). Своё здесь только состояние списка: .unt-row/.sel/
-// dataset.sys + sysname-строка + бейдж basis/DLC поверх (как
-// .cmp-price-badge у кампании).
+// dataset.sys (не вид) + бейдж basis/DLC поверх (как .cmp-price-badge
+// у кампании). Имя — только в подсказке (sysname + путь).
 function untRow(it, cat) {
-  const row = document.createElement("div");
+  const row = document.createElement("span");
   row.className = "upr-chip upr-card unt-row";
   if (it.sys === state.units.sel) row.classList.add("sel");
   row.dataset.sys = it.sys;
@@ -336,7 +369,7 @@ function untRow(it, cat) {
   img.className = "upr-chip-icon";
   img.draggable = false;
   img.loading = "lazy";
-  img.alt = it.sys;
+  img.alt = "";
   row.classList.add("upr-loading");
   if (typeof uprChipIcon === "function")
     uprChipIcon(img, row, it.sys, cat,
@@ -345,15 +378,11 @@ function untRow(it, cat) {
   if (img.complete && img.naturalWidth && typeof cmpSpanChip === "function")
     cmpSpanChip(row, img);
   row.appendChild(img);
-  const nm = document.createElement("span");
-  nm.className = "unt-row-sys";
-  nm.textContent = it.sys;
-  row.appendChild(nm);
   const badge = document.createElement("span");
   badge.className = "unt-src-badge";
   badge.textContent = it.src || "basis";
   row.appendChild(badge);
-  // Клик — выбор и тело; двойной клик и кнопка в теле — попап untEditUnit.
+  // Клик — выбор и тело; двойной клик — попап untEditUnit; ПКМ — меню чипа.
   row.addEventListener("click", ev => {
     ev.stopPropagation();
     untSelect(cat, it.sys);

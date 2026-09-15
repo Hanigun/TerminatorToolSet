@@ -1,4 +1,4 @@
-/* units.css — редактор юнитов species: пулы, секторы, категории, чипы · последний в каскаде (<link> в templates/index.html после overrides.css) */
+/* units.css — редактор юнитов species: пулы, селектор класса, секция найма, тело · последний в каскаде (<link> в templates/index.html после overrides.css) */
 /* обёртка сегмента-источника «Проект | Игра | Мод»: не даёт шапке сжать сегмент */
 .unt-src-wrap { position: relative; flex-shrink: 0; }
 /* контейнер витрины: селектор класса сверху, ниже master-detail */
@@ -13,24 +13,13 @@
 .unt-wrap { flex: 1; min-height: 0; display: flex; gap: 8px; }
 .unt-list-pane { width: 280px; flex-shrink: 0; display: flex; flex-direction: column;
   min-height: 0; border: 1px solid var(--border); background: var(--bg-card); }
-.unt-list-head { display: flex; align-items: center; gap: 8px; padding: 6px 8px;
-  border-bottom: 1px solid var(--border); flex-shrink: 0; }
-.unt-list-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
-  white-space: nowrap; font-size: 11px; font-weight: 700; color: var(--text-mute);
-  text-transform: uppercase; letter-spacing: .04em; }
-.unt-list { flex: 1; min-height: 0; overflow-y: auto; display: flex;
-  flex-direction: column; gap: 2px; padding: 6px; }
-/* строка списка — чип кампании (cmpChip): чистая иконка .upr-chip.upr-card
-   + .upr-chip-icon (размеры, зазоры и спиннер upr-loading — из
-   uprising.css/campaign.css), своё только состояние и текст */
-.unt-row { position: relative; cursor: pointer;
-  display: flex; align-items: center; gap: 8px;
-  border: 1px solid var(--border); background: var(--bg); padding: 4px 6px;
-  min-height: 44px; }
-.unt-row:hover { outline: 1px dashed var(--border); }
-.unt-row.sel { border-color: var(--accent); background: rgba(255,255,255,.04); }
-.unt-row-sys { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
-  white-space: nowrap; font-size: 12px; font-weight: 600; user-select: none; }
+/* список — тело секции найма кампании (.upr-cat-body из uprising.css задаёт
+   чипы, зазоры и фон); свой unt-класс ДОПОЛНИТЕЛЬНО — только скролл и
+   растяжение в панели, вид чипов не трогаем */
+.unt-list { flex: 1; min-height: 0; overflow-y: auto; }
+/* выбранный чип — как найм кампании (campaign.css: #campaign-tab .sel) */
+#units-tab .upr-cat-body .upr-chip.sel { outline: 2px solid var(--accent);
+  outline-offset: -2px; }
 /* тело справа: шапка (иконка-чип + имя + бейдж + правка) + таблица колонка:значение */
 .unt-detail { flex: 1; min-width: 0; overflow-y: auto;
   border: 1px solid var(--border); background: var(--bg-card); padding: 10px 12px; }
@@ -49,14 +38,8 @@
 .unt-kv-key { width: 220px; flex-shrink: 0; font-size: 12px; font-weight: 700;
   color: var(--text-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .unt-kv-val { flex: 1; min-width: 0; font-size: 12px; overflow-wrap: anywhere; }
-/* кнопка-добавление — иконка в шапке списка */
-.unt-chip-add { border: none; background: transparent; padding: 3px; cursor: pointer;
-  display: inline-flex; align-items: center; max-width: fit-content;
-  flex-grow: 0; flex-shrink: 0; }
-.unt-chip-add-icon { display: block; pointer-events: none; }
-.unt-chip-add:hover { color: var(--accent); }
-.unt-chip-add:hover .unt-chip-add-icon { outline: 1px dashed var(--accent); }
-/* бейдж источника чипа: basis или DLC-оверлей (Legion/Resistance) */
+/* бейдж источника чипа: basis или DLC-оверлей (Legion/Resistance) —
+   оверлей как .cmp-price-badge кампании */
 .unt-src-badge { position: absolute; right: 4%; bottom: 2px; display: flex;
   align-items: center; background: rgba(0,0,0,.55);
   padding: 2px 7px; font-size: 11px; font-weight: 700; color: #fff;
