@@ -375,7 +375,7 @@ async function activateTab(tabId) {
   } else if (tab.type === "welcome" || tab.type === "compare"
       || tab.type === "create-mod" || tab.type === "unpacker" || tab.type === "swt"
       || tab.type === "uprising" || tab.type === "uprising-rnd"
-      || tab.type === "campaign") {
+      || tab.type === "campaign" || tab.type === "units") {
     state.currentFile = null;
     state.dirty = false;
     updateDirty();
@@ -483,6 +483,14 @@ function createTab(type, data) {
       type: "uprising-rnd",
       title: t("upr_rnd_title") || "Рандомайзер",
       sub: "modes",
+      icon: "/assets/icons/dark/icons/xml.svg"
+    };
+  } else if (type === "units") {
+    tab = {
+      id: "units",
+      type: "units",
+      title: t("unt_title") || "Редактор юнитов",
+      sub: "",
       icon: "/assets/icons/dark/icons/xml.svg"
     };
   }

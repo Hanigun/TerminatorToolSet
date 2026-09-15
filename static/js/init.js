@@ -7,6 +7,8 @@ async function init() {
   state.swt = swtFreshState();
   state.uprising = uprFreshState();
   state.campaign = cmpFreshState();
+  // фабрика untFreshState() приедет с units.js (T5): до тех пор state.units остаётся null
+  if (typeof untFreshState === "function") state.units = untFreshState();
   document.body.classList.add("dark");
   bootPing(78, ""); // скрипты встали (таблица boot_stages), дальше этапы с подписями
   await loadConfig();
@@ -25,6 +27,8 @@ async function init() {
   setupSwt();
   setupUprising();
   setupCampaign();
+  // setupUnits() приедет с units.js (T5): зовём только когда он уже загружен
+  if (typeof setupUnits === "function") setupUnits();
   // иконки темы — одним запросом в память, фоном (дерево/вкладки больше
   // не открывают по коннекту на каждую иконку)
   preloadIcons();
@@ -49,11 +53,17 @@ async function init() {
   $("#btn-unpacker").onclick = openUnpacker;
   $("#btn-uprising").onclick = () => openUprising();
   $("#btn-campaign").onclick = () => openCampaign();
+  // openUnits() приедет с units.js (T5): резолвится лениво, в момент клика
+  $("#btn-units").onclick = () => openUnits();
   $("#btn-swt").onclick = openSwtEditor;
   $("#landing-create-mod").onclick = openCreateMod;
   $("#landing-unpacker").onclick = openUnpacker;
   $("#landing-uprising").onclick = () => openUprising();
   $("#landing-campaign").onclick = () => openCampaign();
+  // кнопки лендинга для юнитов в разметке пока нет (партиал вне scope S3):
+  // подпишемся, когда она появится, init сейчас падать не должен
+  const landingUnits = $("#landing-units");
+  if (landingUnits) landingUnits.onclick = () => openUnits();
   $("#landing-compare").onclick = openCompare;
   $("#landing-swt").onclick = openSwtEditor;
   $("#cm-pick-dir").onclick = cmPickDir;

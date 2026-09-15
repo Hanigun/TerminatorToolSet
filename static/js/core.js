@@ -47,6 +47,7 @@ const state = {
   swt: null, // заполняет init(): фабрика swtFreshState() живёт в swt.js ниже
   swtSources: null,         // словари для подсказок SWT (/api/swt_sources), null = нет
   uprising: null, // заполняет init(): фабрика uprFreshState() живёт в uprising.js ниже
+  units: null, // заполняет init(): фабрика untFreshState() появится в units.js (T5)
   treeView: "project",      // глобальный источник: project | game | mod (древо + карта)
   cmpSrc: { left: null, right: null }, // источники сторон сравнения: по умолчанию ничего не выбрано
   treeExtFilter: null,      // null = show all; Set of lowercase exts to SHOW
