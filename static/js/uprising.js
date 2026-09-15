@@ -1872,7 +1872,8 @@ async function uprEnsureIconStates(root, names) {
     if (!j || !j.ok) return;
     Object.assign(uprIconStates, j.states || {});
     // состояния долетели позже иконок: перекрасить выбранные чипы обеих карт
-    document.querySelectorAll("#upr-wrap img.upr-chip-icon, #cmp-wrap img.upr-chip-icon")
+    // и списков юнитов (те же чипы кампании: ховер/selected-пары)
+    document.querySelectorAll("#upr-wrap img.upr-chip-icon, #cmp-wrap img.upr-chip-icon, #unt-main img.upr-chip-icon")
       .forEach(img => {
         const chip = (img.closest && img.closest(".upr-chip")) || img.parentNode;
         if (chip) uprChipStatePaint(chip, img);

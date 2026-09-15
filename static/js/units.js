@@ -4,15 +4,55 @@
 // Категории-классы вкладки: пять species-файлов + humans как справочник пехоты.
 // Порядок — как найм в кампании: сначала отряды и техника, затем предметы и пехота.
 var UNT_CATS = ["squads", "cars", "tanks", "helicopters", "inventory_items", "humans"];
-// Буквы плашек-тегов карточек типов (span.swt-item-tag): по первой букве
-// класса, humans — «P» (пехота), чтобы не путать с helicopters («H»).
-var UNT_TYPE_TAGS = { squads: "S", cars: "C", tanks: "T", helicopters: "H",
-  inventory_items: "I", humans: "P" };
+// Иконки классов — РОВНО как заголовки секций кампании (CMP_CAT_ICONS,
+// campaign.js): infantry/light_vehicle/tank/heli/supply_vehicle из
+// assets/campaign/UnitSet; humans — та же пехота, что squads.
+var UNT_CAT_ICONS = {
+  squads: "infantry.webp",
+  cars: "light_vehicle.webp",
+  tanks: "tank.webp",
+  helicopters: "heli.webp",
+  inventory_items: "supply_vehicle.webp",
+  humans: "infantry.webp",
+};
+function untCatIcon(cat) {
+  return "/assets/campaign/UnitSet/" + (UNT_CAT_ICONS[cat] || "infantry.webp");
+}
 // Шеврон сворачивания — РОВНО как в SWT (swt.js:1239, swtItemCard:855).
 var UNT_CHEV_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
-// Кнопки «развернуть/свернуть всё» слоя — РОВНО иконки mkAllBtn (swt.js:1311-1313).
-var UNT_ALL_EXPAND_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6M6 20l6-6 6 6"/></svg>';
-var UNT_ALL_COLLAPSE_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6M6 4l6 6 6-6"/></svg>';
+// Иконки источника (Проект | Игра | Мод) — РОВНО значки вкладок дерева
+// (templates/index.html: sb-tab-project/game/mod): папка, геймпад, куб.
+var UNT_SRC_SVG = {
+  project: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg>',
+  game: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12h4m-2-2v4m8-1h.01M18 10h.01M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z"/></svg>',
+  mod: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
+};
+// Значок источника для шапок слоёв и типов: иконка + подпись из словаря.
+function untSrcBadge() {
+  const v = (state && state.treeView) || "project";
+  const el = document.createElement("span");
+  el.className = "unt-src-ico unt-src-" + v;
+  el.innerHTML = UNT_SRC_SVG[v] || UNT_SRC_SVG.project;
+  const lab = t("tree_tab_" + v) || v;
+  el.title = lab;
+  el.setAttribute("aria-label", lab);
+  return el;
+}
+// Короткий путь слоя: последние 3 сегмента (.../basis/scripts/species).
+function untShortPath(path) {
+  const parts = String(path || "").split(/[\\/]+/).filter(Boolean);
+  if (!parts.length) return "";
+  return parts.slice(-3).join("/");
+}
+// Первый путь файлов слоя для шапки (коротко).
+function untLayerShortPath(L) {
+  let p = "";
+  UNT_CATS.forEach(cat => {
+    if (!p && L && L.cats && L.cats[cat] && L.cats[cat].path)
+      p = L.cats[cat].path;
+  });
+  return untShortPath(p);
+}
 // Иконки строк и тела — РОВНО чипы кампании (cmpChip, campaign.js):
 // чистая иконка .upr-chip.upr-card + .upr-chip-icon, без слотов veh/inf
 // и подложек.
@@ -32,7 +72,7 @@ var UNT_STAT_COLS = ["cost", "cp_cost", "supply_consumption", "people_capacity",
 function untFreshState() {
   return { src: "", layers: [], loading: false, loadSeq: 0, analyzing: false, clip: null,
     cat: "squads", sel: null, selLayer: null, iconMap: {}, iconsReady: false, iconsLoading: false,
-    iconSeq: 0, detSeq: 0 };
+    iconSeq: 0, detSeq: 0, prices: {}, stats: {}, pricesReady: false, pricesLoading: false };
 }
 
 // Корень текущего глобального источника (Проект | Игра | Мод), как у карты и кампании.
@@ -213,6 +253,9 @@ async function renderUnits(force) {
     if (srcChanged) {
       state.units.iconMap = {};
       state.units.iconsReady = false;
+      state.units.prices = {};
+      state.units.stats = {};
+      state.units.pricesReady = false;
     }
     // Выбор — тройка (слой, класс, sysname): чиним класс на первый непустой
     // тип, sel сбрасываем только если строка пропала, иначе тело держит старое.
@@ -238,8 +281,10 @@ async function renderUnits(force) {
     }
     untPaintHeader(root, src);
     untPaint();
-    // Иконки всех слоёв — своим батчем (карту uprising не трогаем).
+    // Иконки всех слоёв — своим батчем (карту uprising не трогаем);
+    // цены (cost) — тем же /api/uprising_prices, что кампания.
     untEnsureIcons().catch(() => {});
+    untEnsurePrices().catch(() => {});
   } finally {
     if (fresh()) state.units.loading = false;
   }
@@ -311,14 +356,18 @@ function untLayerTotal(L) {
   return n;
 }
 
-// Секция слоя — РОВНО механика mkSec (swt.js:1221-1250): шапка
+// Секция слоя — механика mkSec (swt.js:1221-1250): шапка
 // .swt-sec-head (+.swt-sec-closed), шеврон-кнопка .swt-sec-chev, тело
-// .swt-sec-body; флаг раскрытия — L.open; клик по шапке — тоггл
-// (игнор кликов по input/select/button как в mkSec:1246).
+// .swt-sec-body; флаг раскрытия — L.open; клик по шапке — тоггл.
+// Шапка слоя: [шеврон] [чип Base Game / имя DLC] [короткий путь] [счётчик]
+// [иконка источника Проект|Игра|Мод]. Кнопок «развернуть/свернуть всё» нет.
+// Базовая игра — акцентная полоса (.unt-layer-base), DLC — фиолетовая SWT.
 function untLayerSec(L) {
   let open = L.open !== false;
+  const isBase = L.key === "basis";
   const headEl = document.createElement("div");
-  headEl.className = "swt-sec-head" + (open ? "" : " swt-sec-closed");
+  headEl.className = "swt-sec-head unt-layer-head" + (open ? "" : " swt-sec-closed")
+    + (isBase ? " unt-layer-base" : "");
   headEl.dataset.layer = L.key;
   const chev = document.createElement("button");
   chev.className = "icon-btn swt-sec-chev";
@@ -337,16 +386,25 @@ function untLayerSec(L) {
   };
   chev.innerHTML = UNT_CHEV_SVG;
   chev.onclick = e => { e.stopPropagation(); flip(); };
-  const ttl = document.createElement("span");
-  ttl.textContent = L.label || L.key;
-  headEl.append(chev, ttl);
+  const chip = document.createElement("span");
+  chip.className = "unt-layer-chip" + (isBase ? " unt-layer-chip-base" : "");
+  chip.textContent = isBase ? "Base Game" : (L.label || L.key);
+  chip.title = isBase ? "Base Game" : (L.label || L.key);
+  headEl.append(chev, chip);
+  const short = untLayerShortPath(L);
+  if (short) {
+    const p = document.createElement("span");
+    p.className = "unt-layer-path";
+    p.textContent = short;
+    p.title = short;
+    headEl.appendChild(p);
+  }
   const sum = document.createElement("span");
   sum.className = "unt-layer-sum";
   sum.textContent = "· " + untLayerTotal(L);
-  sum.title = ttl.textContent;
+  sum.title = chip.textContent;
   headEl.appendChild(sum);
-  headEl.appendChild(untLayerAllBtn(L, true));
-  headEl.appendChild(untLayerAllBtn(L, false));
+  headEl.appendChild(untSrcBadge());
   headEl.addEventListener("click", e => {
     if (e.target.closest("input, select, button, label, .swt-cmd-combo")) return;
     flip();
@@ -355,29 +413,6 @@ function untLayerSec(L) {
   headEl.addEventListener("contextmenu", e => untLayerCtx(e, L.key));
   apply();
   return { headEl, bodyEl };
-}
-
-// Кнопки «развернуть/свернуть все типы слоя» — РОВНО механика mkAllBtn
-// (swt.js:1307-1325): флаги на данных + синхронизация карточек своей
-// секции напрямую через card.__item, без перерисовки.
-function untLayerAllBtn(L, expand) {
-  const b = document.createElement("button");
-  b.className = "icon-btn swt-sec-all";
-  b.title = expand ? (t("swt_expand_all") || "Развернуть все")
-                   : (t("swt_collapse_all") || "Свернуть все");
-  b.innerHTML = expand ? UNT_ALL_EXPAND_SVG : UNT_ALL_COLLAPSE_SVG;
-  b.onclick = () => {
-    UNT_CATS.forEach(cat => {
-      const data = (L.cats || {})[cat];
-      if (data) data._open = expand;
-    });
-    const bodyEl = b.closest(".swt-sec-head") &&
-      b.closest(".swt-sec-head").nextElementSibling;
-    if (bodyEl) bodyEl.querySelectorAll(".swt-item").forEach(c => {
-      if (c.__item) untApplyTypeOpen(c, c.__item);
-    });
-  };
-  return b;
 }
 
 // Применение флага раскрытия карточки типа — РОВНО swtApplyItemOpen
@@ -392,18 +427,20 @@ function untApplyTypeOpen(card, data) {
                            : (t("swt_expand") || "Развернуть");
 }
 
-// Карточка типа внутри слоя — РОВНО механика swtItemCard (swt.js:844-954):
+// Карточка типа внутри слоя — механика swtItemCard (swt.js:844-954):
 // .swt-item (+.swt-item-closed), шапка .swt-item-head (шеврон .swt-item-chev,
-// плашка-тег с буквой типа, название, счётчик), тело .swt-item-body.
-// Жёлтая полоса — родной border-left .swt-item, ничего своего.
+// иконка класса, название, счётчик, иконка источника), тело .swt-item-body.
+// Иконка класса — РОВНО файлы кампании (UNT_CAT_ICONS, как CMP_CAT_ICONS).
+// Базовая игра — акцентная полоса (.unt-type-base), DLC — родной accent SWT.
 function untTypeCard(L, cat, data) {
   const card = document.createElement("div");
-  card.className = "swt-item" + (data._open ? "" : " swt-item-closed");
-  card.__item = data;   // для «развернуть/свернуть все» без перерисовки
+  card.className = "swt-item unt-type-card" + (data._open ? "" : " swt-item-closed")
+    + (L.key === "basis" ? " unt-type-base" : "");
+  card.__item = data;
   card.dataset.layer = L.key;
   card.dataset.cat = cat;
   const head = document.createElement("div");
-  head.className = "swt-item-head";
+  head.className = "swt-item-head unt-type-head";
   const chev = document.createElement("button");
   chev.className = "icon-btn swt-item-chev";
   chev.title = data._open ? (t("swt_collapse") || "Свернуть")
@@ -414,16 +451,29 @@ function untTypeCard(L, cat, data) {
     data._open = !data._open;
     untApplyTypeOpen(card, data);
   };
-  const tag = document.createElement("span");
-  tag.className = "swt-item-tag unt-type-tag";
-  tag.textContent = UNT_TYPE_TAGS[cat] || "?";
+  const label = t("unt_class_" + cat) || cat;
+  const ico = document.createElement("img");
+  ico.className = "unt-type-icon";
+  ico.src = untCatIcon(cat);
+  ico.alt = label;
+  ico.draggable = false;
+  ico.onerror = () => {
+    try {
+      const fb = document.createElement("span");
+      fb.className = "unt-type-icon-fb";
+      fb.textContent = label.slice(0, 1).toUpperCase();
+      ico.replaceWith(fb);
+    } catch (e) { /* оставили битую иконку */ }
+  };
   const nm = document.createElement("span");
   nm.className = "unt-type-name";
-  nm.textContent = t("unt_class_" + cat) || cat;
+  nm.textContent = label;
+  nm.title = label;
   const cnt = document.createElement("span");
   cnt.className = "unt-type-count";
   cnt.textContent = "· " + ((data.items || []).length);
-  head.append(chev, tag, nm, cnt);
+  head.append(chev, ico, nm, cnt);
+  head.appendChild(untSrcBadge());
   head.addEventListener("click", e => {
     // клик по свободному месту шапки тоже сворачивает карточку
     if (e.target.closest("input, select, button, label")) return;
@@ -436,11 +486,17 @@ function untTypeCard(L, cat, data) {
   const body = document.createElement("div");
   body.className = "swt-item-body";
   if (!data._open) body.hidden = true;
-  // Уровень 3 — существующий master-detail: слева чипы, справа тело.
+  // Уровень 3 — master-detail как боковая панель кампании: слева список
+  // чипов (сетка кампании), справа тело параметров; между ними ресайзер
+  // ширины списка (клон cmp-resizer).
   const wrap = document.createElement("div");
   wrap.className = "unt-wrap";
   const pane = document.createElement("div");
   pane.className = "unt-list-pane";
+  try {
+    const w = parseInt(localStorage.getItem("tsh_unt_list_w") || "0", 10);
+    if (w >= 200 && w <= 700) pane.style.flex = "0 0 " + w + "px";
+  } catch (e) { /* дефолт из CSS */ }
   const list = document.createElement("div");
   list.className = "upr-cat-body unt-list";
   list.dataset.layer = L.key;
@@ -450,17 +506,55 @@ function untTypeCard(L, cat, data) {
     if (e.target === list) untCatCtx(e, L.key, cat);
   };
   pane.appendChild(list);
+  const rz = document.createElement("button");
+  rz.className = "unt-resizer";
+  rz.type = "button";
+  rz.title = t("cmp_resizer_reset") || "";
+  untBindResizer(rz, pane);
   const detail = document.createElement("div");
   detail.className = "unt-detail";
   detail.dataset.layer = L.key;
   detail.dataset.cat = cat;
   wrap.appendChild(pane);
+  wrap.appendChild(rz);
   wrap.appendChild(detail);
   body.appendChild(wrap);
   card.appendChild(body);
   untPaintTypeList(list);
   untPaintTypeDetail(detail);
   return card;
+}
+
+// Ресайзер ширины списка чипов — клон cmp-resizer (campaign.js):
+// тяга ставит фикс поверх дефолта, даблклик сбрасывает к дефолту CSS.
+function untBindResizer(rz, pane) {
+  if (!rz || !pane) return;
+  rz.addEventListener("dblclick", () => {
+    pane.style.flex = "";
+    try { localStorage.removeItem("tsh_unt_list_w"); } catch (e) {}
+  });
+  rz.addEventListener("mousedown", e => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    document.body.classList.add("unt-resizing");
+    const startX = e.clientX;
+    const startW = pane.getBoundingClientRect().width;
+    const move = ev => {
+      const nw = Math.min(700, Math.max(200, startW + (ev.clientX - startX)));
+      pane.style.flex = "0 0 " + Math.round(nw) + "px";
+    };
+    const up = () => {
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      document.body.classList.remove("unt-resizing");
+      try {
+        localStorage.setItem("tsh_unt_list_w",
+          String(Math.round(pane.getBoundingClientRect().width)));
+      } catch (ex) {}
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  });
 }
 
 // Первый непустой слот (слой, класс, sysname): optCat ограничивает классом.
@@ -515,13 +609,15 @@ function untPaintAllLists() {
   document.querySelectorAll("#unt-main .unt-list").forEach(untPaintTypeList);
 }
 
-// Чип списка — РОВНО чип кампании (cmpChip, campaign.js:901-930):
+// Чип списка — РОВНО чип кампании (cmpChip, campaign.js:901-969):
 // чистая иконка .upr-chip.upr-card + .upr-chip-icon через общий хелпер
 // карты (мгновенный плейсхолдер категории + спиннер upr-loading +
 // подмена реальной из СВОЕЙ карты state.units.iconMap — карту uprising
-// не трогаем). Своё здесь только состояние списка: .unt-row/.sel/
-// dataset.sys (не вид) + бейдж basis/DLC поверх (как .cmp-price-badge
-// у кампании). Имя — только в подсказке (sysname + путь).
+// не трогаем), шильдик цены .cmp-price-badge (монетка + cost) и декор
+// слота vehDecor (подложка unitslot, sysname, полоса мест 0/N у техники,
+// численность N/N у отрядов). Своё здесь только состояние списка:
+// .unt-row/.sel/dataset.sys. Шильдика basis/DLC на иконках нет.
+// Имя — только в подсказке (sysname + цена + путь).
 function untRow(layerKey, it, cat) {
   const row = document.createElement("span");
   row.className = "upr-chip upr-card unt-row";
@@ -530,7 +626,11 @@ function untRow(layerKey, it, cat) {
   row.dataset.sys = it.sys;
   row.dataset.layer = layerKey || "";
   row.dataset.cat = cat;
-  row.title = it.sys + "\n" + (it.path || "");
+  const pv = untPrice(cat, it.sys);
+  const dn = (typeof uprUnitName === "function") ? uprUnitName(it.sys) : it.sys;
+  row.title = (dn !== it.sys ? dn + "\n" : "") + it.sys
+    + (pv === "" ? "" : "\n" + (t("cpg_cost") || "Cost") + ": " + pv)
+    + (it.path ? "\n" + it.path : "");
   const img = document.createElement("img");
   img.className = "upr-chip-icon";
   img.draggable = false;
@@ -540,14 +640,25 @@ function untRow(layerKey, it, cat) {
   if (typeof uprChipIcon === "function")
     uprChipIcon(img, row, it.sys, cat,
       { map: state.units.iconMap, ready: state.units.iconsReady });
-  else img.src = uprIconUrl(it.sys, cat);
+  else if (typeof uprIconUrl === "function") img.src = uprIconUrl(it.sys, cat);
   if (img.complete && img.naturalWidth && typeof cmpSpanChip === "function")
     cmpSpanChip(row, img);
   row.appendChild(img);
-  const badge = document.createElement("span");
-  badge.className = "unt-src-badge";
-  badge.textContent = it.src || "basis";
-  row.appendChild(badge);
+  if (pv !== "") {
+    const badge = document.createElement("span");
+    badge.className = "cmp-price-badge";
+    const coin = document.createElement("img");
+    coin.className = "cmp-price-coin";
+    coin.src = "/assets/campaign/glbmp_resource_goodwill_credits.webp";
+    coin.alt = "";
+    coin.draggable = false;
+    const bt = document.createElement("span");
+    bt.textContent = pv;
+    badge.append(coin, bt);
+    row.appendChild(badge);
+  }
+  // Подложка слота + sysname + полоса вместимости — как найм кампании.
+  if (typeof vehDecor === "function") vehDecor(row, it.sys, cat, untSrcRoot());
   // Клик — выбор и тело; двойной клик — попап untEditUnit; ПКМ — меню чипа.
   row.addEventListener("click", ev => {
     ev.stopPropagation();
@@ -561,6 +672,36 @@ function untRow(layerKey, it, cat) {
   return row;
 }
 
+// Цена юнита (колонка cost) — свой кэш через тот же /api/uprising_prices,
+// что кампания (cmpLoadMeta): read-only шильдик на чипе, записи нет.
+function untPrice(cat, name) {
+  try {
+    const v = ((state.units.prices || {})[cat] || {})[name || ""];
+    return (v === undefined || v === null) ? "" : String(v).trim();
+  } catch (e) { return ""; }
+}
+async function untEnsurePrices() {
+  if (!state.units || state.units.pricesLoading || state.units.pricesReady) return;
+  const root = untSrcRoot();
+  if (!root) return;
+  state.units.pricesLoading = true;
+  try {
+    const r = await api("/api/uprising_prices", { method: "POST",
+      body: JSON.stringify({ root }) });
+    const j = await r.json();
+    if (!state.units) return;
+    if (j && j.ok) {
+      state.units.prices = j.prices || {};
+      state.units.stats = j.stats || {};
+      state.units.pricesReady = true;
+      untPaintAllLists();
+    }
+  } catch (e) { /* чипы живут без цен */ }
+  finally {
+    if (state.units) state.units.pricesLoading = false;
+  }
+}
+
 // Выбор чипа: тройка (слой, класс, sysname) — одна на вкладку; подсветка
 // без полной перерисовки списков (иконки не перезапрашиваются) +
 // перерисовка тел всех карточек (тело показывает только свой слот).
@@ -572,8 +713,13 @@ function untSelect(layerKey, cat, sys) {
   state.units.cat = cat;
   state.units.sel = sys;
   document.querySelectorAll("#unt-main .unt-row").forEach(r => {
-    r.classList.toggle("sel", r.dataset.sys === sys
-      && r.dataset.layer === (layerKey || "") && r.dataset.cat === cat);
+    const on = r.dataset.sys === sys
+      && r.dataset.layer === (layerKey || "") && r.dataset.cat === cat;
+    r.classList.toggle("sel", on);
+    // выбранная иконка — свой selected-стейт (ховер-пара с бэкенда).
+    if (typeof uprChipStatePaint === "function") {
+      try { uprChipStatePaint(r); } catch (e) {}
+    }
   });
   document.querySelectorAll("#unt-main .unt-detail").forEach(untPaintTypeDetail);
 }
@@ -600,6 +746,9 @@ async function untEnsureIcons() {
   });
   if (!names.length) {
     state.units.iconsReady = true;
+    if (typeof uprEnsureIconStates === "function") {
+      try { uprEnsureIconStates(root, []); } catch (e) {}
+    }
     untPaintAllLists();
     return;
   }
@@ -614,6 +763,10 @@ async function untEnsureIcons() {
     if (j && j.ok) {
       Object.assign(state.units.iconMap, j.icons || {});
       state.units.iconsReady = true;
+      // ховер/selected-пары иконок — тем же батчем, что карты.
+      if (typeof uprEnsureIconStates === "function") {
+        try { uprEnsureIconStates(root, names); } catch (e) {}
+      }
       untPaintAllLists();
     }
   } catch (e) { /* чипы добирают одиночными через uprChipIcon */ }
@@ -622,12 +775,12 @@ async function untEnsureIcons() {
   }
 }
 
-// Тело карточки типа: ВСЕ параметры юнита из species-строки без
-// исключений (колонка: значение по всем колонкам файла, включая sysname).
-// Тело показывает только свой слот: полный разбор — если глобальный выбор
-// (слой, класс, sysname) попал в эту карточку, иначе подсказка.
-// Строка читается из файла своего слоя (без побочных эффектов,
-// как добор оверлеев в renderUnits).
+// Тело карточки типа: ВСЯ строка species-файла своего слоя без исключений
+// (все колонки файла, включая sysname) — каждый параметр сразу в своём
+// поле ввода, кнопки «Редактировать» нет. Тело показывает только свой
+// слот: если глобальный выбор (слой, класс, sysname) попал в эту карточку —
+// разбор строки, иначе подсказка. Строка читается и пишется в файл своего
+// слоя (basis или DLC-оверлей, без побочных эффектов и без зеркала вниз).
 async function untPaintTypeDetail(box) {
   if (!box || !state.units) return;
   const layerKey = box.dataset.layer;
@@ -645,12 +798,12 @@ async function untPaintTypeDetail(box) {
     box.appendChild(d);
     return;
   }
-  // Шапка тела: иконка-чип кампании + sysname + бейдж источника +
-  // кнопка «Редактировать».
+  // Шапка тела: иконка-чип кампании + sysname + короткий путь.
   const head = document.createElement("div");
   head.className = "unt-detail-head";
   // Иконка тела — тот же чип кампании (cmpChip): чистая иконка
-  // .upr-chip.upr-card + .upr-chip-icon через uprChipIcon + cmpSpanChip.
+  // .upr-chip.upr-card + .upr-chip-icon через uprChipIcon + cmpSpanChip
+  // + цена и декор слота, как в списке.
   const dicho = document.createElement("span");
   dicho.className = "upr-chip upr-card unt-detail-icon";
   const diimg = document.createElement("img");
@@ -662,29 +815,17 @@ async function untPaintTypeDetail(box) {
   if (typeof uprChipIcon === "function")
     uprChipIcon(diimg, dicho, item.sys, cat,
       { map: state.units.iconMap, ready: state.units.iconsReady });
-  else diimg.src = uprIconUrl(item.sys, cat);
+  else if (typeof uprIconUrl === "function") diimg.src = uprIconUrl(item.sys, cat);
   if (diimg.complete && diimg.naturalWidth && typeof cmpSpanChip === "function")
     cmpSpanChip(dicho, diimg);
   dicho.appendChild(diimg);
+  if (typeof vehDecor === "function") vehDecor(dicho, item.sys, cat, untSrcRoot());
   head.appendChild(dicho);
   const nm = document.createElement("span");
   nm.className = "unt-detail-name";
   nm.textContent = item.sys;
   nm.title = item.path || "";
   head.appendChild(nm);
-  const badge = document.createElement("span");
-  badge.className = "unt-src-badge unt-detail-badge";
-  badge.textContent = item.src || "basis";
-  head.appendChild(badge);
-  const editB = document.createElement("button");
-  editB.type = "button";
-  editB.className = "btn sm accent";
-  editB.textContent = t("unt_edit") || "Редактировать";
-  editB.onclick = ev => {
-    ev.stopPropagation();
-    untEditUnit(cat, item.sys, editB).catch(() => {});
-  };
-  head.appendChild(editB);
   head.oncontextmenu = e => untChipCtx(e, layerKey, cat, item.sys);
   box.appendChild(head);
   const pathRow = document.createElement("div");
@@ -702,9 +843,17 @@ async function untPaintTypeDetail(box) {
   const columns = (got && got.columns && got.columns.length)
     ? got.columns : ((data && data.columns) || []);
   let values = [];
+  let rowIdx = -1;
   if (got) {
-    const ri = untFindRow(got.rows, sys);
-    if (ri !== -1) values = (got.rows[ri].values || []).slice();
+    rowIdx = untFindRow(got.rows, sys);
+    if (rowIdx !== -1) values = (got.rows[rowIdx].values || []).slice();
+  }
+  if (rowIdx === -1) {
+    const d = document.createElement("div");
+    d.className = "unt-empty-hint";
+    d.textContent = sys;
+    box.appendChild(d);
+    return;
   }
   const kv = document.createElement("div");
   kv.className = "unt-kv";
@@ -714,17 +863,102 @@ async function untPaintTypeDetail(box) {
     const k = document.createElement("span");
     k.className = "unt-kv-key";
     k.textContent = String(c);
-    const v = document.createElement("span");
-    v.className = "unt-kv-val";
+    k.title = String(c);
+    const inp = document.createElement("input");
+    inp.className = "unt-kv-inp";
+    inp.type = "text";
+    inp.spellcheck = false;
+    inp.autocomplete = "off";
     const s = (i < values.length && values[i] !== undefined && values[i] !== null)
       ? String(values[i]) : "";
-    v.textContent = s;
-    v.title = s;
+    inp.value = s;
+    inp.dataset.col = String(i);
+    inp.title = s;
+    // Класс техники — то же комбо, что в кампании и таблице.
+    if (String(c) === "unit_set" && typeof makeUnitSetCombo === "function"
+        && typeof unitSetChoices === "function") {
+      try { makeUnitSetCombo(r, inp, unitSetChoices([inp.value]), "unit_set"); }
+      catch (e) { /* обычное поле без комбо */ }
+    }
+    inp.addEventListener("change", () => {
+      untDetailCommit(box, layerKey, cat, sys, rowIdx, i, inp).catch(() => {});
+    });
+    inp.addEventListener("keydown", ev => {
+      if (ev.key === "Enter") { ev.preventDefault(); inp.blur(); }
+      else if (ev.key === "Escape") {
+        ev.preventDefault();
+        inp.value = (i < values.length && values[i] !== undefined
+          && values[i] !== null) ? String(values[i]) : "";
+        inp.blur();
+      }
+    });
     r.appendChild(k);
-    r.appendChild(v);
+    r.appendChild(inp);
     kv.appendChild(r);
   });
   box.appendChild(kv);
+}
+
+// Запись одного поля тела: ячейка (rowIdx, col) файла своего слоя.
+// Переименование (col 0) едет выбором и списком на новое имя.
+async function untDetailCommit(box, layerKey, cat, sys, rowIdx, col, inp) {
+  if (!box || !box.isConnected || !state.units) return;
+  const nv = inp.value;
+  const data = untLayerCatData(layerKey, cat);
+  const path = (data && data.path) || "";
+  if (!path || rowIdx < 0) {
+    toast(t("unt_sub") || "error", "err");
+    return;
+  }
+  if (col === 0) {
+    const to = String(nv || "").trim();
+    if (!to || to === sys) {
+      inp.value = sys;
+      return;
+    }
+    if (untAllSys().has(to)) {
+      toast(to, "err");
+      inp.value = sys;
+      return;
+    }
+    inp.disabled = true;
+    const j = await untWriteCells(path,
+      [{ row: rowIdx, col: 0, value: to }], sys + " → " + to);
+    inp.disabled = false;
+    if (!j || !j.ok) {
+      inp.value = sys;
+      return;
+    }
+    // Имя ушло: правим элемент слоя на месте, едем выбором, красим заново.
+    const layers = (state.units && state.units.layers) || [];
+    layers.forEach(L => {
+      if (L.key !== layerKey) return;
+      const items = (((L.cats || {})[cat] || {}).items) || [];
+      items.forEach(x => { if (x.sys === sys) x.sys = to; });
+    });
+    delete (state.units.iconMap || {})[sys];
+    state.units.sel = to;
+    untPaintAllLists();
+    document.querySelectorAll("#unt-main .unt-detail").forEach(untPaintTypeDetail);
+    untEnsureIcons().catch(() => {});
+    toast(t("saved") || "Сохранено", "ok");
+    return;
+  }
+  inp.disabled = true;
+  const j = await untWriteCells(path,
+    [{ row: rowIdx, col, value: nv }], sys + " " + String((data.columns || [])[col] || col));
+  inp.disabled = false;
+  if (!j || !j.ok) return;
+  // Цена и вместимость живут на чипах: правим кэши и красим списки заново.
+  try {
+    const colName = String(((data && data.columns) || [])[col] || "");
+    if (colName === "cost" && state.units.prices && state.units.prices[cat])
+      state.units.prices[cat][sys] = nv;
+    if (colName === "people_capacity" && typeof vehCapMap !== "undefined" && vehCapMap
+        && (typeof uprSrcRoot !== "function" || uprSrcRoot() === untSrcRoot()))
+      vehCapMap[sys] = String(parseInt(nv, 10) || 0);
+  } catch (e) { /* кэши необязательны */ }
+  untPaintAllLists();
 }
 
 // Анализ: сводка-счётчики по классам (без конвертации иконок — это T5-витрина).
