@@ -1,0 +1,83 @@
+/* units.css — редактор юнитов species: пулы, секторы, категории, чипы · последний в каскаде (<link> в templates/index.html после overrides.css) */
+/* обёртка сегмента-источника «Проект | Игра | Мод»: не даёт шапке сжать сегмент */
+.unt-src-wrap { position: relative; flex-shrink: 0; }
+/* контейнер пулов: вертикальная лента категорий-классов друг под другом (рендерит JS в T5) */
+.unt-main { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+/* пул-сектор: сектор 0 — «Общий пул», дальше по одному на источник при нужде */
+.unt-sec { border: 1px solid var(--border); background: var(--bg-card); padding: 10px 12px; }
+.unt-sector-head { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 700; margin-bottom: 10px; }
+.unt-sector-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* категория-класс внутри сектора: заголовок + витрина чипов */
+.unt-cat { margin-bottom: 14px; }
+.unt-cat:last-child { margin-bottom: 0; }
+.unt-cat-title { font-size: 11px; font-weight: 700; color: var(--text-mute); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+.unt-cat-body {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  border: 1px solid var(--border); background: var(--bg-card); padding: 8px;
+}
+/* витрины чипов — впритык, как кампания/карта: 2px между чипами */
+#units-tab .unt-cat-body { gap: 2px; }
+/* чип юнита: весь чип — ручка переноса */
+.unt-chip { position: relative; cursor: grab;
+  display: inline-flex; align-items: center; gap: 4px;
+  border: 1px solid var(--border); background: var(--bg); padding: 2px 4px 2px 6px;
+}
+.unt-chip:active { cursor: grabbing; }
+.unt-chip.unknown { border-color: #f2c500; }
+.unt-chip.unknown::after { content: "?"; color: #f2c500; font-weight: 700; }
+/* карточка = чистая иконка реального размера; без подложки и рамок */
+.unt-card { border-color: transparent; background: transparent; padding: 3px; min-width: 40px; min-height: 40px; }
+#units-tab .unt-cat-body .unt-chip.unt-card { padding: 0; border: none; }
+.unt-card:hover { outline: 1px dashed var(--border); }
+.unt-chip-icon { display: block; user-select: none; pointer-events: none; background-repeat: no-repeat; min-width: 32px; min-height: 32px; }
+.unt-chip-icon.noicon { display: none; }
+/* чипы-иконки отрядов — 72px, как squad-слоты */
+#units-tab .unt-cat-body[data-cat="squads"] .unt-chip.unt-card .unt-chip-icon { width: 72px; height: auto; }
+/* иконка техники и предметов на 5px ниже, пехота остаётся как была */
+.unt-cat-body[data-cat="cars"] .unt-chip:not(.veh) .unt-chip-icon,
+.unt-cat-body[data-cat="tanks"] .unt-chip:not(.veh) .unt-chip-icon,
+.unt-cat-body[data-cat="helicopters"] .unt-chip:not(.veh) .unt-chip-icon,
+.unt-cat-body[data-cat="inventory_items"] .unt-chip:not(.veh) .unt-chip-icon {
+  margin-top: 5px;
+}
+/* слот техники: фон unitslot_main.webp, sysname сверху, тёмная полоса мест 0/N */
+.unt-chip.unt-card.veh { display: inline-flex; flex-direction: column;
+  align-items: center; justify-content: flex-start;
+  background: url(/assets/campaign/unitslot_main.webp) center no-repeat;
+  min-width: 148px; min-height: 110px; }
+#units-tab .unt-cat-body .unt-chip.unt-card.veh { padding: 3px 4px 5px; border: none; }
+.unt-chip-veh-sys { display: block; max-width: 100%; margin: 0 auto;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  text-align: center; font-size: 11px; font-weight: 700; color: #c9d8e8;
+  pointer-events: none; user-select: none; }
+.unt-chip-veh-cap { display: block; position: absolute;
+  top: 27px; left: calc(17% + 1px); right: 0; background: rgba(0,0,0,.35);
+  color: #fff; font-size: 10px; font-weight: 700; text-align: center; line-height: 1.15;
+  pointer-events: none; user-select: none; }
+.unt-chip.veh .unt-chip-icon { align-self: center; }
+.unt-chip.unt-card.veh .unt-chip-icon { width: 124px; height: auto; }
+/* слот пехоты: фон unitslot_main_inf.webp, sysname сверху, численность N/N слева внизу */
+.unt-chip.unt-card.inf { display: inline-flex; flex-direction: column;
+  align-items: center; justify-content: flex-start;
+  background: url(/assets/campaign/unitslot_main_inf.webp) center no-repeat;
+  min-width: 148px; min-height: 110px; }
+.unt-chip.inf .unt-chip-icon { align-self: center; }
+.unt-chip.unt-card.inf .unt-chip-icon { width: 72px; height: auto;
+  margin-top: auto; margin-bottom: auto; }
+#units-tab .unt-cat-body .unt-chip.unt-card.inf { padding: 3px 4px 5px; border: none; }
+.unt-chip-inf-num { position: absolute; left: 2px; bottom: 2px;
+  background: transparent; color: #fff;
+  font-size: 12px; font-weight: 700; text-align: center; line-height: 1.4;
+  padding: 2px 5px; pointer-events: none; user-select: none; z-index: 2; }
+/* кнопка-добавление — иконка последней в ряду категории */
+.unt-chip-add { border: none; background: transparent; padding: 3px; cursor: pointer;
+  display: inline-flex; align-items: center; max-width: fit-content;
+  flex-grow: 0; flex-shrink: 0; }
+.unt-chip-add-icon { display: block; pointer-events: none; }
+.unt-chip-add:hover { color: var(--accent); }
+.unt-chip-add:hover .unt-chip-add-icon { outline: 1px dashed var(--accent); }
+/* бейдж источника чипа: basis или DLC-оверлей (Legion/Resistance) */
+.unt-src-badge { position: absolute; right: 4%; bottom: 2px; display: flex;
+  align-items: center; background: rgba(0,0,0,.55);
+  padding: 2px 7px; font-size: 11px; font-weight: 700; color: #fff;
+  pointer-events: none; z-index: 2; line-height: 1.4; }

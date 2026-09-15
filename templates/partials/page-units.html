@@ -1,0 +1,25 @@
+<!-- partials/page-units.html — редактор юнитов species -->
+        <!-- Редактор юнитов (пулы species: squads/cars/tanks/helicopters/inventory_items + humans) -->
+        <section class="tab-panel" id="units-tab" data-tab-id="units">
+          <div class="swt-page">
+            <div class="swt-head">
+              <div class="swt-head-main">
+                <h2 class="cm-title" data-i18n="unt_title">Редактор юнитов</h2>
+                <div class="cm-sub" id="unt-file" data-i18n="unt_sub">Юниты species: отряды, техника, предметы и пехота</div>
+              </div>
+              <div class="unt-src-wrap">
+                <div class="src-seg" id="unt-src" data-pos="0" role="tablist">
+                  <span class="src-seg-ind" aria-hidden="true"></span>
+                  <button type="button" class="src-seg-btn" data-src="project" role="tab"><span data-i18n="tree_tab_project">Проект</span></button>
+                  <button type="button" class="src-seg-btn" data-src="game" role="tab"><span data-i18n="tree_tab_game">Игра</span></button>
+                  <button type="button" class="src-seg-btn" data-src="mod" role="tab"><span data-i18n="tree_tab_mod">Мод</span></button>
+                </div>
+              </div>
+              <button class="btn" id="unt-reload" data-i18n="unt_reload" hidden>Обновить</button>
+              <button class="btn" id="unt-analyze" data-i18n="unt_analyze" hidden>Анализ</button>
+              <button class="btn" id="unt-open-grid" data-i18n="unt_open_grid" hidden>Открыть в таблице</button>
+              <button class="icon-btn cmp-fs-btn" id="unt-fs" data-i18n-title="cmp_fullscreen" title="На весь экран" hidden><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+            </div>
+            <div class="unt-main" id="unt-main"></div>
+          </div>
+        </section>

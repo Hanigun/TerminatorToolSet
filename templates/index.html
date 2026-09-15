@@ -7,7 +7,7 @@
   <!-- Стили нарезаны по фичам (порядок = каскад, как был в style.css):
        base -> chrome -> sidebar -> popups -> tabs -> tree -> grid ->
         dialogs -> create -> swt -> uprising -> campaign -> dnd -> compare -> findbar ->
-       history -> menus -> widgets -> theme -> unpacker -> overrides.
+       history -> menus -> widgets -> theme -> unpacker -> overrides -> units.
        Гейт клеит их по CSS_ORDER в scripts/verify-ui-wiring.mjs -->
   <link rel="stylesheet" href="/static/css/base.css?v={{ v }}">
   <link rel="stylesheet" href="/static/css/chrome.css?v={{ v }}">
@@ -30,6 +30,7 @@
   <link rel="stylesheet" href="/static/css/theme.css?v={{ v }}">
   <link rel="stylesheet" href="/static/css/unpacker.css?v={{ v }}">
   <link rel="stylesheet" href="/static/css/overrides.css?v={{ v }}">
+  <link rel="stylesheet" href="/static/css/units.css?v={{ v }}">
 </head>
 <body>
   <header class="topbar pywebview-drag-region">
@@ -208,6 +209,7 @@
         {% include "partials/page-uprising.html" %}
         {% include "partials/page-campaign.html" %}
         {% include "partials/page-uprising-rnd.html" %}
+        {% include "partials/page-units.html" %}
       </div>
     </div>
   </main>
@@ -632,6 +634,7 @@
       "/static/js/campaign.js?v={{ v }}",
       "/static/js/chrome.js?v={{ v }}",
       "/static/js/history.js?v={{ v }}",
+      "/static/js/units.js?v={{ v }}",
       "/static/js/init.js?v={{ v }}",
       "/static/js/upr-random.js?v={{ v }}",
       "/static/js/upr-cfg-editor.js?v={{ v }}"
