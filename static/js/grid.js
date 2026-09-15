@@ -11,11 +11,12 @@ function toggleSidebar() {
 }
 
 function updateSidebarVisibility() {
-  // compare & unpacker & uprising & campaign pages: full window width, no sidebar.
-  // SWT-страница остаётся с сайдбаром: там нужно дерево с фильтром .swt
+  // compare & unpacker & uprising & campaign & units pages: full window width, no sidebar.
+  // SWT-страница остаётся с сайдбаром: там нужно дерево с фильтром .swt.
+  // Редактору юнитов древо тоже не нужно — только слои species во всю ширину.
   const onWide = state.activeTabId === "compare" || state.activeTabId === "unpacker"
     || state.activeTabId === "uprising" || state.activeTabId === "uprising-rnd"
-    || state.activeTabId === "campaign";
+    || state.activeTabId === "campaign" || state.activeTabId === "units";
   // древо видно и без открытого проекта — по «Игре»/«Моду», если пути заданы
   const hasProject = (!!(state.project && state.project.files && state.project.files.length)
     || srcAvail("game") || srcAvail("mod")) && !onWide;

@@ -1,38 +1,35 @@
 /* TerminatorToolSet frontend — units.js: вкладка «Редактор юнитов» (S5+S6).
    Классический скрипт, общий глобальный скоуп, порядок загрузки — FILES в templates/index.html.
    S5: чтение и витрина (слои, шапка). S6: попап-редактор, CRUD, контекстные меню. */
-// Категории-классы вкладки: пять species-файлов + humans как справочник пехоты.
-// Порядок — как найм в кампании: сначала отряды и техника, затем предметы и пехота.
-var UNT_CATS = ["squads", "cars", "tanks", "helicopters", "inventory_items", "humans"];
+// Категории-классы вкладки: пять species-файлов. Пехоты (humans) здесь нет —
+// это не юниты, а солдаты внутри отрядов (связи squads→humans проверяет
+// untCheckSquadRefs справочником). Порядок — как найм в кампании: сначала
+// отряды и техника, затем предметы.
+var UNT_CATS = ["squads", "cars", "tanks", "helicopters", "inventory_items"];
 // Иконки классов — РОВНО как заголовки секций кампании (CMP_CAT_ICONS,
 // campaign.js): infantry/light_vehicle/tank/heli/supply_vehicle из
-// assets/campaign/UnitSet; humans — та же пехота, что squads.
+// assets/campaign/UnitSet.
 var UNT_CAT_ICONS = {
   squads: "infantry.webp",
   cars: "light_vehicle.webp",
   tanks: "tank.webp",
   helicopters: "heli.webp",
   inventory_items: "supply_vehicle.webp",
-  humans: "infantry.webp",
 };
 function untCatIcon(cat) {
   return "/assets/campaign/UnitSet/" + (UNT_CAT_ICONS[cat] || "infantry.webp");
 }
 // Шеврон сворачивания — РОВНО как в SWT (swt.js:1239, swtItemCard:855).
 var UNT_CHEV_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
-// Иконки источника (Проект | Игра | Мод) — РОВНО значки вкладок дерева
-// (templates/index.html: sb-tab-project/game/mod): папка, геймпад, куб.
-var UNT_SRC_SVG = {
-  project: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg>',
-  game: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12h4m-2-2v4m8-1h.01M18 10h.01M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z"/></svg>',
-  mod: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
-};
-// Значок источника для шапок слоёв и типов: иконка + подпись из словаря.
+// Значок источника для шапок слоёв и типов — РОВНО значки вкладок дерева
+// и таббара (FOLDER_SVG/GAMEPAD_SVG/MOD_SVG, grid.js): папка, геймпад, куб.
 function untSrcBadge() {
   const v = (state && state.treeView) || "project";
   const el = document.createElement("span");
   el.className = "unt-src-ico unt-src-" + v;
-  el.innerHTML = UNT_SRC_SVG[v] || UNT_SRC_SVG.project;
+  try {
+    el.innerHTML = v === "game" ? GAMEPAD_SVG : v === "mod" ? MOD_SVG : FOLDER_SVG;
+  } catch (e) { /* без иконки — только подпись в title */ }
   const lab = t("tree_tab_" + v) || v;
   el.title = lab;
   el.setAttribute("aria-label", lab);
@@ -54,11 +51,8 @@ function untLayerShortPath(L) {
   return untShortPath(p);
 }
 // Иконки строк и тела — РОВНО чипы кампании (cmpChip, campaign.js):
-// чистая иконка .upr-chip.upr-card + .upr-chip-icon, без слотов veh/inf
-// и подложек.
-// Белые колонки статов species (_STAT_COLS, api/sheets.py): только их правит
-// попап-редактор; произвольные колонки писать нельзя.
-var UNT_STAT_COLS = ["cost", "cp_cost", "supply_consumption", "people_capacity", "unit_set"];
+// чистая иконка .upr-chip.upr-card + .upr-chip-icon, шильдик цены
+// и декор слота vehDecor (без шильдика basis/DLC).
 
 // Единственный дефолт состояния вкладки (старт + закрытие вкладки):
 // layers = [{key:'basis'|'dlc:<Имя>', label, open, cats:{cat:{path, columns,
@@ -68,11 +62,12 @@ var UNT_STAT_COLS = ["cost", "cp_cost", "supply_consumption", "people_capacity",
 // cat/sel/selLayer — выбранный юнит (тройка: слой, класс, sysname), один на
 // вкладку; iconMap — свои иконки (sysname -> data-URL webp, НЕ карта uprising),
 // iconsReady/iconsLoading/iconSeq — готовность/загрузка/поколение батча,
-// detSeq — поколение тела (защита от гонки чтений при быстрых кликах).
+// поколение чтения тела — своё на каждой карточке (box.__detSeq, защита
+// от гонки параллельных чтений строк).
 function untFreshState() {
   return { src: "", layers: [], loading: false, loadSeq: 0, analyzing: false, clip: null,
     cat: "squads", sel: null, selLayer: null, iconMap: {}, iconsReady: false, iconsLoading: false,
-    iconSeq: 0, detSeq: 0, prices: {}, stats: {}, pricesReady: false, pricesLoading: false };
+    iconSeq: 0, prices: {}, stats: {}, pricesReady: false, pricesLoading: false };
 }
 
 // Корень текущего глобального источника (Проект | Игра | Мод), как у карты и кампании.
@@ -573,8 +568,8 @@ function untFirstSlot(optCat) {
 
 // Список юнитов карточки типа — РОВНО ряд найма кампании
 // (campaign.js:810-839): чипы + кнопка «+» последней в ряду.
-// Выбор — клик, попап — двойной клик, меню — правая кнопка
-// (чип — untChipCtx, пустое место ряда — untCatCtx).
+// Выбор — клик, меню — правая кнопка
+// (чип — untChipCtx, пустое место ряда — untCatCtx); попапа нет.
 function untPaintTypeList(list) {
   if (!list) return;
   const st = list.scrollTop;
@@ -620,9 +615,8 @@ function untPaintAllLists() {
 // Имя — только в подсказке (sysname + цена + путь).
 function untRow(layerKey, it, cat) {
   const row = document.createElement("span");
+  // Рамки выделения на юнитах нет: выбранный виден только в теле справа.
   row.className = "upr-chip upr-card unt-row";
-  if (it.sys === state.units.sel && layerKey === state.units.selLayer
-      && cat === state.units.cat) row.classList.add("sel");
   row.dataset.sys = it.sys;
   row.dataset.layer = layerKey || "";
   row.dataset.cat = cat;
@@ -659,14 +653,11 @@ function untRow(layerKey, it, cat) {
   }
   // Подложка слота + sysname + полоса вместимости — как найм кампании.
   if (typeof vehDecor === "function") vehDecor(row, it.sys, cat, untSrcRoot());
-  // Клик — выбор и тело; двойной клик — попап untEditUnit; ПКМ — меню чипа.
+  // Клик — выбор и тело; попапа редактирования нет (всё правится в теле);
+  // ПКМ — меню чипа (добавить/копировать/вырезать/удалить/вставить/таблица).
   row.addEventListener("click", ev => {
     ev.stopPropagation();
     untSelect(layerKey, cat, it.sys);
-  });
-  row.addEventListener("dblclick", ev => {
-    ev.stopPropagation();
-    untEditUnit(cat, it.sys, row).catch(() => {});
   });
   row.addEventListener("contextmenu", e => untChipCtx(e, layerKey, cat, it.sys));
   return row;
@@ -702,9 +693,10 @@ async function untEnsurePrices() {
   }
 }
 
-// Выбор чипа: тройка (слой, класс, sysname) — одна на вкладку; подсветка
-// без полной перерисовки списков (иконки не перезапрашиваются) +
-// перерисовка тел всех карточек (тело показывает только свой слот).
+// Выбор чипа: тройка (слой, класс, sysname) — одна на вкладку; чипы не
+// трогаем вообще (рамок выделения и подмены selected-иконки нет —
+// selected-пара могла быть другого размера и «сжимала» иконку),
+// перерисовываем только тела карточек (тело показывает только свой слот).
 function untSelect(layerKey, cat, sys) {
   if (!state.units) return;
   if (state.units.selLayer === layerKey && state.units.cat === cat
@@ -712,15 +704,6 @@ function untSelect(layerKey, cat, sys) {
   state.units.selLayer = layerKey;
   state.units.cat = cat;
   state.units.sel = sys;
-  document.querySelectorAll("#unt-main .unt-row").forEach(r => {
-    const on = r.dataset.sys === sys
-      && r.dataset.layer === (layerKey || "") && r.dataset.cat === cat;
-    r.classList.toggle("sel", on);
-    // выбранная иконка — свой selected-стейт (ховер-пара с бэкенда).
-    if (typeof uprChipStatePaint === "function") {
-      try { uprChipStatePaint(r); } catch (e) {}
-    }
-  });
   document.querySelectorAll("#unt-main .unt-detail").forEach(untPaintTypeDetail);
 }
 
@@ -787,7 +770,11 @@ async function untPaintTypeDetail(box) {
   const cat = box.dataset.cat;
   const mine = state.units.sel && state.units.selLayer === layerKey
     && state.units.cat === cat;
-  const my = ++state.units.detSeq;
+  // Поколение чтения — своё на каждую карточку: общий счётчик на вкладку
+  // гасил все тела, кроме последнего (параллельные чтения строк), и тело
+  // показывало только иконку без параметров.
+  box.__detSeq = (box.__detSeq || 0) + 1;
+  const my = box.__detSeq;
   const sys = mine ? state.units.sel : null;
   box.innerHTML = "";
   const item = sys ? untFindLayerItem(layerKey, cat, sys) : null;
@@ -836,7 +823,7 @@ async function untPaintTypeDetail(box) {
   // Параметры: читаем строку файла своего слоя (без побочных эффектов,
   // как добор оверлеев в renderUnits).
   const got = await untReadRows(item.path);
-  if (my !== state.units.detSeq || state.units.sel !== sys
+  if (my !== box.__detSeq || state.units.sel !== sys
       || state.units.cat !== cat || state.units.selLayer !== layerKey)
     return;
   const data = untLayerCatData(layerKey, cat);
@@ -1085,16 +1072,6 @@ function untFindLayerItem(layerKey, cat, sys) {
   return null;
 }
 
-// Первый слой, где лежит строка (для выбора после переименования).
-function untLayerOf(cat, sys) {
-  const layers = (state.units && state.units.layers) || [];
-  for (const L of layers) {
-    const items = (((L.cats || {})[cat] || {}).items) || [];
-    if (items.some(x => x.sys === sys)) return L.key;
-  }
-  return null;
-}
-
 // Элемент витрины {sys, src, path} или null.
 function untFindItem(cat, sys) {
   const d = untCatData(cat);
@@ -1121,14 +1098,6 @@ function untUniqueSys(base) {
   let n = 2;
   while (busy.has(v + "_" + n)) n++;
   return v + "_" + n;
-}
-
-// Индекс колонки по имени заголовка или -1.
-function untColIdx(columns, name) {
-  for (let i = 0; i < (columns || []).length; i++) {
-    if (String(columns[i]).trim() === name) return i;
-  }
-  return -1;
 }
 
 // Строки species-файла чтением без побочных эффектов (образец добора оверлеев
@@ -1177,233 +1146,9 @@ async function untResolveTargets(cat, sys) {
   return out;
 }
 
-// Текущий открытый элемент попапа-редактора (один за раз, как у кампании).
-var untEditPopEl = null;
-
-// Попап-редактор строки/чипа (образец cmpEditPop): sysname + поля класса из
-// белых колонок _STAT_COLS, присутствующих в файле. Статы пишутся через
-// /api/species_stat (первый файл со строкой — basis при дубле), затем зеркало
-// вниз в DLC-копии через untWriteCells; переименование — батчем edit_cells по
-// всем копиям (одна запись истории на файл). После — перечитать витрину.
-async function untEditUnit(cat, sys, anchorEl) {
-  if (untEditPopEl) { try { untEditPopEl.remove(); } catch (e) {} untEditPopEl = null; }
-  const item = untFindItem(cat, sys);
-  if (!item || !item.path) { toast(t("unt_sub") || "error", "err"); return; }
-  const targets = await untResolveTargets(cat, sys);
-  if (!targets.length) { toast(sys, "err"); return; }
-  const base = targets[0];
-  const cols = base.columns || [];
-  // Редактируемые статы: белые колонки, реально существующие в файле.
-  const statCols = UNT_STAT_COLS.filter(c => untColIdx(cols, c) !== -1);
-  const curVal = c => {
-    const ci = untColIdx(cols, c);
-    return ci === -1 ? "" : String((base.values[ci] !== undefined && base.values[ci] !== null)
-      ? base.values[ci] : "");
-  };
-  const pop = document.createElement("div");
-  pop.className = "upr-edit-pop";
-  const mkRow = (title, desc) => {
-    const row = document.createElement("div");
-    row.className = "upr-edit-row";
-    const lab = document.createElement("div");
-    lab.className = "upr-edit-lab";
-    const b = document.createElement("b");
-    b.textContent = title;
-    const s = document.createElement("span");
-    s.textContent = desc;
-    lab.append(b, s);
-    row.appendChild(lab);
-    pop.appendChild(row);
-    return row;
-  };
-  // Системное имя (переименование — батчем по всем копиям).
-  const rowS = mkRow(t("upr_f_sysname") || "Системное имя", (cat || "") + ".xml");
-  const nm = document.createElement("input");
-  nm.type = "text";
-  nm.className = "upr-chip-name";
-  nm.value = sys;
-  nm.spellcheck = false;
-  rowS.appendChild(nm);
-  try {
-    if (typeof swtAutocomplete === "function")
-      swtAutocomplete(nm, () => Array.from(untAllSys()),
-        v => { nm.value = v; }, { openOnFocus: false });
-  } catch (e) { /* без автокомплита тоже правится */ }
-  // Поля класса + cost/cp_cost/supply_consumption/people_capacity/unit_set.
-  const inputs = {};
-  statCols.forEach(c => {
-    const r = mkRow(c, (t("unt_class_" + cat) || cat) + " · " + ((item.src) || "basis"));
-    const inp = document.createElement("input");
-    inp.type = "text";
-    inp.className = "mini";
-    inp.spellcheck = false;
-    inp.value = curVal(c);
-    // Класс техники — то же комбо, что в кампании и таблице.
-    if (c === "unit_set" && typeof makeUnitSetCombo === "function"
-        && typeof unitSetChoices === "function") {
-      const hold = document.createElement("div");
-      hold.className = "upr-edit-set";
-      hold.appendChild(inp);
-      try { makeUnitSetCombo(hold, inp, unitSetChoices([inp.value]), "unit_set"); }
-      catch (e) { r.appendChild(inp); return; }
-      r.appendChild(hold);
-    } else r.appendChild(inp);
-    inputs[c] = inp;
-  });
-  const btns = document.createElement("div");
-  btns.className = "upr-edit-btns";
-  const delB = document.createElement("button");
-  delB.className = "btn sm danger";
-  delB.textContent = t("unt_delete") || t("delete") || "Удалить";
-  const canB = document.createElement("button");
-  canB.className = "btn sm ghost";
-  canB.textContent = t("cancel") || "Отмена";
-  const okB = document.createElement("button");
-  okB.className = "btn sm accent";
-  okB.textContent = t("save") || "Сохранить";
-  btns.append(delB, canB, okB);
-  pop.appendChild(btns);
-  // Позиция — у якоря (чипа), иначе по центру вьюпорта.
-  document.body.appendChild(pop);
-  untEditPopEl = pop;
-  try {
-    const vw = window.innerWidth, vh = window.innerHeight;
-    pop.style.position = "fixed";
-    pop.style.zIndex = 60;
-    if (anchorEl && anchorEl.getBoundingClientRect) {
-      const rc = anchorEl.getBoundingClientRect();
-      pop.style.left = Math.max(8, Math.min(rc.left, vw - pop.offsetWidth - 8)) + "px";
-      pop.style.top = Math.max(8, Math.min(rc.bottom + 6, vh - pop.offsetHeight - 8)) + "px";
-    } else {
-      pop.style.left = Math.max(8, (vw - pop.offsetWidth) / 2) + "px";
-      pop.style.top = Math.max(8, (vh - pop.offsetHeight) / 2) + "px";
-    }
-  } catch (e) { /* поверх всё равно видно */ }
-  let closed = false;
-  const close = () => {
-    closed = true;
-    document.removeEventListener("mousedown", outside, true);
-    if (untEditPopEl === pop) untEditPopEl = null;
-    try { pop.remove(); } catch (e) {}
-  };
-  const outside = e => {
-    if (e.target.closest && (e.target.closest(".swt-ac-panel") ||
-        e.target.closest(".unit-combo-pop"))) return;
-    if (untEditPopEl === pop && !pop.contains(e.target)) close();
-  };
-  document.addEventListener("mousedown", outside, true);
-  pop.addEventListener("mousedown", ev => ev.stopPropagation());
-  delB.onclick = e => {
-    e.stopPropagation();
-    close();
-    untDelUnit(cat, sys).catch(() => {});
-  };
-  canB.onclick = e => { e.stopPropagation(); close(); };
-  okB.onclick = e => { e.stopPropagation(); commit().catch(() => {}); };
-  [nm].concat(Object.keys(inputs).map(k => inputs[k])).forEach(el => {
-    if (!el) return;
-    el.addEventListener("keydown", ev => {
-      if (ev.key === "Enter") { ev.preventDefault(); commit().catch(() => {}); }
-      else if (ev.key === "Escape") { ev.preventDefault(); close(); }
-    });
-    el.addEventListener("mousedown", ev => ev.stopPropagation());
-  });
-  async function commit() {
-    if (closed) return;
-    const newSys = nm.value.trim();
-    if (!newSys) { close(); return; }
-    if (newSys !== sys && untAllSys().has(newSys)) {
-      toast(newSys, "err");
-      return;
-    }
-    // Изменившиеся статы (непустые и отличные от текущих).
-    const diff = {};
-    statCols.forEach(c => {
-      const v = inputs[c].value.trim();
-      if (v !== "" && v !== curVal(c)) diff[c] = v;
-    });
-    let ok = true;
-    // Переименование — батчем по всем копиям (одна запись истории на файл).
-    if (newSys !== sys) {
-      for (const tg of targets) {
-        const j = await untWriteCells(tg.path,
-          [{ row: tg.row, col: 0, value: newSys, type: "String" }],
-          sys + " → " + newSys);
-        if (!j || !j.ok) ok = false;
-      }
-    }
-    // Статы — через /api/species_stat (первый файл со строкой), затем зеркало
-    // вниз в остальные копии (правка basis при дубле в DLC).
-    const statNames = Object.keys(diff);
-    if (statNames.length) {
-      const effName = newSys;
-      let sj = null;
-      try {
-        const r = await api("/api/species_stat", { method: "POST",
-          body: JSON.stringify({ root: untSrcRoot(), cat,
-            name: (newSys !== sys ? newSys : sys), stats: diff, save: true }) });
-        sj = await r.json();
-      } catch (e) { sj = null; }
-      if (!sj || !sj.ok) {
-        // species_stat не нашёл строку (переименование уже ушло вниз):
-        // пишем статы напрямую батчем по копиям с новым именем.
-        if (sj && sj.error === "no_such_unit") sj = null;
-        else { toast((sj && sj.error) || "error", "err"); ok = false; }
-      }
-      if (sj && sj.ok) {
-        if (sj.skipped && sj.skipped.length)
-          toast((sj.path || "").split(/[\\/]/).pop() + ": " + sj.skipped.join(", "), "err");
-        try {
-          if (typeof syncFileTabsCells === "function" && sj.path)
-            syncFileTabsCells(sj.path, sj.cells || [], 0);
-        } catch (e) {}
-        // Зеркало вниз: остальные копии с той же строкой.
-        for (const tg of targets) {
-          if (sj.path && tg.path === sj.path) continue;
-          const fresh = await untReadRows(tg.path);
-          if (!fresh) continue;
-          const rcols = (fresh.columns && fresh.columns.length) ? fresh.columns : tg.columns;
-          const ri = untFindRow(fresh.rows, effName);
-          if (ri === -1) continue;
-          const cells = [];
-          statNames.forEach(c => {
-            const ci = untColIdx(rcols, c);
-            if (ci !== -1) cells.push({ row: ri, col: ci, value: diff[c] });
-          });
-          if (cells.length) {
-            const mj = await untWriteCells(tg.path, cells, effName + " " + statNames[0]);
-            if (!mj || !mj.ok) ok = false;
-          }
-        }
-      } else if (sj === null && statNames.length) {
-        // Запасной путь: пишем статы батчем напрямую по копиям.
-        for (const tg of targets) {
-          const cells = [];
-          statNames.forEach(c => {
-            const ci = untColIdx(tg.columns, c);
-            if (ci !== -1) cells.push({ row: tg.row, col: ci, value: diff[c] });
-          });
-          if (cells.length) {
-            const dj = await untWriteCells(tg.path, cells, effName + " " + statNames[0]);
-            if (!dj || !dj.ok) ok = false;
-          }
-        }
-      }
-    }
-    close();
-    // Переименование ушло вниз — выбор едет на новое имя в том же слое
-    // и классе, иначе валидация renderUnits сбросит тело на первый слот.
-    if (newSys !== sys && state.units) {
-      state.units.cat = cat;
-      state.units.selLayer = untLayerOf(cat, sys) || state.units.selLayer;
-      state.units.sel = newSys;
-    }
-    // Оверлеи читались мимо живых сессий — перечитать витрину категории.
-    await renderUnits(true).catch(() => {});
-    if (ok) toast(t("saved") || "Сохранено", "ok");
-  }
-  try { nm.focus(); nm.select(); } catch (e) {}
-}
+// Попап-редактор удалён полностью: все параметры строки правятся прямо
+// в теле карточки (untPaintTypeDetail/untDetailCommit) — отдельных окон
+// редактирования нет ни по даблклику, ни из меню.
 
 // Проверка связей squads→humans справочником /api/units_refs: предупреждает,
 // каких sysname из строки нет среди известных (эвристика: числа пропускаем).
@@ -1717,16 +1462,15 @@ async function untReplaceSys() {
   if (ok) toast(t("saved") || "Сохранено", "ok");
 }
 
-// Меню чипа (образец uprChipCtx): добавить/править/копировать/вырезать/
-// удалить/вставить + открыть в таблице. Добавление и вставка пишут в файл
-// своего слоя.
+// Меню чипа (образец uprChipCtx): добавить/копировать/вырезать/
+// удалить/вставить + открыть в таблице. Пункта редактирования нет —
+// все параметры правятся прямо в теле карточки. Добавление и вставка
+// пишут в файл своего слоя.
 function untChipCtx(e, layerKey, cat, sys) {
   const hasClip = !!((state.units && state.units.clip && state.units.clip.items || []).length);
   openCtxMenu(e, [
     { label: t("unt_add") || "Добавить", icon: "add",
       fn: () => { untAddUnit(cat, null, layerKey).catch(() => {}); } },
-    { label: t("unt_edit") || "Редактировать", icon: "edit",
-      fn: () => { untEditUnit(cat, sys, null).catch(() => {}); } },
     { label: t("unt_copy") || "Копировать", icon: "copy",
       fn: () => { untCopyUnit(cat, sys, false).catch(() => {}); } },
     { label: t("ctx_cut") || "Вырезать", icon: "cut",

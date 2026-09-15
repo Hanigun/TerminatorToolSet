@@ -10,23 +10,29 @@
 .unt-layer-head { padding: 8px 12px; }
 /* базовая игра — акцентная левая полоса вместо фиолетовой SWT */
 .unt-layer-head.unt-layer-base { border-left-color: var(--accent); }
-/* чип слоя: Base Game — акцентный, DLC — нейтральный */
-.unt-layer-chip { display: inline-flex; align-items: center; padding: 3px 12px;
-  font-size: 12px; font-weight: 700; color: var(--text-mute);
-  border: 1px solid var(--border); border-radius: 10px;
+/* чип слоя: Base Game — акцентный с тёмным текстом, DLC — нейтральный.
+   Скругление минимальное (3px, как острые углы программы). Вес селекторов —
+   выше родного .swt-sec-head > span из swt.css, иначе его muted-цвет и капс
+   перекрывают чип и Base Game не читается. */
+.swt-sec-head > span.unt-layer-chip { display: inline-flex; align-items: center;
+  padding: 3px 12px; font-size: 12px; font-weight: 700; color: var(--text-mute);
+  border: 1px solid var(--border); border-radius: 3px;
   text-transform: none; letter-spacing: 0; white-space: nowrap; }
-.unt-layer-chip-base { background: var(--accent); border-color: var(--accent);
-  color: #14161a; }
-/* короткий путь слоя (.../basis/scripts/species) */
-.unt-layer-path { flex: 1 1 auto; min-width: 0; overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap; font-size: 11px;
-  font-weight: 400; color: var(--text-mute); text-transform: none;
-  letter-spacing: 0; }
+.swt-sec-head > span.unt-layer-chip-base { background: var(--accent);
+  border-color: var(--accent); color: #14161a; }
+/* короткий путь слоя (.../basis/scripts/species) — тем же весом, иначе
+   капс из SWT превращает путь в верхний регистр */
+.swt-sec-head > span.unt-layer-path { flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; font-weight: 400; color: var(--text-mute);
+  text-transform: none; letter-spacing: 0; }
 /* сводка слоя в шапке секции */
-.unt-layer-sum { font-size: 11px; font-weight: 400; color: var(--text-mute); text-transform: none; letter-spacing: 0; }
+.swt-sec-head > span.unt-layer-sum { font-size: 11px; font-weight: 400;
+  color: var(--text-mute); text-transform: none; letter-spacing: 0; }
 /* иконка источника (Проект | Игра | Мод) в шапках слоёв и типов */
 .unt-src-ico { flex: none; display: inline-flex; align-items: center;
   color: var(--text-mute); margin-left: auto; }
+.unt-src-ico svg { width: 14px; height: 14px; display: block; }
 .unt-layer-head .unt-src-ico { margin-left: 0; }
 .unt-type-head .unt-src-ico { margin-left: auto; }
 /* карточка типа: базовая игра — акцентная полоса, как слой */
@@ -70,9 +76,8 @@
 /* плюс-кнопка — своим рядом у левого края блока */
 #units-tab .upr-cat-body > .upr-chip-add {
   grid-column: 1 / -1; justify-self: start; padding: 0; }
-/* выбранный чип — как найм кампании (campaign.css: #campaign-tab .sel) */
-#units-tab .upr-cat-body .upr-chip.sel { outline: 2px solid var(--accent);
-  outline-offset: -2px; }
+/* рамок выделения на юнитах нет: выбранный виден только в теле справа */
+#units-tab .upr-cat-body .upr-chip.sel { outline: none; }
 /* ресайзер ширины списка — клон .cmp-resizer кампании */
 .unt-resizer {
   flex: 0 0 6px; align-self: stretch; padding: 0; margin: 0 8px 0 0;
