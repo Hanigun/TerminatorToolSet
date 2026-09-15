@@ -4,8 +4,9 @@
 // Категории-классы вкладки: пять species-файлов + humans как справочник пехоты.
 // Порядок — как найм в кампании: сначала отряды и техника, затем предметы и пехота.
 var UNT_CATS = ["squads", "cars", "tanks", "helicopters", "inventory_items", "humans"];
-// Техника рисуется слотом (фон + sysname), остальное — чистой иконкой.
-var UNT_VEH_CATS = { cars: true, tanks: true, helicopters: true };
+// Иконки строк и тела — РОВНО чипы кампании (cmpChip, campaign.js):
+// чистая иконка .upr-chip.upr-card + .upr-chip-icon, без слотов veh/inf
+// и подложек.
 // Белые колонки статов species (_STAT_COLS, api/sheets.py): только их правит
 // попап-редактор; произвольные колонки писать нельзя.
 var UNT_STAT_COLS = ["cost", "cp_cost", "supply_consumption", "people_capacity", "unit_set"];
@@ -318,29 +319,31 @@ function untPaintList() {
   list.scrollTop = st;
 }
 
-// Строка списка: иконка через общий хелпер карты (мгновенный плейсхолдер
-// категории + спиннер upr-loading + подмена реальной из СВОЕЙ карты
-// state.units.iconMap — карту uprising не трогаем). Техника — слот veh,
-// сквады — слот inf (подложка unitslot_main_inf.webp, как слоты техники).
+// Строка списка — РОВНО чип кампании (cmpChip, campaign.js:901-929):
+// чистая иконка .upr-chip.upr-card + .upr-chip-icon через общий хелпер
+// карты (мгновенный плейсхолдер категории + спиннер upr-loading +
+// подмена реальной из СВОЕЙ карты state.units.iconMap — карту uprising
+// не трогаем). Своё здесь только состояние списка: .unt-row/.sel/
+// dataset.sys + sysname-строка + бейдж basis/DLC поверх (как
+// .cmp-price-badge у кампании).
 function untRow(it, cat) {
   const row = document.createElement("div");
-  row.className = "unt-row unt-chip unt-card"
-    + (UNT_VEH_CATS[cat] ? " veh" : cat === "squads" ? " inf" : "");
+  row.className = "upr-chip upr-card unt-row";
   if (it.sys === state.units.sel) row.classList.add("sel");
   row.dataset.sys = it.sys;
   row.title = it.sys + "\n" + (it.path || "");
   const img = document.createElement("img");
-  img.className = "unt-chip-icon";
+  img.className = "upr-chip-icon";
   img.draggable = false;
   img.loading = "lazy";
   img.alt = it.sys;
+  row.classList.add("upr-loading");
   if (typeof uprChipIcon === "function")
     uprChipIcon(img, row, it.sys, cat,
       { map: state.units.iconMap, ready: state.units.iconsReady });
-  else if (typeof uprPlaceholderUrl === "function") {
-    img.src = uprPlaceholderUrl(cat, it.sys) || "";
-    if (!img.src) img.classList.add("noicon");
-  } else img.classList.add("noicon");
+  else img.src = uprIconUrl(it.sys, cat);
+  if (img.complete && img.naturalWidth && typeof cmpSpanChip === "function")
+    cmpSpanChip(row, img);
   row.appendChild(img);
   const nm = document.createElement("span");
   nm.className = "unt-row-sys";
@@ -429,9 +432,28 @@ async function untPaintDetail() {
     box.appendChild(d);
     return;
   }
-  // Шапка тела: sysname + бейдж источника + кнопка «Редактировать».
+  // Шапка тела: иконка-чип кампании + sysname + бейдж источника +
+  // кнопка «Редактировать».
   const head = document.createElement("div");
   head.className = "unt-detail-head";
+  // Иконка тела — тот же чип кампании (cmpChip): чистая иконка
+  // .upr-chip.upr-card + .upr-chip-icon через uprChipIcon + cmpSpanChip.
+  const dicho = document.createElement("span");
+  dicho.className = "upr-chip upr-card unt-detail-icon";
+  const diimg = document.createElement("img");
+  diimg.className = "upr-chip-icon";
+  diimg.draggable = false;
+  diimg.loading = "lazy";
+  diimg.alt = item.sys;
+  dicho.classList.add("upr-loading");
+  if (typeof uprChipIcon === "function")
+    uprChipIcon(diimg, dicho, item.sys, cat,
+      { map: state.units.iconMap, ready: state.units.iconsReady });
+  else diimg.src = uprIconUrl(item.sys, cat);
+  if (diimg.complete && diimg.naturalWidth && typeof cmpSpanChip === "function")
+    cmpSpanChip(dicho, diimg);
+  dicho.appendChild(diimg);
+  head.appendChild(dicho);
   const nm = document.createElement("span");
   nm.className = "unt-detail-name";
   nm.textContent = item.sys;

@@ -20,7 +20,9 @@
   text-transform: uppercase; letter-spacing: .04em; }
 .unt-list { flex: 1; min-height: 0; overflow-y: auto; display: flex;
   flex-direction: column; gap: 2px; padding: 6px; }
-/* строка списка: иконка 32-40px + sysname + бейдж basis/DLC */
+/* строка списка — чип кампании (cmpChip): чистая иконка .upr-chip.upr-card
+   + .upr-chip-icon (размеры, зазоры и спиннер upr-loading — из
+   uprising.css/campaign.css), своё только состояние и текст */
 .unt-row { position: relative; cursor: pointer;
   display: flex; align-items: center; gap: 8px;
   border: 1px solid var(--border); background: var(--bg); padding: 4px 6px;
@@ -29,22 +31,16 @@
 .unt-row.sel { border-color: var(--accent); background: rgba(255,255,255,.04); }
 .unt-row-sys { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; font-size: 12px; font-weight: 600; user-select: none; }
-.unt-row .unt-src-badge { position: static; flex-shrink: 0; }
-/* слот техники в строке: фон unitslot_main.webp, иконка внутри */
-.unt-row.unt-card.veh { background: url(/assets/campaign/unitslot_main.webp) center no-repeat;
-  min-height: 76px; border: none; padding: 4px 8px; }
-.unt-row.unt-card.veh .unt-chip-icon { width: 72px; height: auto; flex-shrink: 0; }
-/* слот сквада в строке: подложка unitslot_main_inf.webp, как слоты техники */
-.unt-row.unt-card.inf { background: url(/assets/campaign/unitslot_main_inf.webp) center no-repeat;
-  min-height: 76px; border: none; padding: 4px 8px; }
-.unt-row.unt-card.inf .unt-chip-icon { width: 72px; height: auto; flex-shrink: 0; }
-/* тело справа: шапка (имя + бейдж + правка) + таблица колонка:значение */
+/* тело справа: шапка (иконка-чип + имя + бейдж + правка) + таблица колонка:значение */
 .unt-detail { flex: 1; min-width: 0; overflow-y: auto;
   border: 1px solid var(--border); background: var(--bg-card); padding: 10px 12px; }
 .unt-detail-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
 .unt-detail-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; font-size: 16px; font-weight: 700; }
 .unt-detail-badge { position: static; flex-shrink: 0; }
+/* иконка-чип шапки тела (тот же .upr-chip.upr-card кампании): в ряду шапки
+   не сжимается */
+.unt-detail-icon { flex-shrink: 0; }
 .unt-detail-path { font-size: 11px; color: var(--text-mute); margin-bottom: 10px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .unt-kv { display: flex; flex-direction: column; }
@@ -53,20 +49,6 @@
 .unt-kv-key { width: 220px; flex-shrink: 0; font-size: 12px; font-weight: 700;
   color: var(--text-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .unt-kv-val { flex: 1; min-width: 0; font-size: 12px; overflow-wrap: anywhere; }
-/* иконка строки: минимум 32-40px, пока грузится — плейсхолдер категории */
-.unt-chip-icon { display: block; user-select: none; pointer-events: none;
-  background-repeat: no-repeat; min-width: 32px; min-height: 32px; }
-.unt-chip-icon.noicon { display: none; }
-/* спиннер поверх строки, пока реальная иконка грузится (образец
-   .upr-chip.upr-loading из uprising.css: геометрия строки не скачет) */
-.unt-chip.upr-loading .unt-chip-icon { opacity: .35; }
-.unt-chip.upr-loading::before {
-  content: ""; position: absolute; left: 50%; top: 50%;
-  width: 26px; height: 26px; margin: -13px 0 0 -13px;
-  border-radius: 50%; border: 3px solid rgba(255,255,255,.22);
-  border-top-color: #fff; animation: spin .8s linear infinite;
-  z-index: 3; pointer-events: none;
-}
 /* кнопка-добавление — иконка в шапке списка */
 .unt-chip-add { border: none; background: transparent; padding: 3px; cursor: pointer;
   display: inline-flex; align-items: center; max-width: fit-content;
