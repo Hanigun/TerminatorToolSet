@@ -1439,6 +1439,38 @@ function makeUnitSetCombo(td, input, choices, title) {
   } catch (e) { /* noop: правка остаётся обычным input */ }
 }
 
+// класс unit_set -> секция карты при автопереносе: танковые классы
+// (tank/artillery) в tanks, остальное в cars. Общее для попапов обеих карт.
+function unitSetAutoSection(cls) {
+  const v = String(cls || "").trim().toLowerCase();
+  return (v === "tank" || v === "tanks" || v === "artillery") ? "tanks" : "cars";
+}
+// FLIP-перелёт чипа в новую секцию: из старого rect в свежий элемент,
+// 300ms ease-out, дальше элемент живёт сам (инлайн-стили чистятся).
+// Общее для попапов обеих карт.
+function chipFly(fromRect, toEl) {
+  try {
+    if (!fromRect || !toEl || !toEl.getBoundingClientRect) return;
+    const r = toEl.getBoundingClientRect();
+    const dx = fromRect.left + fromRect.width / 2 - (r.left + r.width / 2);
+    const dy = fromRect.top + fromRect.height / 2 - (r.top + r.height / 2);
+    if (!dx && !dy) return;
+    toEl.style.transition = "none";
+    toEl.style.transform = "translate(" + dx + "px," + dy + "px)";
+    toEl.style.zIndex = "60";
+    void toEl.offsetWidth;
+    toEl.style.transition = "transform .3s ease-out";
+    toEl.style.transform = "none";
+    setTimeout(() => {
+      try {
+        toEl.style.transition = "";
+        toEl.style.transform = "";
+        toEl.style.zIndex = "";
+      } catch (e) {}
+    }, 320);
+  } catch (e) { /* нет анимации — чип уже на месте */ }
+}
+
 // Фокус редактора ячейки без самопроизвольного скролла: нативный focus()
 // докручивает контейнер сам и не знает про липкую колонку sysname —
 // редактируемая ячейка уезжает влево под неё. Фокусим без скролла, доводим

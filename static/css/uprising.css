@@ -529,6 +529,15 @@ button.upr-map-btn.rnd {
   flex: 1; min-width: 0; border: 1px solid var(--border); background: var(--bg);
   color: var(--text); padding: 5px 8px; font-size: 12.5px;
 }
+/* комбо класса в попапе юнита: поле как имя, кнопка-стрелка из grid.css */
+.upr-edit-set { flex: 1; min-width: 0; display: flex; }
+.upr-edit-set .unit-combo { flex: 1; min-width: 0; }
+.upr-edit-row .unit-combo input {
+  flex: 1; min-width: 0; text-align: right;
+  border: 1px solid var(--border); background: var(--bg);
+  color: var(--text); padding: 5px 8px; font-size: 12.5px;
+}
+.upr-edit-row select { flex: none; max-width: 140px; }
 /* цена — текст справа, как мини-поля */
 .upr-price-val { flex: none; min-width: 52px; text-align: right;
   color: var(--text); font-size: 12.5px; font-weight: 600; }
