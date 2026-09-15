@@ -175,6 +175,9 @@ function nudgeRepaint() {
 }
 
 // ---------- toast ----------
+// шильдик внизу программы: ошибки ("err") дублируем в общий лог бэкенда
+// (Logs/errors.log через /api/client_log) — иначе причина видна только
+// на экране и пропадает вместе с шильдиком
 let toastTimer = null;
 function toast(msg, kind) {
   const el = $("#toast");
@@ -183,6 +186,7 @@ function toast(msg, kind) {
   el.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (el.hidden = true), 2600);
+  if (kind === "err") reportClientError("toast", msg);
 }
 
 // ---------- универсальное контекстное меню ----------
