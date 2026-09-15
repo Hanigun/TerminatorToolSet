@@ -10,7 +10,7 @@ function cmpFreshState() {
   return {
     path: "", rows: null, columns: [], loading: false, loadSeq: 0,
     sel: null, unitSel: [], tab: "shop", dirty: false, analyzing: false,
-    prices: {}, stats: {}, sysnames: [], syscats: {},
+    prices: {}, stats: {}, sysnames: [], syscats: {}, statPaths: {}, redoHint: "",
     iconMap: {}, iconFail: {}, iconsReady: false, iconsLoading: false,
     sysLoading: false, clip: [], tileClip: [],
   };
@@ -1050,7 +1050,8 @@ async function cmpWriteCells(edits, summary) {
     toast((j && j.error) || "campaign write failed", "err");
     return false;
   }
-  setUndoRedoButtons(!!j.can_undo, !!j.can_redo);
+  state.campaign.redoHint = "";
+  try { await cmpSyncUndoButtons(); } catch (e) {}
   // успешная запись могла сдвинуть позиции стеков — набор юнитов сбросить,
   // иначе протухшие ключи указывали бы не на те записи
   state.campaign.unitSel = [];
@@ -1127,6 +1128,13 @@ function cmpWriteStats(cat, name, stats) {
           }, false);
         } catch (e) {}
       }
+      // species-правка живёт в чужом файле: запомнить для undo/redo
+      // и истории страницы, новая правка гасит чужой redo-хвост
+      try {
+        if (j.path) state.campaign.statPaths[j.path] = true;
+        state.campaign.redoHint = "";
+        cmpSyncUndoButtons();
+      } catch (e) {}
       renderCampaign();
       return true;
     })
@@ -1163,6 +1171,24 @@ function cmpSyncFileTabs(path, cells) {
   catch (e) { return false; }
 }
 
+// история страницы — два файла: карта + species-правки попапа (unit_set,
+// cost...). undo/redo берут файл с самой свежей записью, кнопки — ИЛИ.
+function cmpHistPaths() {
+  try {
+    const ps = [state.campaign.path]
+      .concat(Object.keys(state.campaign.statPaths || {}));
+    return ps.filter((p, i) => p && ps.indexOf(p) === i);
+  } catch (e) { return state.campaign.path ? [state.campaign.path] : []; }
+}
+async function cmpSyncUndoButtons() {
+  try {
+    const rs = await Promise.all(cmpHistPaths().map(p =>
+      api("/api/history?path=" + encodeURIComponent(p))
+        .then(r => r.json()).catch(() => null)));
+    setUndoRedoButtons(rs.some(j => j && j.ok && j.can_undo),
+      rs.some(j => j && j.ok && j.can_redo));
+  } catch (e) {}
+}
 // перечитать строки с сервера после undo/redo (dirty не трогаем: откат —
 // тоже несохранённое изменение)
 async function cmpRepaintUndo() {
@@ -1176,11 +1202,10 @@ async function cmpRepaintUndo() {
       renderCampaign();
     }
   } catch (e) {}
-  try {
-    const h = await api("/api/history?path=" + encodeURIComponent(state.campaign.path));
-    const jh = await h.json();
-    if (jh && jh.ok) setUndoRedoButtons(!!jh.can_undo, !!jh.can_redo);
-  } catch (e) {}
+  // статы могли откатиться в species-файле — перечитать, иначе шильдики
+  // покажут старое; кнопки — ИЛИ по всем файлам истории страницы
+  try { cmpLoadMeta(); } catch (e) {}
+  await cmpSyncUndoButtons();
 }
 
 async function cmpSave() {

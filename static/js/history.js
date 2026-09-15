@@ -54,10 +54,83 @@ async function applyUndoPatch(patch) {
   }
 }
 
+// карты правят два файла (карта + species-правки попапа): undo бьёт
+// в файл с самой свежей применённой записью; redo — в файл последнего
+// отката (redoHint), иначе в файл с самой свежей откаченной записью.
+// Один клик — одно действие, кнопки — ИЛИ по файлам страницы.
+async function mapUndoRedo(endpoint, st, pathsFn, repaintFn, okMsg, noneMsg) {
+  const isUndo = endpoint.indexOf("/api/undo") !== -1;
+  const paths = pathsFn();
+  if (!paths.length) { toast(t("no_file")); return; }
+  if (state.histBusy) return;
+  state.histBusy = true;
+  try {
+    const hs = [];
+    for (const p of paths) {
+      try {
+        const r = await api("/api/history?path=" + encodeURIComponent(p));
+        hs.push({ path: p, recs: ((await r.json()).records || []) });
+      } catch (e) { hs.push({ path: p, recs: [] }); }
+    }
+    const top = (h, undone) => h.recs.filter(r => !!r.undone === undone)
+      .sort((a, b) => (b.ts || 0) - (a.ts || 0))[0] || null;
+    let target = null;
+    if (isUndo) {
+      let bt = -1;
+      hs.forEach(h => {
+        const r = top(h, false);
+        if (r && (r.ts || 0) > bt) { bt = r.ts || 0; target = h.path; }
+      });
+    } else {
+      const hint = st.redoHint;
+      if (hint && hs.some(h => h.path === hint && top(h, true))) target = hint;
+      if (!target) {
+        let bt = -1;
+        hs.forEach(h => {
+          const r = top(h, true);
+          if (r && (r.ts || 0) > bt) { bt = r.ts || 0; target = h.path; }
+        });
+      }
+    }
+    if (!target) {
+      try { await repaintFn(); } catch (e) {}
+      toast(noneMsg);
+      return;
+    }
+    const r = await api(endpoint, { method: "POST",
+      body: JSON.stringify({ path: target }) });
+    const j = await r.json();
+    if (!j.ok) {
+      if (j.error === "nothing_to_undo" || j.error === "nothing_to_redo") {
+        toast(noneMsg);
+      } else {
+        toast(j.error || "error", "err");
+      }
+      try { await repaintFn(); } catch (e) {}
+      return;
+    }
+    // чужой файл (species): открытые вкладки — точечно или stale-метка
+    try {
+      if (target !== paths[0]) {
+        if (j.patch && j.patch.kind === "cell" && j.patch.row != null)
+          syncFileTabsCells(target, [{ row: j.patch.row, col: j.patch.col,
+            value: j.patch.value }]);
+        else if (typeof markFileTabsStale === "function")
+          markFileTabsStale(target);
+      }
+    } catch (e) {}
+    st.redoHint = isUndo ? target : "";
+    await repaintFn();
+    toast(okMsg, "ok");
+  } finally {
+    state.histBusy = false;
+  }
+}
+
 async function runUndoRedo(endpoint, okMsg, noneMsg) {
   // works everywhere changes happen: file tabs edit their own file, the
   // compare page undoes/redoes the side the user last interacted with,
-  // the map page (XML under the hood) undoes/redoes its own file pre-save
+  // map pages route to mapUndoRedo (map file + species edits, newest first)
   const tab = state.tabs.find(tb => tb.id === state.activeTabId);
   let path = null, isCompare = false, cmpSide = null, isUprising = false, isCampaign = false;
   if (tab && tab.type === "file") path = tab.path;
@@ -74,6 +147,10 @@ async function runUndoRedo(endpoint, okMsg, noneMsg) {
     isCampaign = true;
   }
   if (!path) { toast(t("no_file")); return; }
+  // карты — мультиистория (карта + species): свой роутер, общий POST ниже
+  // им не нужен (иначе один клик отменял бы сразу две записи)
+  if (isUprising) { await mapUndoRedo(endpoint, state.uprising, uprHistPaths, uprRepaintUndo, okMsg, noneMsg); return; }
+  if (isCampaign) { await mapUndoRedo(endpoint, state.campaign, cmpHistPaths, cmpRepaintUndo, okMsg, noneMsg); return; }
   if (state.histBusy) return;   // one request at a time (no repeat pile-up)
   state.histBusy = true;
   try {
@@ -130,12 +207,21 @@ async function redoCurrent() {
 // ---------- history ----------
 // Ядро истории: какие файлы попадают в журнал для активной страницы
 // (SWT-вкладка, сравнение с двумя панелями или открытый файл-вкладка)
+// Ядро истории: какие файлы попадают в журнал для активной страницы
+// (карты — карта + species-правки попапа, иначе их откат к началу
+// и журнал молча пропускали бы unit_set/cost)
 function histTargets() {
   if (state.activeTabId === "uprising" && state.uprising.path) {
-    return [{ side: null, path: state.uprising.path }];
+    return [{ side: null, path: state.uprising.path }].concat(
+      Object.keys(state.uprising.statPaths || {})
+        .filter(p => p && p !== state.uprising.path)
+        .map(p => ({ side: null, path: p })));
   }
   if (state.activeTabId === "campaign" && state.campaign.path) {
-    return [{ side: null, path: state.campaign.path }];
+    return [{ side: null, path: state.campaign.path }].concat(
+      Object.keys(state.campaign.statPaths || {})
+        .filter(p => p && p !== state.campaign.path)
+        .map(p => ({ side: null, path: p })));
   }
   if (state.activeTabId === "swt" && state.swt.path) {
     return [{ side: null, path: state.swt.path }];

@@ -11,7 +11,7 @@ function uprFreshState() {
   // ЕДИНСТВЕННЫЙ дефолт состояния карты (старт + закрытие вкладки): все поля,
   // включая поколение загрузки loadSeq — без него переоткрытие давало NaN,
   // guard вечно дропал ответы и карта оставалась бледной (.empty, no sectors)
-  return { path: null, rows: null, columns: [], sheetIndex: 0, sysnames: [], syscats: {}, prices: {}, stats: {}, sysLoading: false, sel: -1, variant: 0, dirty: false, found: false, panel: true, pick: new Set(), clip: [], sectorClip: null, editing: "", loading: false, loadSeq: 0, preloading: false };
+  return { path: null, rows: null, columns: [], sheetIndex: 0, sysnames: [], syscats: {}, prices: {}, stats: {}, statPaths: {}, redoHint: "", sysLoading: false, sel: -1, variant: 0, dirty: false, found: false, panel: true, pick: new Set(), clip: [], sectorClip: null, editing: "", loading: false, loadSeq: 0, preloading: false };
 }
 
 function uprTab() { return state.tabs.find(tb => tb.id === "uprising"); }
@@ -819,6 +819,13 @@ function uprWriteStats(cat, name, stats) {
           }, false);
         } catch (e) {}
       }
+      // species-правка живёт в чужом файле: запомнить для undo/redo
+      // и истории страницы, новая правка гасит чужой redo-хвост
+      try {
+        if (j.path) state.uprising.statPaths[j.path] = true;
+        state.uprising.redoHint = "";
+        uprSyncUndoButtons();
+      } catch (e) {}
       renderUprising();
       return true;
     })
@@ -901,6 +908,24 @@ function renderUprising() {
   } catch (e) {}
 }
 
+// история страницы — два файла: карта + species-правки попапа (unit_set,
+// cost...). undo/redo берут файл с самой свежей записью, кнопки — ИЛИ.
+function uprHistPaths() {
+  try {
+    const ps = [state.uprising.path]
+      .concat(Object.keys(state.uprising.statPaths || {}));
+    return ps.filter((p, i) => p && ps.indexOf(p) === i);
+  } catch (e) { return state.uprising.path ? [state.uprising.path] : []; }
+}
+async function uprSyncUndoButtons() {
+  try {
+    const rs = await Promise.all(uprHistPaths().map(p =>
+      api("/api/history?path=" + encodeURIComponent(p))
+        .then(r => r.json()).catch(() => null)));
+    setUndoRedoButtons(rs.some(j => j && j.ok && j.can_undo),
+      rs.some(j => j && j.ok && j.can_redo));
+  } catch (e) {}
+}
 // перечитать строки карты с сервера после undo/redo (без сброса dirty:
 // откат — тоже несохранённое изменение); кнопки — по флагам истории
 async function uprRepaintUndo() {
@@ -914,11 +939,10 @@ async function uprRepaintUndo() {
       renderUprising();
     }
   } catch (e) { /* оставили как было */ }
-  try {
-    const h = await api("/api/history?path=" + encodeURIComponent(state.uprising.path));
-    const jh = await h.json();
-    if (jh && jh.ok) setUndoRedoButtons(!!jh.can_undo, !!jh.can_redo);
-  } catch (e) { /* кнопки как были */ }
+  // статы могли откатиться в species-файле — перечитать, иначе шильдики
+  // покажут старое; кнопки — ИЛИ по всем файлам истории страницы
+  try { uprLoadSysnames(); } catch (e) {}
+  await uprSyncUndoButtons();
 }
 
 // «карта»: текстура карты + SVG-секторы произвольной формы
@@ -2672,7 +2696,8 @@ async function uprWriteCells(edits, summary) {
     toast((j && j.error) || "map write failed", "err");
     return false;
   }
-  setUndoRedoButtons(!!j.can_undo, !!j.can_redo);
+  state.uprising.redoHint = "";
+  try { await uprSyncUndoButtons(); } catch (e) {}
   // открытые вкладки-таблицы того же файла: подменить значения, иначе
   // таблица покажет старое до переоткрытия
   try { uprSyncFileTabs(cells); } catch (e) { /* таблица обновится при открытии */ }
