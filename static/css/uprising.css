@@ -503,24 +503,27 @@ button.upr-map-btn.rnd {
 .upr-edit-pop {
   position: fixed; z-index: 1250; width: 360px;
   background: var(--bg-elev); border: none; border-left: 3px solid var(--accent);
-  border-radius: 8px; box-shadow: 0 14px 34px rgba(0, 0, 0, .55);
+  border-radius: 3px; box-shadow: 0 14px 34px rgba(0, 0, 0, .55);
   padding: 10px; display: flex; flex-direction: column; gap: 8px;
 }
 .upr-edit-pop .upr-chip-name {
   width: 100%; border: 1px solid var(--border); background: var(--bg);
   color: var(--text); padding: 5px 8px; font-size: 12.5px;
 }
-.upr-edit-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.upr-edit-row {
+  display: flex; align-items: center; gap: 8px; font-size: 12px;
+  background: var(--bg-card); border: none; border-radius: 3px;
+  padding: 6px 10px;
+}
 .upr-edit-row label {
   flex: none; width: 22px; text-align: center;
   color: var(--text-mute); font-weight: 700;
 }
-/* подпись пункта — чип без обводки: название + серое описание на
-   приподнятой пилюле, поле — мини справа */
+/* подпись пункта — внутри общего чипа ряда: только текст, без своей
+   подложки; поле ввода и галка лежат в том же чипе справа */
 .upr-edit-lab {
   flex: 1; min-width: 0; display: flex; flex-direction: column;
-  background: var(--bg-card); border: none; border-radius: 12px;
-  padding: 5px 12px;
+  background: none; border: none; border-radius: 0; padding: 0;
 }
 .upr-edit-lab b { font-weight: 600; color: var(--text); font-size: 12px; }
 .upr-edit-lab span { color: var(--text-mute); font-size: 11px; }
