@@ -2259,13 +2259,11 @@ async function updAutoTick() {
   }
 }
 
-// ---------- GameAssets: выборочная распаковка ассетов из паков игры ----------
-// Скачивания нет: кнопка в шапке всегда видна и открывает свой выпадающий
-// попап (не настройки); зелёная точка — ассеты готовы.
+// ---------- GameAssets: скачивание архива из релиза ----------
+// Только попап кнопки в шапке (в настройки ничего не добавляем);
+// зелёная точка — архив скачан и распакован.
 let gaState = null;
 let gaPollTimer = null;
-let gaPlan = null;
-let gaLangsOff = null;
 
 async function gaStateLoad() {
   try {
@@ -2312,175 +2310,53 @@ function gaToggle() {
   gaPopRender();
 }
 
-function gaGrpCls(key) {
-  return key === "legion" ? "g-legion" : key === "resistance" ? "g-res"
-    : key === "evolution" ? "g-evo" : "g-base";
-}
-
 function gaPopRender() {
   const p = gaPopEl();
-  const unp = (state.config && state.config.unpacked_path) || "";
   const ready = !!(gaState && gaState.downloaded == 1 && gaState.has_dir);
   const prog = (gaState && gaState.progress) || {};
-  let h = '<div class="ga-pop-title">' + escapeHtml(t("ga_title") || "GameAssets") + "</div>";
-  if (unp) {
-    // распакованная игра подключена — ассеты не нужны
-    h += '<div class="ga-note">' + escapeHtml(t("ga_unpacked_msg") || "") + "</div>"
-      + '<div class="ga-path">' + escapeHtml(unp) + "</div>";
-  } else if (ready && !gaPlan) {
-    h += '<div class="ga-done-line">✓ ' + escapeHtml(t("ga_ready") || "")
-      + (gaState.version ? " " + escapeHtml(gaState.version) : "") + "</div>"
-      + '<div class="ga-pop-row"><button class="btn" id="gap-again">'
-      + escapeHtml(t("ga_again") || "") + "</button></div>";
-  } else {
-    const lastRoot = (function () {
-      try { return localStorage.getItem("tsh_up_root") || ""; }
-      catch (e) { return ""; }
-    })();
-    h += '<div class="ga-note">' + escapeHtml(t("ga_subset") || "") + "</div>"
-      + '<div class="ga-pop-row"><input type="text" id="gap-root" class="cm-input"'
-      + ' spellcheck="false" placeholder="' + escapeHtml(t("ga_game_root") || "")
-      + '" value="' + escapeHtml(lastRoot) + '">'
-      + '<button class="btn" id="gap-pick">' + escapeHtml(t("cm_pick_dir") || "…") + "</button>"
-      + '<button class="btn accent" id="gap-scan">' + escapeHtml(t("up_scan") || "") + "</button></div>"
-      + '<div id="gap-plan"></div>'
-      + '<div class="upd-progress" id="gap-progress" hidden>'
-      + '<div class="upd-bar"><div class="upd-fill" id="gap-fill"></div></div>'
-      + '<div class="upd-pct" id="gap-pct"></div></div>'
-      + '<div class="ga-pop-row" id="gap-run-row" hidden>'
-      + '<button class="btn accent" id="gap-run">' + escapeHtml(t("ga_extract") || "") + "</button></div>";
-  }
+  let h = '<div class="ga-pop-title">' + escapeHtml(t("ga_title") || "GameAssets") + "</div>"
+    + '<div class="ga-note">' + escapeHtml(t("ga_hint") || "") + "</div>"
+    + '<div class="ga-pop-state" id="gap-state">' + escapeHtml(gaPopStateText()) + "</div>"
+    + '<div class="upd-progress" id="gap-progress" hidden>'
+    + '<div class="upd-bar"><div class="upd-fill" id="gap-fill"></div></div>'
+    + '<div class="upd-pct" id="gap-pct"></div></div>'
+    + '<div class="ga-pop-row"><button class="btn accent" id="gap-dl">'
+    + escapeHtml(t(ready ? "ga_redownload" : "ga_download") || "") + "</button></div>";
   p.innerHTML = h;
-  const again = $("#gap-again");
-  // «распаковать заново» — тот же мини-процесс поверх готового
-  if (again) again.onclick = () => {
-    gaPlan = null; gaLangsOff = null;
-    if (gaState) gaState.downloaded = 0;
-    gaPopRender();
-  };
-  const pick = $("#gap-pick");
-  if (pick) pick.onclick = async () => {
-    const d = await pickFolder();
-    if (d) {
-      $("#gap-root").value = d;
-      try { localStorage.setItem("tsh_up_root", d); } catch (e) { /* noop */ }
-    }
-  };
-  const scan = $("#gap-scan");
-  if (scan) scan.onclick = gaScan;
-  const run = $("#gap-run");
-  if (run) run.onclick = gaExtract;
-  // скан уже был — дорисовать план; распаковка идёт — показать прогресс
-  if (gaPlan) gaPlanRender();
-  if (prog.state === "working") gaPollStart();
+  const dl = $("#gap-dl");
+  if (dl) dl.onclick = gaDownload;
+  if (prog.state === "downloading" || prog.state === "extracting") gaPollStart();
 }
 
-function gaScan() {
-  const inp = $("#gap-root");
-  const root = inp ? inp.value.trim() : "";
-  if (!root) { toast(t("cm_need_dir") || "need dir", "err"); return; }
-  try { localStorage.setItem("tsh_up_root", root); } catch (e) { /* noop */ }
-  api("/api/game_assets_scan", { method: "POST",
-    body: JSON.stringify({ path: root }) })
-    .then(r => r.json())
-    .then(j => {
-      if (!j || !j.ok) { toast((j && j.error) || "error", "err"); return; }
-      if (!j.sevenz) toast(t("ga_no7z") || "7z not found", "err");
-      gaPlan = j;
-      gaLangsOff = new Set();
-      gaPlanRender();
-    })
-    .catch(() => toast("error", "err"));
+// строка состояния в попапе: версия скачанного или текст ошибки
+function gaPopStateText() {
+  if (!gaState) return "";
+  if (gaState.downloaded == 1 && gaState.has_dir)
+    return (t("ga_downloaded") || "Done")
+      + (gaState.version ? " " + gaState.version : "");
+  const pr = gaState.progress || {};
+  if (pr.state === "error" && pr.error) return pr.error;
+  return "";
 }
 
-function gaPlanRender() {
-  const box = $("#gap-plan");
-  if (!box || !gaPlan) return;
-  const off = gaLangsOff || (gaLangsOff = new Set());
-  let h = "";
-  // чипы состава — показ (не клики): распаковывается только это
-  h += '<div class="ga-sub">' + escapeHtml(t("ga_subset") || "") + "</div>"
-    + '<div class="up-group-list">'
-    + (gaPlan.chips || []).map(c =>
-      '<div class="up-pak static"><span class="up-pak-n">▪</span>'
-      + '<span class="up-pak-name">' + escapeHtml(c) + "</span></div>").join("")
-    + "</div>";
-  for (const g of (gaPlan.groups || [])) {
-    const cls = gaGrpCls(g.key);
-    const langs = Object.keys(g.langs || {}).sort();
-    const n = (g.paks || []).length;
-    h += '<div class="ga-group-head ' + cls + '">' + escapeHtml(g.key)
-      + (n ? " · " + n + " .pak" : "")
-      + (g.loose ? " · 📁basis" : "") + "</div>";
-    if (langs.length) {
-      // языки — кликабельные чипы: клик выключает/возвращает язык
-      h += '<div class="ga-sub">' + escapeHtml(t("ga_langs") || "") + "</div>"
-        + '<div class="up-group-list">';
-      for (const lg of langs) {
-        const isOff = off.has(lg.toLowerCase());
-        h += '<div class="up-pak up-loc lang' + (cls ? " " + cls : "")
-          + (isOff ? " off" : "") + '" data-lang="' + escapeHtml(lg) + '"'
-          + ' title="' + escapeHtml(t("up_off_hint") || "") + '" tabIndex="0">'
-          + '<span class="up-pak-n">🌐</span><span class="up-pak-name">'
-          + escapeHtml(lg) + " ×" + (g.langs[lg] || []).length + "</span></div>";
-      }
-      h += "</div>";
-    }
-  }
-  box.innerHTML = h;
-  box.querySelectorAll(".up-pak.lang").forEach(row => {
-    const toggle = () => {
-      const lg = (row.dataset.lang || "").toLowerCase();
-      if (off.has(lg)) { off.delete(lg); row.classList.remove("off"); }
-      else { off.add(lg); row.classList.add("off"); }
-    };
-    row.onclick = toggle;
-    row.onkeydown = e => {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
-    };
-  });
-  const rr = $("#gap-run-row");
-  if (rr) rr.hidden = false;
-}
-
-async function gaExtract() {
-  const inp = $("#gap-root");
-  const root = inp ? inp.value.trim() : "";
-  if (!root) { toast(t("cm_need_dir") || "need dir", "err"); return; }
-  const langs = [];
-  for (const g of ((gaPlan || {}).groups || [])) {
-    for (const lg of Object.keys(g.langs || {})) {
-      if (!(gaLangsOff || new Set()).has(lg.toLowerCase())
-        && langs.indexOf(lg) === -1) langs.push(lg);
-    }
-  }
-  const bar = $("#gap-progress");
-  if (bar) bar.hidden = false;
-  const rr = $("#gap-run-row");
-  if (rr) rr.hidden = true;
+async function gaDownload() {
+  const dl = $("#gap-dl");
+  if (dl) dl.disabled = true;
+  const st = $("#gap-state");
+  if (st) st.textContent = t("ga_checking") || "…";
   let j = null;
   try {
-    const r = await api("/api/game_assets_extract", { method: "POST",
-      body: JSON.stringify({ path: root, langs }) });
+    const r = await api("/api/game_assets_download", { method: "POST",
+      body: JSON.stringify({}) });
     j = await r.json();
   } catch (e) { j = null; }
   if (!j || !j.ok) {
-    toast((j && j.error) || "error", "err");
-    if (bar) bar.hidden = true;
-    if (rr) rr.hidden = false;
+    toast((j && j.error) || (t("ga_not_found") || "error"), "err");
+    if (st) st.textContent = (j && j.error) || "";
+    if (dl) dl.disabled = false;
     return;
   }
   gaPollStart();
-}
-
-function gaPollStart() {
-  gaPollStop();
-  gaPollTick();
-  gaPollTimer = setInterval(gaPollTick, 600);
-}
-
-function gaPollStop() {
-  if (gaPollTimer) { clearInterval(gaPollTimer); gaPollTimer = null; }
 }
 
 async function gaPollTick() {
@@ -2493,25 +2369,28 @@ async function gaPollTick() {
   if (!pr) return;
   if (gaState) gaState.progress = pr;
   const bar = $("#gap-progress"), fill = $("#gap-fill"), pct = $("#gap-pct");
-  if (pr.state === "working") {
+  const st = $("#gap-state"), dlb = $("#gap-dl");
+  if (pr.state === "downloading" || pr.state === "extracting") {
     if (bar) bar.hidden = false;
     const total = pr.total || 0, done = pr.done || 0;
     const pc = total > 0 ? Math.min(99, Math.floor(done * 100 / total)) : 0;
-    if (fill) fill.style.width = pc + "%";
-    if (pct) pct.textContent = (t("ga_extracting") || "…") + " " + pc + "%"
-      + (pr.current ? " · " + pr.current : "");
+    if (fill) fill.style.width = (pr.state === "extracting" ? 100 : pc) + "%";
+    const txt = pr.state === "extracting"
+      ? (t("ga_extracting") || "…")
+      : (t("ga_downloading") || "…") + " " + pc + "%";
+    if (pct) pct.textContent = txt;
+    if (st) st.textContent = txt;
   } else if (pr.state === "done") {
     gaPollStop();
     if (bar) bar.hidden = true;
-    gaPlan = null; gaLangsOff = null;
-    toast(t("ga_ready") || "Done", "ok");
+    toast(t("ga_downloaded") || "Done", "ok");
     await gaStateLoad();
   } else if (pr.state === "error") {
     gaPollStop();
     if (bar) bar.hidden = true;
     toast(pr.error || "error", "err");
-    const rr = $("#gap-run-row");
-    if (rr) rr.hidden = false;
+    if (st) st.textContent = pr.error || "";
+    if (dlb) dlb.disabled = false;
   }
 }
 
