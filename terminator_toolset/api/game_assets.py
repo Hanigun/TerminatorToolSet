@@ -1,29 +1,33 @@
-"""GameAssets routes: state/check/download/progress (owned by GameAssets)."""
+"""GameAssets routes: state/scan/extract/progress (owned by GameAssets)."""
 from __future__ import annotations
 
-from flask import jsonify
+from flask import jsonify, request
 
 
 def register_game_assets(app, ctx):
-    """Состояние архива GameAssets, проверка и фоновое скачивание."""
+    """Состояние ассетов, сканирование паков игры и фоновая выборочная
+    распаковка (никакого скачивания — только локальные паки)."""
     ga = ctx.ga
 
     @app.route("/api/game_assets_state")
     def api_game_assets_state():
-        """Флаг скачивания, версия, наличие папки на диске, прогресс."""
+        """Флаг готовности, версия, наличие папки на диске, прогресс."""
         return jsonify(ga.state())
 
-    @app.route("/api/game_assets_check", methods=["POST"])
-    def api_game_assets_check():
-        """Спросить воркер /gameassets о свежем архиве."""
-        return jsonify(ga.check())
+    @app.route("/api/game_assets_scan", methods=["POST"])
+    def api_game_assets_scan():
+        """Что будет распаковано из папки игры: группы, паки, языки."""
+        body = request.get_json(silent=True, force=True) or {}
+        return jsonify(ga.scan(body.get("path") or ""))
 
-    @app.route("/api/game_assets_download", methods=["POST"])
-    def api_game_assets_download():
-        """Скачать и распаковать архив в фоне (прогресс через polling)."""
-        return jsonify(ga.download())
+    @app.route("/api/game_assets_extract", methods=["POST"])
+    def api_game_assets_extract():
+        """Выборочно распаковать ассеты из паков в фоне (polling прогресса)."""
+        body = request.get_json(silent=True, force=True) or {}
+        return jsonify(ga.extract(body.get("path") or "",
+                                  body.get("langs") or []))
 
     @app.route("/api/game_assets_progress")
     def api_game_assets_progress():
-        """Прогресс скачивания/распаковки для прогресс-бара."""
+        """Прогресс распаковки для мини-бара попапа."""
         return jsonify({"ok": True, "progress": ga.progress()})
