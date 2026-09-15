@@ -1347,10 +1347,12 @@ function untChipsField(r, ctx, s, focusAdd) {
       }
       else if (ev.key === "Escape") { ev.preventDefault(); fin(false); }
       // Backspace в пустом добавлении рядом с чипами — убрать последний
-      // чип; ушла последняя запятая — пункт снова обычный.
+      // чип; единственный чип не удаляем — убираем невидимую запятую:
+      // строка снова обычная, текст пункта сохранён.
       else if (ev.key === "Backspace" && ed.value === "" && items.length) {
         ev.preventDefault();
         done = true;
+        if (items.length <= 1) { toPlain(); return; }
         items.pop();
         mutated();
       }
