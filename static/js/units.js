@@ -268,9 +268,6 @@ function setupUnits() {
   untRegisterHistPage();
   const rel = $("#unt-reload");
   if (rel) rel.onclick = () => {
-    // что делает кнопка — видно в строке состояния иконок шапки
-    try { untIconStatus("Обновление: досмотр иконок, цены, слои с диска…"); }
-    catch (e) {}
     untReloadImages();
     untEnsurePrices().catch(() => {});
     renderUnits(true).catch(() => {});
@@ -1130,24 +1127,6 @@ function untFailSave() {
     localStorage.setItem(k, JSON.stringify(Object.keys(state.units.iconFail || {})));
   } catch (e) { /* переполнение/блок — не критично */ }
 }
-// Строка состояния иконок в шапке вкладки: видно без девтулзов, что
-// происходит (мс батча, счётчики, известные missing). Создаёт span сама.
-function untIconStatus(text) {
-  try {
-    let el = document.getElementById("unt-icon-status");
-    if (!el) {
-      const anchor = document.getElementById("unt-analyze")
-        || document.getElementById("unt-reload");
-      if (!anchor || !anchor.parentNode) return;
-      el = document.createElement("span");
-      el.id = "unt-icon-status";
-      el.className = "unt-icon-status";
-      anchor.parentNode.insertBefore(el, anchor.nextSibling);
-    }
-    el.textContent = text || "";
-    el.title = text || "";
-  } catch (e) { /* шапки нет — молча */ }
-}
 // Иконки своим батчем — URL-карта /api/uprising_icon_map (sysname -> URL
 // готовой webp, кэш браузера immutable), НЕ data-URL /api/uprising_icons_data:
 // data-URL тянули мегабайты base64 при КАЖДОМ запуске (браузер их не кэширует),
@@ -1175,19 +1154,13 @@ async function untFetchNames(names) {
   if (!state.units || !names.length) return;
   const my = ++state.units.iconSeq;
   const root = untSrcRoot();
-  const now = () => {
-    try { return performance.now(); } catch (e) { return Date.now(); }
-  };
-  const t0 = now();
   state.units.iconsLoading = true;
   const fresh = () => my === state.units.iconSeq && !!state.units;
   const done = () => {
     if (state.units && my === state.units.iconSeq)
       state.units.iconsLoading = false;
   };
-  const secs = t => (((now() - t) / 1000).toFixed(1)) + "с";
   try {
-    untIconStatus("Иконки: запрос " + names.length + "…");
     const merged = await untIconMapBatch(root, names);
     if (!fresh()) { done(); return; }
     Object.assign(state.units.iconMap, merged);
@@ -1198,16 +1171,12 @@ async function untFetchNames(names) {
       try { uprEnsureIconStates(root, names); } catch (e) {}
     }
     untPaintAllLists();
-    const real = names.filter(n => merged[n]).length;
     const missing = names.filter(n => !merged[n]);
-    untIconStatus("Иконки: " + real + "/" + names.length + " за " + secs(t0) +
-      (missing.length ? " · нет " + missing.length + "…" : " · все на месте"));
     if (!missing.length) { done(); return; }
     // Фон: persistent-предзагрузка (dds->webp в общий CustomImages/<слой>
     // чанками), затем добивка URL-картой. Готовность НЕ ждёт — иначе каждая
     // холодная загрузка держала спиннеры, пока жмутся сотни dds.
     (async () => {
-      const tp = now();
       try {
         const CH = 100;
         for (let i = 0; i < missing.length; i += CH) {
@@ -1236,10 +1205,6 @@ async function untFetchNames(names) {
         if (changed) untPaintAllLists();
         // missing зафиксировать между перезапусками — больше не просим
         try { untFailSave(); } catch (e) {}
-        const real2 = missing.filter(n => state.units.iconMap[n]).length;
-        untIconStatus("Иконки: " + (real + real2) + "/" + names.length +
-          " · нет " + (missing.length - real2) + " (запомнены, больше не тянем)" +
-          " · фон " + secs(tp));
       } finally { done(); }
     })().catch(() => { done(); });
   } catch (e) { done(); /* чипы добирают одиночными через uprChipIcon */ }
@@ -1252,9 +1217,6 @@ async function untEnsureIcons() {
     if (state.units) {
       state.units.iconsReady = true;
       untPaintAllLists();
-      const known = Object.keys(state.units.iconFail || {}).length;
-      untIconStatus("Иконки: запросов нет (карточки закрыты)" +
-        (known ? " · без иконок " + known + " — не тянем" : ""));
     }
     return;
   }
@@ -1963,10 +1925,6 @@ async function untAnalyze() {
       if (acc.missing) parts.push("?" + acc.missing);
       toast((t("swt_analyzed_tt") || "Готово") +
         (parts.length ? " (" + parts.join(" ") + ")" : ""), "ok");
-      try {
-        untIconStatus("Анализ: +" + acc.converted + " =" + acc.ready +
-          " !" + acc.failed + " ?" + acc.missing + " (без исходников)");
-      } catch (e) {}
     } else toast(lastErr, "err");
   } catch (e) { toast(String((e && e.message) || e), "err"); }
   finally {
