@@ -340,6 +340,21 @@
               <button class="icon-btn set-path-clear danger" id="set-mod-clear" data-i18n-title="set_clear_path" title="Очистить путь">✕</button>
             </div></label>
           <div class="settings-hint set-mod-hint" data-i18n="set_mod_path_hint">Путь к твоему созданному моду (для разработчика мода). Заполняется автоматически при создании мода; используется командой «Скопировать в мод».</div>
+          <label class="setting-row set-mod-row"><span data-i18n="set_mod_overlay">Саб-путь _ASSETS</span>
+            <div class="cm-dir-row set-path-row">
+              <input type="text" id="set-mod-overlay" spellcheck="false">
+              <button class="icon-btn gold" id="set-mod-overlay-pick" data-i18n-title="up_pick_dest" title="Выбрать папку"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1 1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg></button>
+              <button class="icon-btn set-path-clear danger" id="set-mod-overlay-clear" data-i18n-title="set_clear_path" title="Очистить путь">✕</button>
+            </div></label>
+          <div class="settings-hint set-mod-hint" data-i18n="set_mod_overlay_hint">Папка вида &lt;МОД&gt;_ASSETS с чистыми текстурами рядом с корнем мода. Поиск моделей и текстур идёт по обоим корням как по одному целому.</div>
+          <div class="modsp-wrap">
+            <button class="modsp-toggle" id="mod-subpaths-toggle" aria-expanded="false">
+              <span class="modsp-caret">▸</span>
+              <span data-i18n="mod_subpaths">Саб-пути: текстуры • модели</span>
+              <span class="modsp-count" id="mod-subpaths-count"></span>
+            </button>
+            <div class="modsp-panel" id="mod-subpaths" hidden></div>
+          </div>
           <div class="settings-actions">
             <button class="btn accent" id="set-unpacked-save" data-i18n="save">Сохранить</button>
           </div>
@@ -399,6 +414,27 @@
         <div class="guard-actions">
           <button class="btn accent guard-save" id="guard-save"><span data-i18n="save">Сохранить</span></button>
           <button class="btn ghost" id="guard-cancel" data-i18n="cancel">Отмена</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modpath modal: папка не принята — нет ожидаемой структуры -->
+  <div class="modal" id="modwarn-modal" hidden>
+    <div class="modal-card mid">
+      <div class="modal-head">
+        <span id="modwarn-title">Папка не подходит</span>
+        <button class="icon-btn danger" data-close>✕</button>
+      </div>
+      <div class="guard-body">
+        <div class="guard-file" id="modwarn-path"></div>
+        <div class="modwarn-text" id="modwarn-text"></div>
+        <div class="modwarn-cols">
+          <div class="modwarn-col"><div class="modwarn-cap" data-i18n="modwarn_expected">Ожидалось внутри</div><div id="modwarn-expected"></div></div>
+          <div class="modwarn-col"><div class="modwarn-cap" data-i18n="modwarn_found">Найдено</div><div id="modwarn-found"></div></div>
+        </div>
+        <div class="guard-actions">
+          <button class="btn accent" id="modwarn-ok" data-i18n="modwarn_ok">Понятно</button>
         </div>
       </div>
     </div>
@@ -639,6 +675,7 @@
       "/static/js/uprising.js?v={{ v }}",
       "/static/js/campaign.js?v={{ v }}",
       "/static/js/chrome.js?v={{ v }}",
+      "/static/js/modpaths.js?v={{ v }}",
       "/static/js/history.js?v={{ v }}",
       "/static/js/units.js?v={{ v }}",
        "/static/js/model3d.js?v={{ v }}",

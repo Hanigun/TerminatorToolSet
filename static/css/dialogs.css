@@ -132,6 +132,65 @@
    тянет её на шапку — даём нормальные внутренние отступы */
 .modal-card > .settings-hint { margin-top: 0; padding: 10px 16px 0; }
 .set-mod-hint { color: var(--text-mute); }
+/* Саб-пути мода: стильный дропдаун под путём (текстуры • модели) */
+.modsp-wrap { margin-top: -4px; }
+.modsp-toggle {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  background: var(--bg-elev, #2a2d33); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 12px; font-size: 13px; cursor: pointer;
+}
+.modsp-toggle:hover { border-color: var(--accent); }
+.modsp-toggle.open .modsp-caret { transform: rotate(90deg); }
+.modsp-caret {
+  display: inline-block; color: var(--accent); font-size: 11px;
+  transition: transform .15s ease;
+}
+.modsp-count {
+  margin-left: auto; font-size: 11px; color: var(--text-mute);
+  background: var(--bg, #1e2126); border: 1px solid var(--border);
+  border-radius: 10px; padding: 1px 8px;
+}
+.modsp-panel {
+  margin-top: 6px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg, #1e2126); padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 10px;
+  max-height: 220px; overflow-y: auto;
+}
+.modsp-panel[hidden] { display: none; }
+.modsp-group { display: flex; flex-direction: column; gap: 4px; }
+.modsp-head { display: flex; align-items: center; gap: 7px; }
+.modsp-title {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-mute);
+}
+.modsp-gdot { font-size: 10px; color: var(--text-faint, #5a6068); }
+.modsp-gdot::before { content: "●"; }
+.modsp-gdot.ok { color: #7bc88a; }
+.modsp-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.modsp-row.miss { opacity: .62; }
+.modsp-dot { font-size: 10px; width: 14px; text-align: center; color: #7bc88a; }
+.modsp-row.miss .modsp-dot { color: var(--text-faint, #5a6068); }
+.modsp-rel {
+  flex: 1; min-width: 0; font-family: Consolas, monospace;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.modsp-pill {
+  font-size: 10px; border: 1px solid var(--border); border-radius: 10px;
+  padding: 1px 8px; color: var(--text-mute); white-space: nowrap;
+}
+.modsp-pill.sub { color: #e8c15a; border-color: #6b5a2a; }
+.modsp-pill.miss { color: var(--text-faint, #5a6068); }
+.modsp-empty { font-size: 12px; color: var(--text-mute); }
+/* Модалка отказа пути: текст + две колонки чипов */
+.modwarn-text { font-size: 13px; color: var(--text); margin: 2px 0 10px; }
+.modwarn-cols { display: flex; gap: 12px; margin-bottom: 4px; }
+.modwarn-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.modwarn-cap {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-mute);
+}
+.modwarn-col .modsp-pill { align-self: flex-start; }
 /* шестерёнка настроек: чуть крупнее остальных иконок кнопки */
 #btn-settings svg { width: 16px; height: 16px; }
 .settings-actions { display: flex; gap: 8px; justify-content: flex-end; }
