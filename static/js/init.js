@@ -261,10 +261,11 @@ async function init() {
     const p = $("#set-unpacked").value.trim();
     const mp = $("#set-mod-path").value.trim();
     const pp = $("#set-project-path").value.trim();
-    const ov = $("#set-mod-overlay").value.trim();
+    const as = $("#set-mod-assets").value.trim();
+    const md = $("#set-mod-models").value.trim();
     const r = await api("/api/config", { method: "POST",
       body: JSON.stringify({ unpacked_path: p, mod_path: mp, project_path: pp,
-        mod_overlay_path: ov }) });
+        mod_assets_path: as, mod_models_path: md }) });
     const j = await r.json();
     if (j.error === "bad_mod_structure" || j.error === "bad_overlay_structure") {
       if (typeof showModWarn === "function") showModWarn(j);
@@ -273,7 +274,8 @@ async function init() {
       if (typeof revertModPathFields === "function") revertModPathFields();
       else {
         $("#set-mod-path").value = state.config.mod_path || "";
-        $("#set-mod-overlay").value = state.config.mod_overlay_path || "";
+        $("#set-mod-assets").value = state.config.mod_assets_path || "";
+        $("#set-mod-models").value = state.config.mod_models_path || "";
       }
       syncPathClear();
       return;
@@ -282,7 +284,8 @@ async function init() {
       state.config.unpacked_path = p;
       state.config.mod_path = mp;
       state.config.project_path = pp;
-      state.config.mod_overlay_path = ov;
+      state.config.mod_assets_path = as;
+      state.config.mod_models_path = md;
       // путь проекта из настроек применяется сразу: дерево перезагружается
       // тем же путём, что и с главной (иначе путь виден, но не загружен)
       const curRoot = (state.project && state.project.root) || "";
@@ -295,7 +298,15 @@ async function init() {
   });
   $("#set-mod-pick").addEventListener("click", async () => {
     const p = await pickFolder();
-    if (p) { $("#set-mod-path").value = p; syncPathClear(); }
+    if (p) {
+      $("#set-mod-path").value = p;
+      syncPathClear();
+      try {
+        const menu = document.getElementById("mod-path-menu");
+        if (menu && !menu.hidden && typeof refreshModSubpaths === "function")
+          refreshModSubpaths();
+      } catch (e) {}
+    }
   });
   // иконка папки логов в ряду категорий настроек (справа): открыть Logs
   const logsBtn = $("#btn-open-logs");

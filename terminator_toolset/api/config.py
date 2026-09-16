@@ -22,7 +22,9 @@ def register_config(app, ctx):
         # Путь мода без ожидаемой структуры не принимаем: папка вида
         # «голые текстуры» вместо корня мода молча ломала бы древо «Мод»,
         # копирование в мод и превью. Пустое значение — отвязка (крестик),
-        # она всегда разрешена.
+        # она всегда разрешена. Саб-пути мягче: чистые текстуры/модели
+        # могут лежать и голыми папками без basis/. Ответ несёт key+kind,
+        # чтобы фронт показал попап и откатил именно это поле.
         if "mod_path" in data:
             mp = (data.get("mod_path") or "").strip()
             if mp:
@@ -30,21 +32,22 @@ def register_config(app, ctx):
                 if not chk["ok"]:
                     return jsonify({"ok": False,
                                     "error": "bad_mod_structure",
+                                    "key": "mod_path", "kind": "mod",
                                     "path": mp,
                                     "expected": chk["expected"],
                                     "found": chk["found"]})
-        # Саб-путь _ASSETS мягче: чистые текстуры могут лежать и голыми
-        # папками textures//models//animations без basis/.
-        if "mod_overlay_path" in data:
-            ov = (data.get("mod_overlay_path") or "").strip()
-            if ov:
-                chk = _check_mod(ov, overlay=True)
-                if not chk["ok"]:
-                    return jsonify({"ok": False,
-                                    "error": "bad_overlay_structure",
-                                    "path": ov,
-                                    "expected": chk["expected"],
-                                    "found": chk["found"]})
+        for key in ("mod_assets_path", "mod_models_path"):
+            if key in data:
+                ov = (data.get(key) or "").strip()
+                if ov:
+                    chk = _check_mod(ov, overlay=True)
+                    if not chk["ok"]:
+                        return jsonify({"ok": False,
+                                        "error": "bad_overlay_structure",
+                                        "key": key, "kind": "overlay",
+                                        "path": ov,
+                                        "expected": chk["expected"],
+                                        "found": chk["found"]})
         for k, v in data.items():
             if k in config.data or k in ("theme", "language", "fullscreen", "auto_save",
                                          "default_key_column", "window_width", "window_height",
@@ -60,17 +63,22 @@ def register_config(app, ctx):
 
     @app.route("/api/mod_subpaths")
     def api_mod_subpaths():
-        """Саб-пути мода для дропдауна настроек: {textures, models} —
-        [{rel, exists, where}]. ?root= — живой предпросмотр при наборе
-        пути, иначе корень из конфига; оверлей — из конфига."""
+        """Саб-пути мода для саб-меню настроек: {textures, models} —
+        [{rel, exists, where}]. ?root/?assets/?models — живой предпросмотр
+        при наборе путей, иначе значения из конфига."""
         root = (request.args.get("root", "") or "").strip() \
             or (config.get("mod_path") or "")
         try:
-            ovl = (config.get("mod_overlay_path") or "").strip()
+            assets = (request.args.get("assets", "") or "").strip() \
+                or (config.get("mod_assets_path")
+                    or config.get("mod_overlay_path") or "").strip()
+            models = (request.args.get("models", "") or "").strip() \
+                or (config.get("mod_models_path") or "").strip()
         except Exception:  # noqa: BLE001
-            ovl = ""
+            assets, models = "", ""
         import os as _os
         if not root or not _os.path.isdir(root):
             return jsonify({"ok": False, "error": "no mod path"})
-        return jsonify({"ok": True, "root": root, "overlay": ovl,
-                        "groups": _mod_subpaths(root, ovl)})
+        return jsonify({"ok": True, "root": root,
+                        "assets": assets, "models": models,
+                        "groups": _mod_subpaths(root, assets, models)})

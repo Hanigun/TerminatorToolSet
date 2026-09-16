@@ -1136,7 +1136,8 @@ function openSettings(tab) {
   $("#set-guard-unpacked").checked = state.config.guard_unpacked !== false;
   $("#set-unpacked").value = state.config.unpacked_path || "";
   $("#set-mod-path").value = state.config.mod_path || "";
-  $("#set-mod-overlay").value = state.config.mod_overlay_path || "";
+  $("#set-mod-assets").value = state.config.mod_assets_path || "";
+  $("#set-mod-models").value = state.config.mod_models_path || "";
   $("#set-project-path").value = state.config.project_path || state.config.last_project || "";
   const czSel = $("#set-content-zoom");
   const uzSel = $("#set-ui-zoom");
@@ -1155,7 +1156,7 @@ function openSettings(tab) {
   renderHotkeyEditor();
   $("#settings-modal").hidden = false;
   syncPathClear();
-  try { syncModOverlayClear(); } catch (e) {}
+  try { syncModSubClear(); } catch (e) {}
   try { if (typeof refreshModSubpaths === "function") refreshModSubpaths(); } catch (e2) {}
   if (tab) {
     const btn = document.querySelector('.settings-tabs .st-tab[data-st="' + tab + '"]');
@@ -1366,7 +1367,8 @@ async function saveSettings() {
     auto_hide_tree: $("#set-auto-hide-tree").checked,
     guard_unpacked: $("#set-guard-unpacked").checked,
     mod_path: $("#set-mod-path").value.trim(),
-    mod_overlay_path: $("#set-mod-overlay").value.trim(),
+    mod_assets_path: $("#set-mod-assets").value.trim(),
+    mod_models_path: $("#set-mod-models").value.trim(),
   };
   const prevLang = state.lang;
   const r = await api("/api/config", { method: "POST", body: JSON.stringify(body) });

@@ -78,7 +78,7 @@ def safe_rel(value):
 def layer_bases(root, overlay=()):
     """Корни слоёв данных: basis первым, затем DLC-оверлеи.
 
-    overlay — саб-путь _ASSETS мода (строка или список): его basis-слои
+    overlay — саб-пути мода (строка или список): их basis-слои
     идут следом, файлы мода побеждают (symlink-like union, domain/modroots).
     """
     bases = []
@@ -117,8 +117,8 @@ def find_file(root, rel, fallback="", overlay=()):
 
     Мод — оверлей поверх базовой игры: чего нет в root, ищем
     в fallback (распакованная база). Свои файлы мода — первые.
-    overlay — саб-путь _ASSETS мода: его слои между root и fallback,
-    оба корня видны как одно целое.
+    overlay — саб-пути мода (ассеты, модели): их слои между root
+    и fallback, все корни видны как одно целое.
     """
     rel = safe_rel(rel)
     if not rel or not root:
@@ -157,25 +157,40 @@ def _base_fallback(upr, root):
     return base
 
 
-def overlay_for(upr, root):
-    """Саб-путь _ASSETS для поиска: (overlay,) если root — корень мода
-    из конфига и саб-путь задан, иначе (). Чужие корни (проект, игра)
-    оверлей мода не затрагивает."""
+def overlays_for(upr, root):
+    """Саб-пути мода для поиска: (assets, models), пустые выкинуты.
+
+    Отдаём, только если root — корень мода из конфига; чужие корни
+    (проект, игра) саб-пути не затрагивают. mod_overlay_path —
+    старое имя пути ассетов, подхватывается для совместимости."""
     try:
         cfg = getattr(upr, "_config", None)
         store = getattr(upr, "_store", None)
         if cfg is None:
             return ()
         mod = cfg.get("mod_path") or ""
-        ovl = cfg.get("mod_overlay_path") or ""
-        if store is not None:
-            mod = store.normal(mod) or ""
-            ovl = store.normal(ovl) or ""
-        if not ovl or not os.path.isdir(ovl):
+        assets = cfg.get("mod_assets_path") or cfg.get("mod_overlay_path") or ""
+        models = cfg.get("mod_models_path") or ""
+
+        def _norm(v):
+            try:
+                v = store.normal(v) if store is not None else v
+            except Exception:  # noqa: BLE001
+                pass
+            return v or ""
+        mod, assets, models = _norm(mod), _norm(assets), _norm(models)
+        if not _same_root(mod, root):
             return ()
-        if _same_root(ovl, root) or not _same_root(mod, root):
-            return ()
-        return (os.path.normpath(ovl),)
+        out = []
+        for cand in (assets, models):
+            try:
+                if cand and os.path.isdir(cand) and \
+                        not _same_root(cand, root) and \
+                        os.path.normpath(cand) not in out:
+                    out.append(os.path.normpath(cand))
+            except Exception:  # noqa: BLE001
+                continue
+        return tuple(out)
     except Exception:  # noqa: BLE001
         return ()
 
@@ -1067,7 +1082,7 @@ def preview_payload(upr, root, value, turret="@@auto@@", mg="@@auto@@"):
     if not root or not os.path.isdir(root):
         return {"ok": False, "error": "no_root"}
     ovl = _base_fallback(upr, root)
-    sub = overlay_for(upr, root)
+    sub = overlays_for(upr, root)
     armor_table = _preset("node_armor").get(rel) or {}
     path = find_file(root, rel, ovl, sub)
     if not path:
@@ -1214,7 +1229,7 @@ def turret_payload(upr, root, chassis_value, turret_rel, turret_slot="",
     if not root or not os.path.isdir(root):
         return {"ok": False, "error": "no_root"}
     ovl = _base_fallback(upr, root)
-    sub = overlay_for(upr, root)
+    sub = overlays_for(upr, root)
     cpath = find_file(root, crel, ovl, sub)
     if not cpath:
         return {"ok": False, "error": "no_file", "value": crel}

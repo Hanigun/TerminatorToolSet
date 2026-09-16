@@ -333,27 +333,30 @@
               <button class="icon-btn set-path-clear danger" id="set-unpacked-clear" data-i18n-title="set_clear_path" title="Очистить путь">✕</button>
             </div></label>
           <div class="settings-hint" data-i18n="set_unpacked_hint">Используется вкладкой «Игра» в дереве проекта. После успешной распаковки путь записывается автоматически.</div>
-          <label class="setting-row set-mod-row"><span data-i18n="set_mod_path">Путь к основному моду</span>
+          <label class="setting-row set-mod-row"><span class="modpath-label" id="mod-path-label" data-i18n="set_mod_path">Путь к основному моду</span>
             <div class="cm-dir-row set-path-row">
               <input type="text" id="set-mod-path" spellcheck="false">
-              <button class="icon-btn gold" id="set-mod-pick" data-i18n-title="up_pick_dest" title="Выбрать папку"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg></button>
+              <button class="icon-btn gold" id="set-mod-pick" data-i18n-title="up_pick_dest" title="Выбрать папку"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1 1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg></button>
               <button class="icon-btn set-path-clear danger" id="set-mod-clear" data-i18n-title="set_clear_path" title="Очистить путь">✕</button>
+              <button class="icon-btn gold modpath-caret" id="mod-path-caret" data-i18n-title="mod_subpaths" title="Саб-пути: текстуры • модели">▸</button>
             </div></label>
           <div class="settings-hint set-mod-hint" data-i18n="set_mod_path_hint">Путь к твоему созданному моду (для разработчика мода). Заполняется автоматически при создании мода; используется командой «Скопировать в мод».</div>
-          <label class="setting-row set-mod-row"><span data-i18n="set_mod_overlay">Саб-путь _ASSETS</span>
-            <div class="cm-dir-row set-path-row">
-              <input type="text" id="set-mod-overlay" spellcheck="false">
-              <button class="icon-btn gold" id="set-mod-overlay-pick" data-i18n-title="up_pick_dest" title="Выбрать папку"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1 1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg></button>
-              <button class="icon-btn set-path-clear danger" id="set-mod-overlay-clear" data-i18n-title="set_clear_path" title="Очистить путь">✕</button>
-            </div></label>
-          <div class="settings-hint set-mod-hint" data-i18n="set_mod_overlay_hint">Папка вида &lt;МОД&gt;_ASSETS с чистыми текстурами рядом с корнем мода. Поиск моделей и текстур идёт по обоим корням как по одному целому.</div>
-          <div class="modsp-wrap">
-            <button class="modsp-toggle" id="mod-subpaths-toggle" aria-expanded="false">
-              <span class="modsp-caret">▸</span>
-              <span data-i18n="mod_subpaths">Саб-пути: текстуры • модели</span>
-              <span class="modsp-count" id="mod-subpaths-count"></span>
-            </button>
-            <div class="modsp-panel" id="mod-subpaths" hidden></div>
+          <div class="modpath-menu" id="mod-path-menu" hidden>
+            <label class="setting-row"><span data-i18n="set_mod_assets">Путь к ассетам (_ASSETS)</span>
+              <div class="cm-dir-row set-path-row">
+                <input type="text" id="set-mod-assets" spellcheck="false">
+                <button class="icon-btn gold" id="set-mod-assets-pick" data-i18n-title="up_pick_dest" title="Выбрать папку"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1 1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg></button>
+                <button class="icon-btn set-path-clear danger" id="set-mod-assets-clear" data-i18n-title="set_clear_path" title="Очистить путь">✕</button>
+              </div></label>
+            <div class="settings-hint set-mod-hint" data-i18n="set_mod_assets_hint">Папка вида &lt;МОД&gt;_ASSETS с чистыми текстурами рядом с корнем мода.</div>
+            <label class="setting-row"><span data-i18n="set_mod_models">Путь к моделям</span>
+              <div class="cm-dir-row set-path-row">
+                <input type="text" id="set-mod-models" spellcheck="false">
+                <button class="icon-btn gold" id="set-mod-models-pick" data-i18n-title="up_pick_dest" title="Выбрать папку"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1 1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/></svg></button>
+                <button class="icon-btn set-path-clear danger" id="set-mod-models-clear" data-i18n-title="set_clear_path" title="Очистить путь">✕</button>
+              </div></label>
+            <div class="settings-hint set-mod-hint" data-i18n="set_mod_models_hint">Папка с моделями рядом с корнем мода. Поиск идёт по корню мода, затем саб-путям — всё видно как одно целое.</div>
+            <div class="modsp-panel" id="mod-subpaths"></div>
           </div>
           <div class="settings-actions">
             <button class="btn accent" id="set-unpacked-save" data-i18n="save">Сохранить</button>

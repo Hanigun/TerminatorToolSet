@@ -1,10 +1,11 @@
 """Саб-пути мода: текстуры/модели, проверка структуры, оверлей _ASSETS.
 
-Мод (mod_path) — корень с basis/... Рядом может лежать папка вида
-<МОД>_ASSETS с чистыми текстурами: её подключают саб-путём (конфиг
-mod_overlay_path), и программа видит оба корня как одно целое —
-поиск моделей/текстур идёт по слоям мода, затем оверлея (symlink-like
-union на уровне basis-слоёв, без слияния деревьев и правок на диске).
+Мод (mod_path) — корень с basis/... Рядом могут лежать папки вида
+<МОД>_ASSETS с чистыми текстурами и папка с моделями: их подключают
+саб-путями (конфиг mod_assets_path / mod_models_path), и программа
+видит все корни как одно целое — поиск моделей/текстур идёт по слоям
+мода, затем саб-путей (symlink-like union на уровне basis-слоёв,
+без слияния деревьев и правок на диске).
 """
 from __future__ import annotations
 
@@ -65,14 +66,16 @@ def check_mod_structure(path: str, overlay: bool = False) -> dict:
     return {"ok": ok, "expected": expected, "found": found}
 
 
-def layer_bases_union(mod_root: str, overlay: str = "") -> "list[str]":
-    """basis-слои мода + оверлея: basis, dlc/*/basis каждого корня.
+def layer_bases_union(mod_root: str, overlay: object = "") -> "list[str]":
+    """basis-слои мода + саб-путей: basis, dlc/*/basis каждого корня.
 
-    Порядок: слои мода первые (свои файлы побеждают), затем оверлей.
-    Дубли и несуществующие каталоги выкинуты.
+    overlay — строка или список (ассеты, модели...). Порядок: слои мода
+    первые (свои файлы побеждают), затем саб-пути. Дубли
+    и несуществующие каталоги выкинуты.
     """
     bases: "list[str]" = []
-    for root in (mod_root, overlay):
+    ovs = [overlay] if isinstance(overlay, str) else list(overlay or [])
+    for root in [mod_root] + ovs:
         if not root or not os.path.isdir(root):
             continue
         try:
@@ -90,22 +93,30 @@ def layer_bases_union(mod_root: str, overlay: str = "") -> "list[str]":
     return bases
 
 
-def mod_subpaths(mod_root: str, overlay: str = "") -> dict:
-    """Саб-пути для дропдауна настроек: {textures:[...], models:[...]}.
+def mod_subpaths(mod_root: str, assets: str = "",
+                  models: str = "") -> dict:
+    """Саб-пути для саб-меню настроек: {textures:[...], models:[...]}.
 
     Каждый элемент {rel, exists, where}: rel — путь вида
-    basis/textures или dlc/<Имя>/basis/models; where — "mod"/"overlay"
-    (где физически найден) либо "" (нет ни там, ни там).
+    basis/textures или dlc/<Имя>/basis/models; where — "mod"/"assets"/
+    "models" (где физически найден) либо "" (нет нигде).
     """
     groups = {"textures": [], "models": []}
+    roots: "list[tuple[str, str]]" = []
     try:
-        roots = []
-        if mod_root and os.path.isdir(mod_root):
-            roots.append((os.path.normpath(mod_root), "mod"))
-        if overlay and os.path.isdir(overlay) and \
-                os.path.normcase(os.path.normpath(overlay)) != \
-                os.path.normcase(os.path.normpath(mod_root or "")):
-            roots.append((os.path.normpath(overlay), "overlay"))
+        seen_roots = set()
+
+        def _add(root: str, tag: str) -> None:
+            try:
+                nb = os.path.normcase(os.path.normpath(root or ""))
+            except Exception:  # noqa: BLE001
+                return
+            if root and os.path.isdir(root) and nb not in seen_roots:
+                seen_roots.add(nb)
+                roots.append((os.path.normpath(root), tag))
+        _add(mod_root, "mod")
+        _add(assets, "assets")
+        _add(models, "models")
     except Exception:  # noqa: BLE001
         roots = []
     seen: "set[str]" = set()

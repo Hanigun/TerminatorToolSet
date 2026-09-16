@@ -132,32 +132,25 @@
    тянет её на шапку — даём нормальные внутренние отступы */
 .modal-card > .settings-hint { margin-top: 0; padding: 10px 16px 0; }
 .set-mod-hint { color: var(--text-mute); }
-/* Саб-пути мода: стильный дропдаун под путём (текстуры • модели) */
-.modsp-wrap { margin-top: -4px; }
-.modsp-toggle {
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  background: var(--bg-elev, #2a2d33); color: var(--text);
-  border: 1px solid var(--border); border-radius: 8px;
-  padding: 8px 12px; font-size: 13px; cursor: pointer;
+/* Путь мода — ещё и кнопка: подпись и каретка открывают саб-меню
+   с двумя пунктами (ассеты, модели) и статусами саб-путей */
+.modpath-label { cursor: pointer; }
+.modpath-label:hover { color: var(--accent); }
+.modpath-caret { transition: transform .15s ease; }
+.modpath-caret.open { transform: rotate(90deg); }
+.modpath-menu {
+  margin-top: -4px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg-elev, #2a2d33); padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 10px;
 }
-.modsp-toggle:hover { border-color: var(--accent); }
-.modsp-toggle.open .modsp-caret { transform: rotate(90deg); }
-.modsp-caret {
-  display: inline-block; color: var(--accent); font-size: 11px;
-  transition: transform .15s ease;
-}
-.modsp-count {
-  margin-left: auto; font-size: 11px; color: var(--text-mute);
-  background: var(--bg, #1e2126); border: 1px solid var(--border);
-  border-radius: 10px; padding: 1px 8px;
-}
+.modpath-menu[hidden] { display: none; }
+/* Статусы саб-путей внутри саб-меню */
 .modsp-panel {
-  margin-top: 6px; border: 1px solid var(--border); border-radius: 8px;
+  border: 1px solid var(--border); border-radius: 8px;
   background: var(--bg, #1e2126); padding: 10px 12px;
   display: flex; flex-direction: column; gap: 10px;
   max-height: 220px; overflow-y: auto;
 }
-.modsp-panel[hidden] { display: none; }
 .modsp-group { display: flex; flex-direction: column; gap: 4px; }
 .modsp-head { display: flex; align-items: center; gap: 7px; }
 .modsp-title {
