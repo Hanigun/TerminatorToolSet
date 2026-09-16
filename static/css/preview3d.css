@@ -1,0 +1,92 @@
+/* Редактор preview_config: тело вкладки — тот же вьюер model3d
+(бар сверху, сцена слева), справа — панель координат и конфигов */
+.preview-tab {
+  overflow: hidden;
+  background: #222326;
+}
+.pv3-body {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+}
+.preview-tab .m3d-view {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+  min-width: 0;
+}
+/* Боковая панель редактора позы */
+.pv3-side {
+  width: 248px;
+  flex: none;
+  overflow-y: auto;
+  padding: 10px 12px 14px;
+  background: #2a2c30;
+  border-left: 1px solid #3a3d43;
+  color: #cfd3da;
+  font-size: 12px;
+}
+.pv3-lab {
+  margin: 10px 0 4px;
+  color: #8f959f;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+.pv3-lab:first-child {
+  margin-top: 0;
+}
+.pv3-val {
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  color: #e8ebf0;
+  background: #222326;
+  border: 1px solid #3a3d43;
+  border-radius: 4px;
+  padding: 4px 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pv3-in {
+  width: 100%;
+  box-sizing: border-box;
+  background: #222326;
+  border: 1px solid #3a3d43;
+  border-radius: 4px;
+  color: #e8ebf0;
+  font-size: 12px;
+  padding: 4px 6px;
+  margin-top: 4px;
+}
+.pv3-in:focus {
+  outline: none;
+  border-color: #6e96e6;
+}
+.pv3-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.pv3-btn {
+  flex: 1;
+  background: #3d5a99;
+  border: 1px solid #4c6cab;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 12px;
+  padding: 6px 0;
+  cursor: pointer;
+}
+.pv3-btn:hover {
+  background: #4868ad;
+}
+.pv3-btn.pv3-ghost {
+  background: transparent;
+  border-color: #4a4e56;
+  color: #cfd3da;
+}
+.pv3-btn.pv3-ghost:hover {
+  background: #33363c;
+}

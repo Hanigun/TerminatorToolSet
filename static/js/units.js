@@ -1375,6 +1375,33 @@ async function untPaintTypeDetail(box) {
   }
   const kv = document.createElement("div");
   kv.className = "unt-kv";
+  // Кнопка редактора preview_config в шапке: 3D-редактор позы камеры
+  // юнита вкладкой (preview3d.js поверх ядра model3d, сам model3d цел).
+  // Только если у юнита есть mesh; стартовый конфиг — из колонки
+  // preview_camera_config (у пехоты/оружия её нет — там кнопка молча
+  // не появляется, обычный предпросмотр не трогаем).
+  {
+    const meshIdx = columns.findIndex(c => String(c).trim().toLowerCase() === "mesh");
+    const meshVal = (meshIdx !== -1 && meshIdx < values.length)
+      ? String(values[meshIdx] || "").trim() : "";
+    if (meshVal) {
+      const pcIdx = columns.findIndex(c =>
+        String(c).trim().toLowerCase() === "preview_camera_config");
+      const pv = untFieldBtn(UNT_M3D_SVG, "pv3_open");
+      pv.onclick = e => {
+        e.stopPropagation();
+        if (typeof openPreviewEditor !== "function") {
+          toast(t("m3d_err_lib") || "3D error", "err");
+          return;
+        }
+        const cfg = (pcIdx !== -1 && pcIdx < values.length)
+          ? String(values[pcIdx] || "") : "";
+        openPreviewEditor({root: untSrcRoot() || "", mesh: meshVal,
+          sys: sys, cat: cat, config: cfg});
+      };
+      head.appendChild(pv);
+    }
+  }
   columns.forEach((c, i) => {
     if (i === sysIdx) return; // sysname — поле в шапке рядом с иконкой
     const r = document.createElement("div");

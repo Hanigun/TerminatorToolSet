@@ -341,7 +341,7 @@ async function activateTab(tabId) {
   // Update toolbar visibility
   const isWelcome = tab.type === "welcome";
   // У 3D-превью своей панели инструментов нет (только бар вьюера в теле)
-  $("#sheet-toolbar").hidden = isWelcome || tab.type === "model";
+  $("#sheet-toolbar").hidden = isWelcome || tab.type === "model" || tab.type === "preview";
   
   // Update current file state for the active tab
   if (tab.type === "file" && tab.fileData) {
@@ -383,6 +383,16 @@ async function activateTab(tabId) {
     const mfp = $("#file-path");
     mfp.textContent = tab.path || "";
     mfp.title = tab.path || "";
+  } else if (tab.type === "preview") {
+    // Редактор preview_config: сессий нет, в шапке — юнит и конфиг
+    state.currentFile = null;
+    state.dirty = false;
+    updateDirty();
+    paintSyncBoxes();
+    const pfp = $("#file-path");
+    const pv = tab._pv3 || {};
+    pfp.textContent = [pv.sys, pv.config].filter(Boolean).join(" · ") || tab.title || "";
+    pfp.title = pfp.textContent;
   } else if (tab.type === "welcome" || tab.type === "compare"
       || tab.type === "create-mod" || tab.type === "unpacker" || tab.type === "swt"
       || tab.type === "uprising" || tab.type === "uprising-rnd"
@@ -522,6 +532,17 @@ function createTab(type, data) {
       dirty: false,
       icon: getFileIcon(data.path)
     };
+  } else if (type === "preview") {
+    // Вкладка редактора preview_config: тело строит openPreviewEditor
+    // в preview3d.js поверх ядра model3d; сохранение — кнопкой в панели.
+    tab = {
+      id,
+      type: "preview",
+      title: data.title || "preview",
+      sub: "",
+      dirty: false,
+      icon: "/assets/icons/dark/icons/_3d.svg"
+    };
   }
 
   state.tabs.push(tab);
@@ -567,8 +588,9 @@ function closeTab(tabId) {
     if (tab.type === "units" && typeof untFreshState === "function") {
       state.units = untFreshState();
     }
-    // 3D-превью .model: гасим цикл рендера и чистим GL-ресурсы вкладки
-    if (tab.type === "model" && typeof m3dDisposeTab === "function") {
+    // 3D-превью .model и редактор preview_config: гасим цикл рендера
+    // и чистим GL-ресурсы вкладки (ядро одно — уборка общая)
+    if ((tab.type === "model" || tab.type === "preview") && typeof m3dDisposeTab === "function") {
       try { m3dDisposeTab(tab); } catch (e) {}
     }
 

@@ -1,0 +1,394 @@
+// Редактор preview_config: поза камеры для превью юнита.
+// ВАЖНО: model3d.js не тронут — только вызываем его готовое ядро
+// (m3dLibs/m3dStage/m3dShowData/кэш) и дорисовываем свою боковую панель.
+// Точка входа — openPreviewEditor({root, mesh, sys, cat, config}):
+// переиспользуется из редактора юнитов, а позже — из древа и других
+// редакторов. Вкладка типа "preview" (создаёт grid.js).
+// Соответствие координатам игры: position/target(fov — как есть;
+// rotation в превью всегда смотрит в origin (OrbitControls держит
+// lookAt), поэтому читаем и пишем фактический кватернион камеры;
+// zoom игры — дистанция камера→origin (у абрамса |pos|≈20.3,
+// zoom=20.58 — сходится).
+var PV3_RAD2DEG = 180 / Math.PI;
+var PV3_DEG2RAD = Math.PI / 180;
+
+// Свет для нового конфига с нуля: копия значений игры (abrams.config) —
+// редактор свет не крутит, но файл обязан остаться полным.
+var PV3_DEFAULT_LIGHTS = {
+  directLight: {
+    color: "00e9f9fe",
+    position: {x: 0.0, y: 0.0, z: 0.0},
+    power: 10.0, range: 1.0,
+    rotation: {w: -0.383022278547287, x: -0.3830222189426422,
+      y: -0.17860622704029083, z: 0.8213937282562256},
+    shadowBias: 0.0003000000142492354, shadowOpacity: 0.0,
+  },
+  indirectLight: {
+    addFactor: 0.0, ambientColor: "ffffffff", angle: 53.0,
+    brightness: 0.699999988079071, exposure: 0.5199999809265137,
+    textureName: "gray_1",
+  },
+};
+
+// "preview_config/abrams.config" -> "abrams.config"; "abrams" -> "abrams.config"
+function pv3ConfigName(ref) {
+  let s = String(ref || "").replace(/\\/g, "/");
+  s = s.split("/").pop().trim();
+  if (!s) return "";
+  return s.endsWith(".config") ? s : s + ".config";
+}
+
+// Открыть редактор превью вкладкой. mesh — сырое значение колонки mesh
+// (тот же value, что ест /api/model_preview). Повторный вызов по тому же
+// юниту — переключение на готовую вкладку.
+function openPreviewEditor(opts) {
+  opts = opts || {};
+  const root = opts.root || "", mesh = opts.mesh || "";
+  if (!root || !mesh) {
+    toast(t("m3d_err_nofile") || "3D error", "err");
+    return;
+  }
+  const sys = opts.sys || mesh;
+  try {
+    const hit = (state.tabs || []).find(t => t.type === "preview"
+      && t._pv3 && t._pv3.root === root && t._pv3.mesh === mesh);
+    if (hit) { activateTab(hit.id); return; }
+  } catch (e) { /* вкладок ещё нет */ }
+  const tab = createTab("preview", {title: sys});
+  const pv3 = tab._pv3 = {root: root, mesh: mesh, sys: sys,
+    cat: opts.cat || "", config: pv3ConfigName(opts.config),
+    names: [], base: null, cam: null, st: null, ui: null};
+  tab.sub = pv3.config || "";
+  const panel = document.createElement("section");
+  panel.className = "tab-panel preview-tab";
+  panel.dataset.tabId = tab.id;
+  panel.role = "tabpanel";
+  const bar = document.createElement("div");
+  bar.className = "m3d-bar";
+  const body = document.createElement("div");
+  body.className = "pv3-body";
+  const view = document.createElement("div");
+  view.className = "m3d-view";
+  view.innerHTML = '<div class="m3d-cube"><div class="m3d-cube-inner">' +
+    '<i></i><i></i><i></i><i></i><i></i><i></i></div></div>' +
+    '<div class="m3d-status"></div>' +
+    '<div class="m3d-pbar"><i></i></div>' +
+    '<div class="m3d-tprog" style="display:none"><span></span><i><b></b></i></div>' +
+    '<div class="m3d-perf"></div>' +
+    '<div class="m3d-err" hidden></div>';
+  try { view.querySelector(".m3d-status").textContent = t("m3d_loading") || ""; }
+  catch (e) { /* подпись необязательна */ }
+  const side = document.createElement("aside");
+  side.className = "pv3-side";
+  body.appendChild(view);
+  body.appendChild(side);
+  panel.appendChild(bar);
+  panel.appendChild(body);
+  $("#tab-panels").appendChild(panel);
+  renderTabBar();
+  activateTab(tab.id);
+  if (state.config && state.config.auto_hide_tree) {
+    state.sidebarCollapsed = true;
+    try { updateSidebarVisibility(); } catch (e) {}
+  }
+  m3dLibs(ok => {
+    if (!panel.isConnected) return;
+    const fail = msg => {
+      try { view.querySelector(".m3d-cube").remove(); } catch (e) {}
+      try { view.querySelector(".m3d-status").remove(); } catch (e2) {}
+      try { view.querySelector(".m3d-pbar").remove(); } catch (e3) {}
+      const box = view.querySelector(".m3d-err");
+      if (box) { box.textContent = msg; box.hidden = false; }
+    };
+    if (!ok || typeof m3dStage !== "function") {
+      fail(t("m3d_err_lib") || "3D error");
+      return;
+    }
+    // Сцена ядром model3d — та же, что в обычном превью
+    const st = m3dStage(panel, view, bar, root);
+    if (!st) { fail(t("m3d_err_lib") || "3D error"); return; }
+    st.onClose = () => { try { closeTab(tab.id); } catch (e) {} };
+    tab._m3d = st;
+    pv3.st = st;
+    pv3FetchModel(tab, pv3, st, fail);
+  });
+}
+
+// Геометрия — тем же эндпоинтом и тем же показом, что обычное превью
+// (m3dShowData), дальше поза камеры — наша.
+function pv3FetchModel(tab, pv3, st, fail) {
+  const key = m3dCacheKey(pv3.root, pv3.mesh, pv3.cat, pv3.sys);
+  st.cacheKey = key;
+  const done = data => {
+    if (!st.pop.isConnected) return;
+    try { st.spin.hidden = true; } catch (e) {}
+    try { st.status.hidden = true; } catch (e2) {}
+    if (!data || !data.ok) {
+      fail(m3dErrText(data && data.error));
+      return;
+    }
+    if (st.cacheKey) m3dCachePut(st.cacheKey, {data: data});
+    m3dShowData(st, data, true);
+    pv3AfterLoad(tab, pv3, st);
+  };
+  const hit = m3dCacheGet(key);
+  if (hit && hit.data && hit.data.ok) {
+    st.params = {root: pv3.root, value: pv3.mesh,
+      cat: pv3.cat, sys: pv3.sys,
+      turret: (hit.data.turret && hit.data.turret.rel) || "@@auto@@"};
+    st.fromCache = true;
+    done(hit.data);
+    return;
+  }
+  m3dProgress(st, 0.15);
+  st.params = {root: pv3.root, value: pv3.mesh,
+    cat: pv3.cat, sys: pv3.sys,
+    turret: m3dTurretPick.get(key) || "@@auto@@"};
+  fetch("/api/model_preview", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(st.params),
+  }).then(r => r.json()).catch(() => ({ok: false, error: "net"})
+  ).then(done);
+}
+
+// Модель встала: строим боковую панель, грузим список конфигов
+// и применяем позу текущего конфига юнита.
+function pv3AfterLoad(tab, pv3, st) {
+  pv3BuildSide(tab, pv3, st);
+  try {
+    st.ctl.addEventListener("change", () => pv3Update(pv3));
+  } catch (e) { /* без живого readout — только по кнопкам */ }
+  fetch("/api/preview_configs?root=" + encodeURIComponent(pv3.root)
+  ).then(r => r.json()).catch(() => ({ok: false})
+  ).then(res => {
+    if (!st.pop.isConnected) return;
+    pv3.names = (res && res.ok && res.names) || [];
+    pv3FillSelect(pv3);
+    pv3LoadConfig(pv3, pv3.config || "");
+  });
+}
+
+// Применить позу из конфига: точка прицеливания, угол обзора, затем
+// камера на сохранённой дистанции (zoom) по направлению позы.
+function pv3ApplyPose(pv3, cam) {
+  const st = pv3.st;
+  if (!st || !cam) return;
+  const o = cam.origin || {}, p = cam.position || {}, r = cam.rotation || {};
+  const origin = new THREE.Vector3(+o.x || 0, +o.y || 0, +o.z || 0);
+  const pos = new THREE.Vector3(+p.x || 0, +p.y || 0, +p.z || 0);
+  const dir = pos.clone().sub(origin);
+  if (dir.lengthSq() < 1e-8) dir.set(1, 0.5, -1);
+  dir.normalize();
+  const zoom = (+cam.zoom > 0) ? +cam.zoom : 20;
+  st.ctl.target.copy(origin);
+  st.camera.position.copy(origin).addScaledVector(dir, zoom);
+  st.camera.fov = (+cam.fov > 0 ? +cam.fov : 0.49) * PV3_RAD2DEG;
+  st.camera.updateProjectionMatrix();
+  st.ctl.update();
+  pv3.cam = JSON.parse(JSON.stringify(cam));
+  pv3Update(pv3);
+}
+
+// Текущая поза сцены в формате конфига игры (полная точность,
+// без округлений — округление только в подписях).
+function pv3ReadPose(pv3) {
+  const st = pv3.st;
+  const c = st.camera, q = c.quaternion, tg = st.ctl.target;
+  return {
+    fov: c.fov * PV3_DEG2RAD,
+    origin: {x: tg.x, y: tg.y, z: tg.z},
+    position: {x: c.position.x, y: c.position.y, z: c.position.z},
+    rotation: {w: q.w, x: q.x, y: q.y, z: q.z},
+    zoom: c.position.distanceTo(tg),
+  };
+}
+
+// Живые координаты в панели: каждый сдвиг камеры — новые цифры.
+function pv3Update(pv3) {
+  const ui = pv3.ui;
+  if (!ui || !pv3.st) return;
+  const pose = pv3ReadPose(pv3);
+  const f4 = v => (Math.round(v * 10000) / 10000).toFixed(4);
+  ui.pos.textContent = f4(pose.position.x) + "  " +
+    f4(pose.position.y) + "  " + f4(pose.position.z);
+  ui.rot.textContent = f4(pose.rotation.w) + "  " +
+    f4(pose.rotation.x) + "  " + f4(pose.rotation.y) + "  " +
+    f4(pose.rotation.z);
+  ui.org.textContent = f4(pose.origin.x) + "  " +
+    f4(pose.origin.y) + "  " + f4(pose.origin.z);
+  ui.fov.textContent = f4(pose.fov);
+  ui.zoom.textContent = f4(pose.zoom);
+  if (document.activeElement !== ui.fovIn) ui.fovIn.value = f4(pose.fov);
+}
+
+// Загрузить конфиг по имени и встать в его позу; пустое имя —
+// домашний вид ядра (поза по умолчанию, свет — дефолт игры).
+function pv3LoadConfig(pv3, name) {
+  const st = pv3.st;
+  if (!st) return;
+  pv3.config = name || "";
+  pv3.base = null;
+  if (pv3.ui) {
+    pv3.ui.sel.value = name || "";
+    pv3.ui.name.value = name || "";
+  }
+  if (!name) {
+    if (st.home) st.home();
+    pv3.cam = null;
+    pv3Update(pv3);
+    return;
+  }
+  fetch("/api/preview_config?root=" + encodeURIComponent(pv3.root) +
+    "&name=" + encodeURIComponent(name)
+  ).then(r => r.json()).catch(() => ({ok: false})
+  ).then(res => {
+    if (!st.pop.isConnected) return;
+    if (!res || !res.ok || !res.data) {
+      toast(t("pv3_err_load") || "preview error", "err");
+      return;
+    }
+    pv3.base = res.data;
+    if (res.data.camera) pv3ApplyPose(pv3, res.data.camera);
+    else pv3Update(pv3);
+  });
+}
+
+// Сохранить текущую позу: в текущий конфиг либо в новый из поля имени.
+function pv3Save(pv3) {
+  const ui = pv3.ui;
+  if (!ui || !pv3.st) return;
+  const name = pv3ConfigName(ui.name.value);
+  if (!name) {
+    toast(t("pv3_err_name") || "preview error", "err");
+    return;
+  }
+  const base = pv3.base || {};
+  const data = {
+    camera: pv3ReadPose(pv3),
+    directLight: base.directLight || PV3_DEFAULT_LIGHTS.directLight,
+    indirectLight: base.indirectLight || PV3_DEFAULT_LIGHTS.indirectLight,
+  };
+  fetch("/api/preview_config_save", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({root: pv3.root, name: name, data: data}),
+  }).then(r => r.json()).catch(() => ({ok: false})
+  ).then(res => {
+    if (!pv3.st.pop.isConnected) return;
+    if (!res || !res.ok) {
+      toast(t("pv3_err_save") || "preview error", "err");
+      return;
+    }
+    pv3.config = res.name;
+    pv3.base = data;
+    pv3.cam = JSON.parse(JSON.stringify(data.camera));
+    if (pv3.names.indexOf(res.name) === -1) {
+      pv3.names.push(res.name);
+      pv3.names.sort();
+      pv3FillSelect(pv3);
+    }
+    ui.sel.value = res.name;
+    ui.name.value = res.name;
+    const tab = (state.tabs || []).find(t => t._pv3 === pv3);
+    if (tab) { tab.sub = res.name; renderTabBar(); }
+    toast(t("pv3_saved") || "saved", "ok");
+  });
+}
+
+function pv3FillSelect(pv3) {
+  const sel = pv3.ui && pv3.ui.sel;
+  if (!sel) return;
+  sel.options.length = 0;
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = "—";
+  sel.appendChild(none);
+  pv3.names.forEach(n => {
+    const o = document.createElement("option");
+    o.value = n;
+    o.textContent = n.replace(/\.config$/, "");
+    if (n === pv3.config) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
+// Боковая панель редактора: выбор конфига, живые координаты,
+// угол обзора, имя файла, сохранить/сбросить.
+function pv3BuildSide(tab, pv3, st) {
+  const side = st.pop.querySelector(".pv3-side");
+  if (!side || pv3.ui) return;
+  const L = key => t(key) || key;
+  const mkLab = key => {
+    const d = document.createElement("div");
+    d.className = "pv3-lab";
+    d.textContent = L(key);
+    side.appendChild(d);
+    return d;
+  };
+  const mkVal = () => {
+    const d = document.createElement("div");
+    d.className = "pv3-val";
+    d.textContent = "—";
+    side.appendChild(d);
+    return d;
+  };
+  mkLab("pv3_config");
+  const sel = document.createElement("select");
+  sel.className = "pv3-in";
+  sel.onchange = () => pv3LoadConfig(pv3, sel.value || "");
+  side.appendChild(sel);
+  mkLab("pv3_pos");
+  const pos = mkVal();
+  mkLab("pv3_rot");
+  const rot = mkVal();
+  mkLab("pv3_origin");
+  const org = mkVal();
+  mkLab("pv3_fov");
+  const fov = mkVal();
+  const fovIn = document.createElement("input");
+  fovIn.className = "pv3-in";
+  fovIn.type = "number";
+  fovIn.step = "0.01";
+  fovIn.min = "0.05";
+  fovIn.title = L("pv3_fov");
+  fovIn.onchange = () => {
+    const v = parseFloat(fovIn.value);
+    if (!(v > 0)) return;
+    st.camera.fov = v * PV3_RAD2DEG;
+    st.camera.updateProjectionMatrix();
+    pv3Update(pv3);
+  };
+  side.appendChild(fovIn);
+  mkLab("pv3_zoom");
+  const zoom = mkVal();
+  mkLab("pv3_name");
+  const name = document.createElement("input");
+  name.className = "pv3-in";
+  name.type = "text";
+  name.spellcheck = false;
+  name.autocomplete = "off";
+  name.placeholder = "abrams";
+  side.appendChild(name);
+  const row = document.createElement("div");
+  row.className = "pv3-row";
+  const save = document.createElement("button");
+  save.type = "button";
+  save.className = "pv3-btn";
+  save.textContent = L("pv3_save");
+  save.onclick = () => pv3Save(pv3);
+  const reset = document.createElement("button");
+  reset.type = "button";
+  reset.className = "pv3-btn pv3-ghost";
+  reset.textContent = L("pv3_reset");
+  reset.onclick = () => {
+    if (pv3.cam) pv3ApplyPose(pv3, pv3.cam);
+    else if (st.home) { st.home(); pv3Update(pv3); }
+  };
+  row.appendChild(save);
+  row.appendChild(reset);
+  side.appendChild(row);
+  pv3.ui = {sel: sel, pos: pos, rot: rot, org: org, fov: fov,
+    fovIn: fovIn, zoom: zoom, name: name};
+  pv3Update(pv3);
+}
