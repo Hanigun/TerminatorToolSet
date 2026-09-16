@@ -475,6 +475,14 @@ async function renderUnits(force) {
     // цены (cost) — тем же /api/uprising_prices, что кампания.
     untEnsureIcons().catch(() => {});
     untEnsurePrices().catch(() => {});
+    // Фоновая ленивая догрузка найденных иконок: в простое после отрисовки
+    // греем кэш браузера, чтобы раскрытие карточек было мгновенным.
+    try {
+      const idle = window.requestIdleCallback || null;
+      if (idle) idle(() => { untPrefetchExisting().catch(() => {}); },
+        { timeout: 4000 });
+      else setTimeout(() => { untPrefetchExisting().catch(() => {}); }, 2000);
+    } catch (e) {}
     // Досмотр зависших иконок (рваный коннект без error): один проход
     // через 5с после отрисовки, как cmpImgSweepT у кампании.
     try {
@@ -1231,6 +1239,78 @@ async function untEnsureTypeIcons(layerKey, cat) {
   if (!names.length) return;
   state.units.iconsReady = false;
   await untFetchNames(names).catch(() => {});
+}
+
+// Все sysname витрины (все слои и классы, открытые и закрытые), кроме уже
+// готовых (iconMap) и заведомо отсутствующих (iconFail) — для фонового
+// прогрева, не для отрисовки.
+function untAllNames() {
+  const out = [];
+  if (!state.units) return out;
+  const map = state.units.iconMap || {};
+  const fail = state.units.iconFail || {};
+  const seen = new Set();
+  ((state.units.layers || [])).forEach(L => {
+    UNT_CATS.forEach(c => {
+      (((L.cats || {})[c] || {}).items || []).forEach(x => {
+        if (x && x.sys && !map[x.sys] && !fail[x.sys] && !seen.has(x.sys)) {
+          seen.add(x.sys);
+          out.push(x.sys);
+        }
+      });
+    });
+  });
+  return out;
+}
+
+// Фоновая ленивая догрузка УЖЕ НАЙДЕННЫХ иконок (в простое после отрисовки):
+// один URL-батч на всю витрину + тихий префетч найденных URL в кэш браузера.
+// Чипы не строим, DOM не трогаем, спиннеров нет — когда пользователь раскроет
+// карточку, иконки берутся из кэша мгновенно. Missing ("") не трогаем вообще:
+// новые иконки — стандартное поведение при раскрытии (спиннер, предзагрузка,
+// конвертер, отображение). Действие пользователя важнее: любой новый батч
+// (iconSeq вырос) останавливает прогрев.
+async function untPrefetchExisting() {
+  if (!state.units) return;
+  const my = state.units.iconSeq;
+  const fresh = () => !!state.units && my === state.units.iconSeq;
+  const names = untAllNames();
+  if (!names.length) return;
+  const root = untSrcRoot();
+  let merged;
+  try {
+    merged = await untIconMapBatch(root, names);
+  } catch (e) { return; }
+  if (!fresh()) return;
+  Object.assign(state.units.iconMap, merged);
+  state.units.iconsReady = true;
+  // чипы открытых карточек — проявить сразу; закрытые чипов не имеют
+  untPaintAllLists();
+  const urls = [];
+  names.forEach(n => { if (merged[n]) urls.push(merged[n]); });
+  const CH = 40;
+  for (let i = 0; i < urls.length; i += CH) {
+    if (!fresh()) return;
+    await new Promise(res => {
+      let left = 0;
+      let done = false;
+      const fin = () => { if (!done) { done = true; res(); } };
+      // зависший коннект не держит прогрев: потолок 15с на чанк
+      const timer = setTimeout(fin, 15000);
+      try {
+        urls.slice(i, i + CH).forEach(u => {
+          left++;
+          const im = new Image();
+          im.onload = im.onerror = () => {
+            try { im.onload = im.onerror = null; } catch (e) {}
+            if (--left <= 0) { clearTimeout(timer); fin(); }
+          };
+          im.src = u;
+        });
+      } catch (e) { clearTimeout(timer); fin(); }
+      if (!left) { clearTimeout(timer); fin(); }
+    });
+  }
 }
 
 // Тело карточки типа: ВСЯ строка species-файла своего слоя без исключений
