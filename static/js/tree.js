@@ -31,6 +31,26 @@ const TREE_DIR_ICONS = {
 // .model — по видам техники (Пехота/Машины/Танки/Вертолёты…).
 // Order defines display order; groups only appear for files actually
 // present in the opened project.
+// стем .model без суффиксов вариантов (_burn/_damaged/_desert/_rust):
+// fnd_abrams_chassis_damaged_burn → fnd_abrams_chassis. Матчеры ниже
+// работают по стему — варианты той же машины ложатся в тот же раздел.
+function mdlStem(name) {
+  let s = String(name || "").toLowerCase().replace(/\.model$/, "");
+  let prev = "";
+  while (s !== prev) {
+    prev = s;
+    s = s.replace(/_(burn|damaged|desert|rust)$/, "");
+  }
+  return s;
+}
+// шасси танкового класса по species (tanks.xml, колонка mesh):
+// точный список стемов + узкий фолбэк для будущих chassis
+const MDL_TANK_STEMS = new Set(["spider", "lgn_tank_chassis",
+  "lgn_artillery_chassis", "fnd_bradley_chassis", "fnd_abrams_chassis",
+  "fnd_m113_chassis", "fnd_m109_chassis", "buldozer_chassis",
+  "integrator_transport_v1", "integrator_small_tractor",
+  "integrator_transport_plasma_artillery", "integrator_tank_v1",
+  "integrator_tractor_v1", "sherman_railcannon", "lgn_madrobot_chassis"]);
 const TREE_CATEGORIES = [
   // humans.xml живёт в «Отрядах»: отдельный раздел «Пехота» убран, один
   // боец без отряда в игре не встречается
@@ -42,13 +62,22 @@ const TREE_CATEGORIES = [
   { key: "tank_upgrades", icon: "renovate.svg", match: n => !n.endsWith(".model") && n.startsWith("tank_") },
   { key: "helicopters", icon: "velocity.svg", match: n => n === "helicopters.xml" },
   { key: "heli_upgrades", icon: "renovate.svg", match: n => !n.endsWith(".model") && n.startsWith("heli_") },
+  // .model башен и танковых шасси — ДО вооружения: у башни в имени
+  // cannon/railgun/minigun, у sherman_railcannon — railcannon, порядок решает.
+  // Башни: любой _turret_/_tower без chassis (сменные башни, TOW, вышки
+  // буксируемых платформ). Танки: стемы шасси танкового класса из tanks.xml
+  // (колонка mesh) + узкий фолбэк для будущих chassis (без apc/humvee/
+  // stryker/hemtt/himars/towed — они классом Машины, см. cars.xml).
+  { key: "mdl_turrets", icon: "dart.svg", match: n => { if (!n.endsWith(".model")) return false; const s = mdlStem(n); return !/chassis/.test(s) && (/turret|_tower/.test(s) || /_tow$/.test(s)); } },
+  { key: "mdl_tanks", icon: "sentry.svg", match: n => { if (!n.endsWith(".model")) return false; const s = mdlStem(n); return MDL_TANK_STEMS.has(s) || (/_chassis$/.test(s) && /tank|artillery|dozer|sherman|madrobot/.test(s)); } },
   // авиация: сами самолёты и вызовы авиаударов одним разделом
-  // (.model с теми же именами — туда же)
-  { key: "airplanes", icon: "velocity.svg", match: n => n === "airplanes.xml" || n === "airstrikes.xml" || (n.endsWith(".model") && /f117|f35|su_57|fighter|harrier|ac130/.test(n)) },
+  // (.model: A-10 и прочая пилотируемая — туда же, сверялись с species)
+  { key: "airplanes", icon: "velocity.svg", match: n => n === "airplanes.xml" || n === "airstrikes.xml" || (n.endsWith(".model") && /a10|f117|f35|su_57|fighter|harrier|ac130|air_traktor/.test(mdlStem(n))) },
   // «Вооружение»: стволы, крепления, слоты, ракеты и боеприпасы одним разделом
-  // (.model вертолётного подвеса — туда же; guntruck остаётся в Машинах:
-  // голого «gun» в ключевых словах нет, техника матчится ниже по папке)
-  { key: "guns", icon: "dart.svg", match: (n, p) => n === "guns.xml" || n === "gun_mounts.xml" || n === "weapon_slots.xml" || n === "missiles.xml" || n === "ammunition.xml" || (n.endsWith(".model") && (/(^|[\\/])weapons([\\/]|$)/.test(p || "") || /minigun|hidra|hellfire|sidewinder|missile|mortar|cannon|rifle|howitzer/.test(n))) },
+  // (.model: подвес вертолётов, станковые пулемёты, миномёты, мины и мелкое
+  // стрелковое из other/; техника с guntruck/turret в имени матчится выше
+  // и ниже по своим разделам, голого «gun» в словах нет)
+  { key: "guns", icon: "dart.svg", match: (n, p) => n === "guns.xml" || n === "gun_mounts.xml" || n === "weapon_slots.xml" || n === "missiles.xml" || n === "ammunition.xml" || (n.endsWith(".model") && !/camera|pentagon|test_char/.test(n) && (/(^|[\\/])(weapons|other)([\\/]|$)/.test(p || "") || (!/chassis/.test(mdlStem(n)) && /minigun|hidra|hellfire|sidewinder|missile|mortar|cannon|rifle|howitzer|grenade|machinegun|hmg|launcher|rpg|atgm|stinger|javelin|shotgun|recoilless|railgun|mg_/.test(mdlStem(n))))) },
   { key: "modules", icon: "lib.svg", match: n => n === "modules.xml" },
   { key: "animations", icon: "lottie.svg", match: n => !n.endsWith(".model") && (n === "animations.xml" || n.startsWith("animations_")) },
   { key: "inventory", icon: "package_json.svg", match: n => n === "inventory_items.xml" },
@@ -69,16 +98,17 @@ const TREE_CATEGORIES = [
   { key: "swt_multiplayer", icon: "command.svg", match: n => n.endsWith(".swt") && (/^mp_map/i.test(n) || /_(1vs1|2vs2|2vs1|coop)\.swt$/i.test(n)) },
   { key: "swt_skirmish", icon: "dart.svg", match: n => n.endsWith(".swt") && (/^skirmish_/i.test(n) || /^sk_map/i.test(n)) },
   { key: "swt_campaign", icon: "storybook.svg", match: n => n.endsWith(".swt") },
-  // .model из папки models — разбивка по видам, как species: сначала точные
-  // типы по имени (танки/вертолёты/авиация), затем папки и ключевые слова
-  // (машины/вооружение/строения/пехота/реквизит). Порядок важен: guntruck
-  // из vehicles не должен уйти в вооружение, а uh1_minigun — в вертолёты.
-  { key: "mdl_tanks", icon: "sentry.svg", match: n => n.endsWith(".model") && /tank|abrams|apc/.test(n) },
-  { key: "mdl_helicopters", icon: "velocity.svg", match: n => n.endsWith(".model") && /heli|flyer|blackhawk|little_bird|chinook|comanche|(^|_)(uh1|uh60|md500|ah1|oh58|ch53|mi_26|ka_)/.test(n) },
-  { key: "mdl_vehicles", icon: "cargo.svg", match: (n, p) => n.endsWith(".model") && (/(^|[\\/])vehicles([\\/]|$)/.test(p || "") || /car|truck|humvee|hemtt|stryker|bradley|m113|m109|himars|panhard|caravan|tractor|trailer|buldozer|mech|mammoth|sheridan|lav|ambulance|bus|jeep|bike|guntruck/.test(n)) },
-  { key: "mdl_buildings", icon: "command.svg", match: (n, p) => n.endsWith(".model") && (/(^|[\\/])buildings([\\/]|$)/.test(p || "") || /building|bunker|tower|gate|hq|outpost|wall|bridge/.test(n)) },
-  { key: "mdl_infantry", icon: "robots.svg", match: (n, p) => n.endsWith(".model") && (/(^|[\\/])(infantry|soldiers|humans|characters|troops)([\\/]|$)/.test(p || "") || /^inf_|soldier|human|trooper/.test(n)) },
-  { key: "mdl_props", icon: "package_json.svg", match: (n, p) => n.endsWith(".model") && /(^|[\\/])props([\\/]|$)/.test(p || "") },
+  // .model из папки models — остаток по папкам и видам: вертолёты —
+  // по именам из helicopters.xml, машины — вся папка vehicles
+  // (chassis без танкового класса: apc/humvee/stryker/hemtt/himars/
+  // towed-прицепы/guntruck — класс Машины по cars.xml, mortar-humvee тоже),
+  // строения — buildings/global_map/maps, пехота — скины и превью-формации,
+  // реквизит — props/plants. Неопознанное (mainmenu, обломки) — в Прочее.
+  { key: "mdl_helicopters", icon: "velocity.svg", match: n => n.endsWith(".model") && /heli|flyer|blackhawk|uh-1|uh_1|uh1|uh60|uh_60|md-500|md500|little_bird|chinook|comanche|ah1|oh58|ch53|mi_26|ka_/.test(mdlStem(n)) },
+  { key: "mdl_vehicles", icon: "cargo.svg", match: (n, p) => n.endsWith(".model") && /(^|[\\/])vehicles([\\/]|$)/.test(p || "") },
+  { key: "mdl_buildings", icon: "command.svg", match: (n, p) => n.endsWith(".model") && (/(^|[\\/])(buildings|global_map|maps)([\\/]|$)/.test(p || "") || /^building_/.test(mdlStem(n)) || /_map$/.test(mdlStem(n))) },
+  { key: "mdl_infantry", icon: "robots.svg", match: (n, p) => n.endsWith(".model") && (/(^|[\\/])(skin|preview|infantry|soldiers|humans|characters|troops)([\\/]|$)/.test(p || "") || /^(infantry_|inf_|civilian_|militia_)|soldier|human|trooper/.test(mdlStem(n))) },
+  { key: "mdl_props", icon: "package_json.svg", match: (n, p) => n.endsWith(".model") && /(^|[\\/])(props|plants)([\\/]|$)/.test(p || "") },
 ];
 
 function fileExt(name) {
