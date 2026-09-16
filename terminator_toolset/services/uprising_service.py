@@ -158,6 +158,11 @@ class Uprising:
         self.icon_lock = threading.Lock()  # one map rebuild per root
         self.conv_mem = {}    # (src.lower(), mtime) -> png; skips re-stat
         self.data_mem = {"mt": 0.0, "map": {}}  # bucket/file -> data-URL
+        # версионированный батч иконок: v -> {"ok": True, "icons": {...}}
+        # для кэшируемого GET /api/uprising_icons_data_v (браузер держит
+        # батч между запусками, серверная мемо — только на сессию);
+        # не больше 4 пачек в памяти (каждая — мегабайты base64)
+        self.icons_batch_mem = {}
         self.sysn_cache = {}  # root-key -> {"mt": float, "res": {...}}
         self.find_cache = {}  # root -> (path, ts): мемоизация find_shop,
         # иначе каждый openUprising — полный os.walk по root (секунды)
@@ -1728,6 +1733,65 @@ class Uprising:
             hit = self.icon_webp(root, n)
             icons[n] = self.webp_asset_url(*hit) if hit else ""
         return {"ok": True, "icons": icons}
+
+    def icons_data_version(self, root, names):
+        """Дешёвая версия батча иконок для проверки свежести: sha1 от корня,
+        списка имён и mtime-ключей icon_map/webp_index (те же снепшоты, что
+        берёт icons_data, без чтения и base64 самих файлов). Смена любого
+        webp (конвертер, удаление, обновление сборки) двигает mtime папки
+        -> индекс перестраивается -> версия меняется. Пустой v = не смогли
+        посчитать (фронт идёт полным POST-путём)."""
+        try:
+            names = sorted({str(n).strip() for n in (names or [])
+                            if str(n).strip()})[:5000]
+        except Exception:  # noqa: BLE001
+            return {"ok": False, "v": ""}
+        try:
+            self.icon_map(root)
+            layers = self._layer_roots(root)
+            ent = self.icon_cache.get("|".join(layers)) or {}
+            icon_mt = ent.get("mt") or 0.0
+        except Exception:  # noqa: BLE001
+            icon_mt = 0.0
+        try:
+            self.webp_index()
+            webp_mt = self.webp_idx.get("mt") or 0.0
+        except Exception:  # noqa: BLE001
+            webp_mt = 0.0
+        try:
+            h = hashlib.sha1()
+            h.update(b"icons-batch-v1")
+            h.update(os.path.normcase(root or "").encode("utf-8", "ignore"))
+            h.update(str(icon_mt).encode("ascii"))
+            h.update(str(webp_mt).encode("ascii"))
+            for n in names:
+                h.update(n.encode("utf-8", "ignore"))
+                h.update(b"\x00")
+            return {"ok": True, "v": h.hexdigest()[:24]}
+        except Exception:  # noqa: BLE001
+            return {"ok": False, "v": ""}
+
+    def icons_batch_memo_get(self, v):
+        """Готовая пачка батча по версии (для кэшируемого GET). In-memory —
+        живёт только сессию; между запусками работает кэш браузера."""
+        try:
+            if v:
+                return (self.icons_batch_mem or {}).get(v)
+        except Exception:  # noqa: BLE001
+            pass
+        return None
+
+    def icons_batch_memo_put(self, v, payload):
+        """Запомнить пачку батча по версии (не больше 4, старше — вон)."""
+        try:
+            if not v or not isinstance(payload, dict):
+                return
+            m = self.icons_batch_mem
+            m[v] = payload
+            while len(m) > 4:
+                m.pop(next(iter(m)), None)
+        except Exception:  # noqa: BLE001
+            pass
 
     def icons_data(self, root, names):
         """All icons in one request: {name: data:image/webp;base64,...}.

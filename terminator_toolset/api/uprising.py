@@ -175,10 +175,46 @@ def register_uprising(app, ctx):
         """Все иконки одним запросом: {name: data:image/webp;base64,...}.
         Сервер отдаёт HTTP/1.0 без keep-alive — сотни отдельных <img> дают
         секунды оверхеда на соединения (≈5мс/шт); один ответ снимает
-        проблему: фронт ставит data-URL напрямую, дальше всё из памяти."""
+        проблему: фронт ставит data-URL напрямую, дальше всё из памяти.
+        Ответ несёт и версию пачки (v): фронт кладёт её в localStorage,
+        а саму пачку — в кэш браузера через GET /api/uprising_icons_data_v;
+        повторный запуск забирает иконки из кэша без перезакачки."""
         data = request.get_json(silent=True) or {}
         root = store.normal(data.get("root", ""))
-        return jsonify(upr.icons_data(root, data.get("names")))
+        res = upr.icons_data(root, data.get("names"))
+        try:
+            ver = upr.icons_data_version(root, data.get("names"))
+            v = ver.get("v", "") if ver else ""
+        except Exception:  # noqa: BLE001
+            v = ""
+        if v:
+            upr.icons_batch_memo_put(
+                v, {"ok": True, "icons": res.get("icons", {})})
+            res["v"] = v
+        return jsonify(res)
+
+    @app.route("/api/uprising_icons_data_version", methods=["POST"])
+    def api_uprising_icons_data_version():
+        """Дешёвая проверка свежести батча: {v} без байтов иконок (только
+        stat-снепшоты species/webp-индексов). Фронт сравнивает с версией
+        из localStorage: совпала — пачка берётся кэшируемым GET."""
+        data = request.get_json(silent=True) or {}
+        root = store.normal(data.get("root", ""))
+        return jsonify(upr.icons_data_version(root, data.get("names")))
+
+    @app.route("/api/uprising_icons_data_v")
+    def api_uprising_icons_data_v():
+        """Пачка батча иконок по версии для кэша браузера (immutable):
+        между запусками сервер перезапускается и мемо пуста — тогда GET
+        отдаёт 404, а отдачу берёт на себя кэш браузера; мимо обоих кэшей —
+        фронт идёт полным POST-путём и греет кэш заново."""
+        v = (request.args.get("v") or "").strip()
+        hit = upr.icons_batch_memo_get(v) if v else None
+        if not hit:
+            return ("", 404)
+        resp = jsonify(hit)
+        resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return resp
 
     @app.route("/api/uprising_icon_states", methods=["POST"])
     def api_uprising_icon_states():

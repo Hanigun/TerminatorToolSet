@@ -1023,12 +1023,29 @@ async function untOpenUnit(cat, sys) {
   } catch (e) { /* rAF недоступен — первый скролл уже сделан */ }
 }
 
+// Версия батча иконок в localStorage (per root): сама пачка байтов живёт
+// в кэше браузера (immutable GET), здесь только её версия.
+function untBatchVerKey(root) {
+  return "tsh_unt_iconbatch|" + (root || "");
+}
+function untBatchVerGet(root) {
+  try { return localStorage.getItem(untBatchVerKey(root)) || ""; }
+  catch (e) { return ""; }
+}
+function untBatchVerSet(root, v) {
+  try {
+    if (v) localStorage.setItem(untBatchVerKey(root), v);
+    else localStorage.removeItem(untBatchVerKey(root));
+  } catch (e) { /* приватный режим — без кэша версий */ }
+}
 // Иконки всех слоёв своим батчем (образец cmpEnsureIcons): имена без
-// иконок — запросами /api/uprising_icon_map, затем только перерисовка
-// списков (тела от иконок не зависят). Карта хранит СТАБИЛЬНЫЕ URL готовых
-// webp (/assets/upr-webp/..., immutable-кэш браузера): повторный запуск
-// берёт иконки из кэша, а не качает base64-пачку заново через icons_data.
-// Флаг готовности свой — uprIconsReady и uprIconMap карты не трогаем.
+// иконок — ОДНИМ запросом /api/uprising_icons_data, затем только перерисовка
+// списков (тела от иконок не зависят). Сервер у нас HTTP/1.0 без keep-alive,
+// поэтому сотни отдельных <img> запрещены — только батч. Повторные запуски
+// пачку НЕ качают: сначала дешёвая проверка версии, совпала с localStorage —
+// пачка забирается кэшируемым GET (кэш браузера, ноль байтов), мимо обоих
+// кэшей — полный POST и прогрев кэша заново. Флаг готовности свой —
+// uprIconsReady и uprIconMap карты не трогаем.
 async function untEnsureIcons() {
   if (!state.units) return;
   const my = ++state.units.iconSeq;
@@ -1055,55 +1072,94 @@ async function untEnsureIcons() {
   }
   state.units.iconsLoading = true;
   const root = untSrcRoot();
-  // icon_map отдаёт максимум 800 имён за запрос — режем чанками и клеим.
-  const fetchMap = async list => {
-    const acc = {};
-    const CH = 500;
-    for (let i = 0; i < list.length; i += CH) {
-      if (my !== state.units.iconSeq || !state.units) return null;
-      const r = await api("/api/uprising_icon_map", { method: "POST",
-        body: JSON.stringify({ root, names: list.slice(i, i + CH) }),
-        timeout: 60000 });
-      const j = await r.json();
-      if (!j || !j.ok) return null;
-      Object.assign(acc, j.icons || {});
-    }
-    return acc;
-  };
-  try {
-    const got = await fetchMap(names);
-    if (!got) throw new Error("icon_map not ok");
-    if (my !== state.units.iconSeq) return;
-    if (!state.units) return;
-    Object.assign(state.units.iconMap, got);
-    // Недолёт батча — не temp-одиночки, а persistent-предзагрузка
-    // (образец uprPreloadMissing карты): мисс пишет webp в общий
-    // CustomImages/<слой>, затем карта добирается тем же icon_map.
-    // Пустая строка в карте = иконки точно нет (чип остаётся
-    // на категорийном плейсхолдере, синглы не дёргаем).
-    const missing = names.filter(n => !(got[n]));
-    const CH = 100;
-    for (let i = 0; i < missing.length; i += CH) {
-      if (my !== state.units.iconSeq || !state.units) return;
-      try {
-        await api("/api/uprising_icon_preload", { method: "POST",
-          body: JSON.stringify({ root,
-            names: missing.slice(i, i + CH) }), timeout: 180000 });
-      } catch (e) { /* чанк не дожался — остальные всё равно идут */ }
-    }
-    if (missing.length && my === state.units.iconSeq && state.units) {
-      try {
-        const got2 = await fetchMap(missing);
-        if (got2) Object.assign(state.units.iconMap, got2);
-      } catch (e) { /* чипы добирают одиночными через uprChipIcon */ }
-    }
-    if (my !== state.units.iconSeq || !state.units) return;
+  // Быстрый путь: версия совпала — пачка из кэша браузера одним GET.
+  const applyBatch = icons => {
+    Object.assign(state.units.iconMap, icons || {});
     state.units.iconsReady = true;
     // ховер/selected-пары иконок — тем же батчем, что карты.
     if (typeof uprEnsureIconStates === "function") {
       try { uprEnsureIconStates(root, names); } catch (e) {}
     }
     untPaintAllLists();
+  };
+  try {
+    let v = "";
+    try {
+      const rv = await api("/api/uprising_icons_data_version", {
+        method: "POST", body: JSON.stringify({ root, names }),
+        timeout: 30000 });
+      const jv = await rv.json();
+      if (jv && jv.ok && jv.v) v = jv.v;
+    } catch (e) { /* нет версии — полным путём */ }
+    if (v && untBatchVerGet(root) === v) {
+      try {
+        const rg = await api("/api/uprising_icons_data_v?v="
+          + encodeURIComponent(v), { timeout: 60000 });
+        if (rg.ok) {
+          const jg = await rg.json();
+          if (jg && jg.ok && jg.icons) {
+            if (my !== state.units.iconSeq || !state.units) return;
+            applyBatch(jg.icons);
+            return;
+          }
+        }
+      } catch (e) { /* мимо кэша — полным путём */ }
+    }
+  } catch (e) { /* быстрый путь не вышел — полным путём */ }
+  try {
+    const r = await api("/api/uprising_icons_data", { method: "POST",
+      body: JSON.stringify({ root, names }), timeout: 60000 });
+    const j = await r.json();
+    if (my !== state.units.iconSeq) return;
+    if (!state.units) return;
+    if (j && j.ok) {
+      Object.assign(state.units.iconMap, j.icons || {});
+      // Недолёт батча — не temp-одиночки, а persistent-предзагрузка
+      // (образец uprPreloadMissing карты): мисс пишет webp в общий
+      // CustomImages/<слой>, затем батч добирается. Иначе каждая
+      // холодная загрузка гнала сотни dds->png во временную папку.
+      const missing = names.filter(n => !((j.icons || {})[n]));
+      const CH = 100;
+      for (let i = 0; i < missing.length; i += CH) {
+        if (my !== state.units.iconSeq || !state.units) return;
+        try {
+          await api("/api/uprising_icon_preload", { method: "POST",
+            body: JSON.stringify({ root,
+              names: missing.slice(i, i + CH) }), timeout: 180000 });
+        } catch (e) { /* чанк не дожался — остальные всё равно идут */ }
+      }
+      if (missing.length && my === state.units.iconSeq && state.units) {
+        try {
+          const r2 = await api("/api/uprising_icons_data", { method: "POST",
+            body: JSON.stringify({ root, names: missing }),
+            timeout: 60000 });
+          const j2 = await r2.json();
+          if (j2 && j2.ok)
+            Object.assign(state.units.iconMap, j2.icons || {});
+        } catch (e) { /* чипы добирают одиночными через uprChipIcon */ }
+      }
+      if (my !== state.units.iconSeq || !state.units) return;
+      // Полная пачка на руках: фиксируем её версию и греем кэш браузера
+      // (тихий GET мимо api() — без ретраев и жалоб в лог).
+      try {
+        const rv2 = await api("/api/uprising_icons_data_version", {
+          method: "POST", body: JSON.stringify({ root,
+            names: Object.keys(state.units.iconMap) }),
+          timeout: 30000 });
+        const jv2 = await rv2.json();
+        if (jv2 && jv2.ok && jv2.v) {
+          untBatchVerSet(root, jv2.v);
+          fetch("/api/uprising_icons_data_v?v="
+            + encodeURIComponent(jv2.v)).catch(() => {});
+        }
+      } catch (e) { /* без версионного кэша — как раньше */ }
+      state.units.iconsReady = true;
+      // ховер/selected-пары иконок — тем же батчем, что карты.
+      if (typeof uprEnsureIconStates === "function") {
+        try { uprEnsureIconStates(root, names); } catch (e) {}
+      }
+      untPaintAllLists();
+    }
   } catch (e) { /* чипы добирают одиночными через uprChipIcon */ }
   finally {
     if (state.units && my === state.units.iconSeq) state.units.iconsLoading = false;
