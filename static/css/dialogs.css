@@ -145,6 +145,9 @@
 /* Путь мода — тот же серый блок, что проект и игра. Текст подписи
    некликабелен; саб-меню открывает только большая серая стрелка. */
 .modpath-group { display: flex; flex-direction: column; gap: 8px; }
+/* подпись мода: цвет текста фиксирован и при наведении (id перебивает
+   любые ховер-правила), курсор обычный — текст некликабелен */
+#mod-path-label, #mod-path-label:hover { color: var(--text); cursor: default; }
 .modpath-arrow {
   width: 24px; height: 20px; flex: none;
   display: inline-flex; align-items: center; justify-content: center;
