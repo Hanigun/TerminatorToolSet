@@ -7,13 +7,13 @@
 // Саб-меню открыто/закрыто.
 function toggleModPathMenu(force) {
   const menu = document.getElementById("mod-path-menu");
-  const caret = document.getElementById("mod-path-caret");
+  const group = document.getElementById("mod-path-group");
   if (!menu) return;
   const open = force !== undefined ? force : menu.hidden;
   menu.hidden = !open;
-  if (caret) {
-    caret.classList.toggle("open", open);
-    caret.setAttribute("aria-expanded", open ? "true" : "false");
+  if (group) {
+    group.classList.toggle("open", open);
+    group.setAttribute("aria-expanded", open ? "true" : "false");
   }
   if (open) refreshModSubpaths();
 }
@@ -179,17 +179,16 @@ function syncModSubClear() {
 
 // Привязка кнопки-меню и двух пунктов (id только этого модуля).
 (function wireModPaths() {
-  const caret = document.getElementById("mod-path-caret");
   const label = document.getElementById("mod-path-label");
   const menu = document.getElementById("mod-path-menu");
-  const flip = e => {
-    if (e) e.stopPropagation();
-    toggleModPathMenu();
-  };
-  if (caret) caret.addEventListener("click", flip);
   if (label) {
-    label.addEventListener("click", flip);
-    label.title = label.textContent;
+    // подпись — длинная кнопка строки: клик раскрывает саб-пути.
+    // preventDefault: label иначе уводит фокус в поле ввода пути.
+    label.addEventListener("click", e => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleModPathMenu();
+    });
   }
   // клик мимо меню — закрыть; клик внутри — не всплывает наружу
   if (menu) menu.addEventListener("click", e => e.stopPropagation());

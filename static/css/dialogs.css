@@ -132,16 +132,28 @@
    тянет её на шапку — даём нормальные внутренние отступы */
 .modal-card > .settings-hint { margin-top: 0; padding: 10px 16px 0; }
 .set-mod-hint { color: var(--text-mute); }
-/* Путь мода — ещё и кнопка: подпись и каретка открывают саб-меню
-   с двумя пунктами (ассеты, модели) и статусами саб-путей */
-.modpath-label { cursor: pointer; }
-.modpath-label:hover { color: var(--accent); }
-.modpath-caret { transition: transform .15s ease; }
-.modpath-caret.open { transform: rotate(90deg); }
-.modpath-menu {
-  margin-top: -4px; border: 1px solid var(--border); border-radius: 8px;
-  background: var(--bg-elev, #2a2d33); padding: 10px 12px;
+/* Путь мода — ещё и кнопка: вся строка, кроме поля и кнопок, раскрывает
+   саб-меню. Общий тёмный фон группы показывает, что саб-пути дочерние. */
+.modpath-group {
+  background: var(--bg, #1e2126);
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 12px;
   display: flex; flex-direction: column; gap: 10px;
+}
+.modpath-label {
+  flex: 1; align-self: stretch; display: flex; align-items: center; gap: 8px;
+  cursor: pointer; min-width: 0;
+}
+.modpath-label:hover { color: var(--accent); }
+/* статическая стрелка-подсказка (часть кнопки-строки, не отдельная кнопка) */
+.modpath-label::after {
+  content: "▸"; color: var(--accent); font-size: 11px;
+  display: inline-block; transition: transform .15s ease;
+}
+.modpath-group.open .modpath-label::after { transform: rotate(90deg); }
+.modpath-menu {
+  display: flex; flex-direction: column; gap: 10px;
+  border-top: 1px dashed var(--border); padding-top: 10px;
 }
 .modpath-menu[hidden] { display: none; }
 /* Статусы саб-путей внутри саб-меню */
