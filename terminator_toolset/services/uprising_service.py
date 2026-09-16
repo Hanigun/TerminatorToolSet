@@ -169,6 +169,20 @@ class Uprising:
         # кэш иконок в релиз не пакуется (как Logs): папка создаётся
         # при первом старте, webp кладёт туда конвертер
         self.ensure_custom_images()
+        # дисковый кэш species-карты иконок: память процесса умирает при
+        # каждом выходе, а парсинг всех species холодным стоил ~1с — первый
+        # батч иконок любого редактора после запуска снова крутил спиннеры.
+        # mtime-ключ тот же, что у памяти: правим species — пересобирается.
+        try:
+            base = os.environ.get("LOCALAPPDATA") or tempfile.gettempdir()
+            self.icon_disk_dir = os.path.join(base, "TerminatorToolSet",
+                                              "upr_iconmap")
+            os.makedirs(self.icon_disk_dir, exist_ok=True)
+        except Exception:  # noqa: BLE001
+            try:
+                self.icon_disk_dir = self.png_cache
+            except Exception:  # noqa: BLE001
+                self.icon_disk_dir = ""
 
     def ensure_custom_images(self):
         """Создать корни CustomImages (внешний рядом с EXE + встроенный),
@@ -388,6 +402,10 @@ class Uprising:
             ent = self.icon_cache.get(key)
             if ent and ent["mt"] == mt:
                 return ent["map"]
+            disk = self._icon_disk_load(key, mt)
+            if disk is not None:
+                self.icon_cache[key] = disk
+                return disk["map"]
             amap = {}
             gun_acc = {}
             for lay, base, overlay in per_layer:
@@ -403,7 +421,55 @@ class Uprising:
                 for p, u in sub_acc.get("preset_unit", {}).items():
                     gun_acc.setdefault("preset_unit", {}).setdefault(p, u)
             self.icon_cache[key] = {"mt": mt, "map": amap, "guns": gun_acc}
+            self._icon_disk_save(key, mt, amap, gun_acc)
             return amap
+
+    def _icon_disk_path(self, key):
+        """Путь дискового кэша species-карты по ключу слоёв."""
+        try:
+            if not self.icon_disk_dir:
+                return ""
+            fp = hashlib.sha1(key.encode("utf-8")).hexdigest()[:16]
+            return os.path.join(self.icon_disk_dir, "map_" + fp + ".json")
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def _icon_disk_load(self, key, mt):
+        """Готовая карта с диска (память процесса переживает перезапуски):
+        {"mt", "map", "guns"} или None. Без валидации схемы — битый файл
+        просто игнорируется и пересобирается ниже."""
+        try:
+            p = self._icon_disk_path(key)
+            if not p or not os.path.isfile(p):
+                return None
+            with open(p, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict) or data.get("mt") != mt:
+                return None
+            raw = data.get("map") or {}
+            guns = data.get("guns") or {}
+            if not isinstance(raw, dict) or not isinstance(guns, dict):
+                return None
+            amap = {}
+            for k, v in raw.items():
+                if isinstance(v, (list, tuple)) and len(v) == 2:
+                    amap[str(k)] = (str(v[0]), str(v[1]))
+            return {"mt": mt, "map": amap, "guns": guns}
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _icon_disk_save(self, key, mt, amap, gun_acc):
+        """Записать карту на диск (best-effort, через tmp+replace)."""
+        try:
+            p = self._icon_disk_path(key)
+            if not p:
+                return
+            tmp = p + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"mt": mt, "map": amap, "guns": gun_acc}, f)
+            os.replace(tmp, p)
+        except Exception:  # noqa: BLE001
+            pass
 
     def gun_index(self, root):
         """Preset->unit / unit->guns companion of icon_map(), same cache
@@ -1399,6 +1465,10 @@ class Uprising:
             idx = self.webp_index()
         except Exception:  # noqa: BLE001
             idx = {}
+        try:
+            _pref = self._custom_preference(root)
+        except Exception:  # noqa: BLE001
+            _pref = []
         out = {}
         for n, srcs in want.items():
             st = {}
@@ -1412,7 +1482,7 @@ class Uprising:
                     continue
                 if hit[0] == "custom":
                     try:
-                        pick = self._custom_pick(root, stem)
+                        pick = self._custom_pick(root, stem, _pref)
                     except Exception:  # noqa: BLE001
                         pick = ""
                     if not pick:
