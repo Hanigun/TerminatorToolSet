@@ -35,6 +35,8 @@ from terminator_toolset.model3d.part_groups import (
     classify_armor_detail, classify_detailed)
 from terminator_toolset.model3d.skeleton import (
     compose_world_matrices, resolve_node_parents)
+from terminator_toolset.domain.modroots import (
+    layer_bases_union as _overlay_bases)
 
 ROOT_PARENT = 0xFFFFFFFF
 
@@ -73,8 +75,12 @@ def safe_rel(value):
     return "/".join(parts)
 
 
-def layer_bases(root):
-    """Корни слоёв данных: basis первым, затем DLC-оверлеи."""
+def layer_bases(root, overlay=()):
+    """Корни слоёв данных: basis первым, затем DLC-оверлеи.
+
+    overlay — саб-путь _ASSETS мода (строка или список): его basis-слои
+    идут следом, файлы мода побеждают (symlink-like union, domain/modroots).
+    """
     bases = []
     try:
         b = os.path.join(root or "", "basis")
@@ -84,6 +90,14 @@ def layer_bases(root):
         for d in dlc:
             if os.path.isdir(d):
                 bases.append(d)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        ovs = [overlay] if isinstance(overlay, str) else list(overlay or [])
+        for ov in ovs:
+            for b in _overlay_bases("", ov or ""):
+                if b not in bases:
+                    bases.append(b)
     except Exception:  # noqa: BLE001
         pass
     return bases
@@ -98,16 +112,18 @@ def _same_root(a, b):
         return False
 
 
-def find_file(root, rel, fallback=""):
+def find_file(root, rel, fallback="", overlay=()):
     """Первый существующий файл rel по слоям, иначе ''.
 
     Мод — оверлей поверх базовой игры: чего нет в root, ищем
     в fallback (распакованная база). Свои файлы мода — первые.
+    overlay — саб-путь _ASSETS мода: его слои между root и fallback,
+    оба корня видны как одно целое.
     """
     rel = safe_rel(rel)
     if not rel or not root:
         return ""
-    for base in layer_bases(root):
+    for base in layer_bases(root, overlay):
         p = os.path.normpath(os.path.join(base, *rel.split("/")))
         # Не выходим за пределы слоя, только файлы
         try:
@@ -139,6 +155,29 @@ def _base_fallback(upr, root):
     if not base or _same_root(base, root):
         return ""
     return base
+
+
+def overlay_for(upr, root):
+    """Саб-путь _ASSETS для поиска: (overlay,) если root — корень мода
+    из конфига и саб-путь задан, иначе (). Чужие корни (проект, игра)
+    оверлей мода не затрагивает."""
+    try:
+        cfg = getattr(upr, "_config", None)
+        store = getattr(upr, "_store", None)
+        if cfg is None:
+            return ()
+        mod = cfg.get("mod_path") or ""
+        ovl = cfg.get("mod_overlay_path") or ""
+        if store is not None:
+            mod = store.normal(mod) or ""
+            ovl = store.normal(ovl) or ""
+        if not ovl or not os.path.isdir(ovl):
+            return ()
+        if _same_root(ovl, root) or not _same_root(mod, root):
+            return ()
+        return (os.path.normpath(ovl),)
+    except Exception:  # noqa: BLE001
+        return ()
 
 
 def _file_key(path):
@@ -335,16 +374,17 @@ def bake_mesh(model, mesh, worlds=None, has_extras=False, offset=None,
             "part": part}
 
 
-def material_payload(upr, root, mtrl_rel, fallback=""):
+def material_payload(upr, root, mtrl_rel, fallback="", overlay=()):
     """Материал по basis-пути .material: rel текстур для /api/model_tex.
 
     DDS заранее НЕ греем: прогрев всех текстур синхронно вешал ответ
     на десятки секунд. Текстуры догружаются лениво через /api/model_tex
     (там свой mtime-кэш), сцена со светом и сеткой встаёт сразу.
+    overlay — слои саб-пути _ASSETS мода между root и fallback.
     """
     out = {"name": mtrl_rel, "albedo": "", "normal": "", "rough": "",
            "transparent": False, "double_sided": False, "missing": True}
-    p = find_file(root, mtrl_rel, fallback)
+    p = find_file(root, mtrl_rel, fallback, overlay)
     if not p:
         return out
     try:
@@ -357,7 +397,8 @@ def material_payload(upr, root, mtrl_rel, fallback=""):
                       ("rough", "rough")):
         rel = safe_rel(tex.get(slot) or "")
         # Текстура реально лежит в слоях — иначе битая ссылка
-        out[key] = rel if rel and find_file(root, rel, fallback) else ""
+        out[key] = rel if rel and find_file(root, rel, fallback,
+                                            overlay) else ""
     out["transparent"] = bool(mat.is_transparent)
     out["double_sided"] = (mat.rasterizer_state == "CullNone")
     return out
@@ -574,7 +615,7 @@ def _upgrade_mounts(upgrade_rows, sys, mounts_list):
     return sets
 
 
-def _preset_mg_sets(root, chassis_rel, fallback=""):
+def _preset_mg_sets(root, chassis_rel, fallback="", overlay=()):
     """MG-сеты корпуса из пресета {turret_rel: [{rel, slot}]}.
 
     Отсутствующие файлы отсекаются; spare-сет (пулемёты сетов
@@ -588,7 +629,7 @@ def _preset_mg_sets(root, chassis_rel, fallback=""):
         good = []
         for m in items or []:
             rel = safe_rel(m.get("rel") or "")
-            if rel and find_file(root, rel, fallback):
+            if rel and find_file(root, rel, fallback, overlay):
                 good.append({"rel": rel, "slot": m.get("slot") or ""})
         return good
 
@@ -602,7 +643,8 @@ def _preset_mg_sets(root, chassis_rel, fallback=""):
     return mg_sets
 
 
-def _turret_candidates(root, chassis_path, chassis_rel, fallback=""):
+def _turret_candidates(root, chassis_path, chassis_rel, fallback="",
+                       overlay=()):
     """Варианты башни из пресета (без XML).
 
     turret_variants.json по rel корпуса: {choices, mg, default}.
@@ -615,7 +657,7 @@ def _turret_candidates(root, chassis_path, chassis_rel, fallback=""):
     choices = []
     for c in entry.get("choices") or []:
         rel = safe_rel(c.get("rel") or "")
-        if not rel or not find_file(root, rel, fallback):
+        if not rel or not find_file(root, rel, fallback, overlay):
             continue
         if any(x["rel"] == rel for x in choices):
             continue
@@ -623,7 +665,7 @@ def _turret_candidates(root, chassis_path, chassis_rel, fallback=""):
                         "label": c.get("label") or _short_turret_label(
                             stem, os.path.basename(rel)),
                         "slot": c.get("slot") or ""})
-    mg_sets = _preset_mg_sets(root, chassis_rel, fallback)
+    mg_sets = _preset_mg_sets(root, chassis_rel, fallback, overlay)
     if choices:
         default = entry.get("default") or ""
         for c in choices:
@@ -953,7 +995,7 @@ def _node_pos(ent, name):
 
 
 def _bake_mg_meshes(root, mod_ent, turret_off, mg_list, tmtrl_base,
-                    fallback=""):
+                    fallback="", overlay=()):
     """Пулемёты поверх башни: корень MG-модели — на ноду-слот башни.
 
     mod_ent — закэшированная башня, turret_off — её сдвиг на корпусе
@@ -963,7 +1005,7 @@ def _bake_mg_meshes(root, mod_ent, turret_off, mg_list, tmtrl_base,
     meshes, materials = [], []
     for item in mg_list or []:
         mrel = safe_rel(item.get("rel") or "")
-        mpath = find_file(root, mrel, fallback) if mrel else ""
+        mpath = find_file(root, mrel, fallback, overlay) if mrel else ""
         if not mpath:
             continue
         try:
@@ -989,7 +1031,7 @@ def _bake_mg_meshes(root, mod_ent, turret_off, mg_list, tmtrl_base,
         oz = (turret_off[2] if turret_off else 0.0) + anchor[2] - origin[2]
         mmtrl = list(mg_ent["model"].mtrl or [])
         base = tmtrl_base + len(materials)
-        materials += [material_payload(None, root, m, fallback)
+        materials += [material_payload(None, root, m, fallback, overlay)
                         for m in mmtrl]
         mtable = _preset("node_armor").get(mrel) or {}
         for m in mg_ent["model"].meshes or []:
@@ -1025,8 +1067,9 @@ def preview_payload(upr, root, value, turret="@@auto@@", mg="@@auto@@"):
     if not root or not os.path.isdir(root):
         return {"ok": False, "error": "no_root"}
     ovl = _base_fallback(upr, root)
+    sub = overlay_for(upr, root)
     armor_table = _preset("node_armor").get(rel) or {}
-    path = find_file(root, rel, ovl)
+    path = find_file(root, rel, ovl, sub)
     if not path:
         return {"ok": False, "error": "no_file", "value": rel}
     t0 = time.perf_counter()
@@ -1057,7 +1100,8 @@ def preview_payload(upr, root, value, turret="@@auto@@", mg="@@auto@@"):
     ms_bake = round((time.perf_counter() - t0) * 1000)
     mtrl_rels = list(host.mtrl or [])
     t0 = time.perf_counter()
-    materials = [material_payload(upr, root, m, ovl) for m in mtrl_rels]
+    materials = [material_payload(upr, root, m, ovl, sub)
+                 for m in mtrl_rels]
     ms_mats = round((time.perf_counter() - t0) * 1000)
     turret_info = None
     want = turret if turret != "@@auto@@" else None
@@ -1067,7 +1111,7 @@ def preview_payload(upr, root, value, turret="@@auto@@", mg="@@auto@@"):
         explicit = turret not in (None, "@@auto@@", "")
         # Полный список вариантов всегда — иначе после ручного выбора
         # выпадашка схлопывается до одного пункта и прячется.
-        choices, mg_sets = _turret_candidates(root, path, rel, ovl)
+        choices, mg_sets = _turret_candidates(root, path, rel, ovl, sub)
         if explicit:
             want = safe_rel(turret)
             if not any(c["rel"] == want for c in choices):
@@ -1078,7 +1122,7 @@ def preview_payload(upr, root, value, turret="@@auto@@", mg="@@auto@@"):
             want = next((c["rel"] for c in choices
                          if c.get("selected")), choices[0]["rel"])
         if want:
-            tpath = find_file(root, want, ovl)
+            tpath = find_file(root, want, ovl, sub)
             if tpath and tpath != path:
                 try:
                     mod_ent = _cached_model(tpath)
@@ -1095,7 +1139,7 @@ def preview_payload(upr, root, value, turret="@@auto@@", mg="@@auto@@"):
                         host_ent, mod_ent, prefer=want_slot)
                     tmtrl = list(mod.mtrl or [])
                     base = len(materials)
-                    materials += [material_payload(upr, root, m, ovl)
+                    materials += [material_payload(upr, root, m, ovl, sub)
                                   for m in tmtrl]
                     tarmor = _preset("node_armor").get(want) or {}
                     for m in mod.meshes or []:
@@ -1111,7 +1155,7 @@ def preview_payload(upr, root, value, turret="@@auto@@", mg="@@auto@@"):
                         os.path.splitext(os.path.basename(path))[0])
                     mg_meshes, mg_mats = _bake_mg_meshes(
                         root, mod_ent, off, mg_list,
-                        base + len(tmtrl), ovl)
+                        base + len(tmtrl), ovl, sub)
                     materials += mg_mats
                     meshes += mg_meshes
                     stock = _stock_turret_bone(host_ent, mount)
@@ -1170,10 +1214,11 @@ def turret_payload(upr, root, chassis_value, turret_rel, turret_slot="",
     if not root or not os.path.isdir(root):
         return {"ok": False, "error": "no_root"}
     ovl = _base_fallback(upr, root)
-    cpath = find_file(root, crel, ovl)
+    sub = overlay_for(upr, root)
+    cpath = find_file(root, crel, ovl, sub)
     if not cpath:
         return {"ok": False, "error": "no_file", "value": crel}
-    tpath = find_file(root, trel, ovl)
+    tpath = find_file(root, trel, ovl, sub)
     if not tpath or tpath == cpath:
         return {"ok": False, "error": "no_file", "value": trel}
     t0 = time.perf_counter()
@@ -1190,7 +1235,7 @@ def turret_payload(upr, root, chassis_value, turret_rel, turret_slot="",
     tmtrl = list(mod.mtrl or [])
     base = len(list(host_ent["model"].mtrl or []))
     t0 = time.perf_counter()
-    materials = [material_payload(upr, root, m, ovl) for m in tmtrl]
+    materials = [material_payload(upr, root, m, ovl, sub) for m in tmtrl]
     ms_mats = round((time.perf_counter() - t0) * 1000)
     t0 = time.perf_counter()
     meshes = []
@@ -1203,19 +1248,19 @@ def turret_payload(upr, root, chassis_value, turret_rel, turret_slot="",
         if b["material"] >= 0:
             b["material"] += base
         meshes.append(b)
-    mg_sets = _preset_mg_sets(root, crel, ovl)
+    mg_sets = _preset_mg_sets(root, crel, ovl, sub)
     mg_list, mg_union, mg_rel = _resolve_mg(
         mg_sets, trel, mg,
         os.path.splitext(os.path.basename(cpath))[0])
     mg_meshes, mg_mats = _bake_mg_meshes(
         root, mod_ent, off, mg_list,
-        base + len(tmtrl), ovl)
+        base + len(tmtrl), ovl, sub)
     materials += mg_mats
     meshes += mg_meshes
     _muzzle_keep(meshes)
     _gun_keep(meshes)
     ms_bake = round((time.perf_counter() - t0) * 1000)
-    choices, _ = _turret_candidates(root, cpath, crel, ovl)
+    choices, _ = _turret_candidates(root, cpath, crel, ovl, sub)
     for c in choices:
         c["selected"] = (c["rel"] == trel)
     return {"ok": True, "rel": trel, "mount": mount, "anchor": anchor,

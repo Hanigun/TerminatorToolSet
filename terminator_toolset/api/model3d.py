@@ -65,7 +65,11 @@ def register_model3d(app, ctx):
             ovl = upr.unpacked_root() if upr is not None else ""
         except Exception:  # noqa: BLE001
             ovl = ""
-        p = m3.find_file(root, rel, ovl) if rel else ""
+        try:
+            sub = m3.overlay_for(upr, root)
+        except Exception:  # noqa: BLE001
+            sub = ()
+        p = m3.find_file(root, rel, ovl, sub) if rel else ""
         if p and p.lower().endswith(".dds"):
             try:
                 # Двухканальные нормали: Z чинить по содержимому, не по
