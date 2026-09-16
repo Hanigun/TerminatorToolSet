@@ -142,27 +142,26 @@
 .set-path-block .settings-hint,
 .set-mod-row .settings-hint,
 .modpath-menu .settings-hint { margin-top: 0; }
-/* Путь мода — ещё и кнопка: вся строка, кроме поля и кнопок, раскрывает
-   саб-меню. Сама без фона; ховер без аутлайна — темнее цвета блоков,
-   чтобы не путался с их обычным фоном. Описание — внутри зоны. */
-.set-mod-row { padding: 6px 8px; margin: 0 -8px; border-radius: 0; }
-.set-mod-row:hover { background: rgba(0, 0, 0, 0.45); }
-.modpath-label {
-  flex: 1; align-self: stretch; display: flex; align-items: center; gap: 10px;
-  cursor: pointer; min-width: 0;
+/* Путь мода — тот же серый блок, что проект и игра. Текст подписи
+   некликабелен; саб-меню открывает только большая серая стрелка. */
+.modpath-group { display: flex; flex-direction: column; gap: 8px; }
+.modpath-arrow {
+  width: 24px; height: 20px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer;
 }
-.modpath-label:hover { color: var(--accent); }
-/* большая серая стрелка-треугольник (часть строки-кнопки) */
-.modpath-label::after {
-  content: ""; width: 0; height: 0; flex: none;
-  border-top: 7px solid transparent;
-  border-bottom: 7px solid transparent;
+.modpath-arrow::before {
+  content: ""; width: 0; height: 0;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
   border-left: 12px solid var(--text-mute);
   transform-origin: center; transition: transform .15s ease;
 }
-.modpath-group.open .modpath-label::after { transform: rotate(90deg); }
+.modpath-arrow:hover::before { border-left-color: var(--text); }
+.modpath-group.open .modpath-arrow::before { transform: rotate(90deg); }
 /* Саб-меню — один тёмный блок; отдельные блоки у пунктов убраны.
-   Дочерность видна деревом: направляющая слева + отводы к строкам. */
+   Дочерность — современное скруглённое дерево: вертикаль
+   и отводы со скруглёнными углами. */
 .modpath-menu {
   background: var(--bg, #1e2126); border-radius: 0;
   padding: 10px 12px;
@@ -170,15 +169,28 @@
 }
 .modpath-menu[hidden] { display: none; }
 .modsp-items {
+  display: flex; flex-direction: column;
+}
+.modsp-item { position: relative; padding-left: 26px; }
+/* вертикаль дерева: у первого пункта — на всю высоту (мост в зазор),
+   у последнего — только до своей строки */
+.modsp-item.has-next::before {
+  content: ""; position: absolute; left: 9px; top: 0; bottom: -10px;
   border-left: 2px solid var(--text-faint, #5a6068);
-  margin-left: 4px; padding-left: 14px;
-  display: flex; flex-direction: column; gap: 8px;
+}
+.modsp-item.has-next .setting-row::after {
+  content: ""; position: absolute; left: -17px; top: 50%; width: 15px;
+  border-top: 2px solid var(--text-faint, #5a6068);
+}
+/* последний пункт — скруглённое колено */
+.modsp-item.last .setting-row::before {
+  content: ""; position: absolute; left: -17px; top: -6px;
+  width: 15px; height: 70%;
+  border-left: 2px solid var(--text-faint, #5a6068);
+  border-bottom: 2px solid var(--text-faint, #5a6068);
+  border-radius: 0 0 0 12px;
 }
 .modsp-items .setting-row { position: relative; }
-.modsp-items .setting-row::before {
-  content: ""; position: absolute; left: -14px; top: 50%;
-  width: 12px; border-top: 2px solid var(--text-faint, #5a6068);
-}
 /* Статусы саб-путей внутри саб-меню */
 .modsp-panel {
   background: none; border: none; border-radius: 0; padding: 2px 0 0;

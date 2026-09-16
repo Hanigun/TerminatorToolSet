@@ -179,13 +179,11 @@ function syncModSubClear() {
 
 // Привязка кнопки-меню и двух пунктов (id только этого модуля).
 (function wireModPaths() {
-  const label = document.getElementById("mod-path-label");
+  const arrow = document.getElementById("mod-path-toggle");
   const menu = document.getElementById("mod-path-menu");
-  if (label) {
-    // подпись — длинная кнопка строки: клик раскрывает саб-пути.
-    // preventDefault: label иначе уводит фокус в поле ввода пути.
-    label.addEventListener("click", e => {
-      e.preventDefault();
+  // саб-меню открывает только стрелка; текст подписи некликабелен
+  if (arrow) {
+    arrow.addEventListener("click", e => {
       e.stopPropagation();
       toggleModPathMenu();
     });
