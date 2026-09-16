@@ -26,26 +26,31 @@ const TREE_DIR_ICONS = {
 };
 
 // unit-sheet categories: inside species-like folders the raw xml list is
-// regrouped into labeled subsections (Отряды / Машины / Танки / Вооружение…).
+// regrouped into labeled subsections (Отряды / Машины / Танки / Вооружение…);
+// .swt сценарии делятся на Кампанию/Стычку/Мультиплеер/WAL/Uprising,
+// .model — по видам техники (Пехота/Машины/Танки/Вертолёты…).
 // Order defines display order; groups only appear for files actually
 // present in the opened project.
 const TREE_CATEGORIES = [
   // humans.xml живёт в «Отрядах»: отдельный раздел «Пехота» убран, один
   // боец без отряда в игре не встречается
   { key: "squads", icon: "command.svg", match: n => n === "squads.xml" || n === "humans.xml" || n === "infantry_preview_config.xml" },
-  { key: "squad_upgrades", icon: "renovate.svg", match: n => n.startsWith("squad_") || n === "infantry_training.xml" },
+  { key: "squad_upgrades", icon: "renovate.svg", match: n => !n.endsWith(".model") && (n.startsWith("squad_") || n === "infantry_training.xml") },
   { key: "cars", icon: "cargo.svg", match: n => n === "cars.xml" },
-  { key: "car_upgrades", icon: "renovate.svg", match: n => n.startsWith("car_") },
+  { key: "car_upgrades", icon: "renovate.svg", match: n => !n.endsWith(".model") && n.startsWith("car_") },
   { key: "tanks", icon: "sentry.svg", match: n => n === "tanks.xml" },
-  { key: "tank_upgrades", icon: "renovate.svg", match: n => n.startsWith("tank_") },
+  { key: "tank_upgrades", icon: "renovate.svg", match: n => !n.endsWith(".model") && n.startsWith("tank_") },
   { key: "helicopters", icon: "velocity.svg", match: n => n === "helicopters.xml" },
-  { key: "heli_upgrades", icon: "renovate.svg", match: n => n.startsWith("heli_") },
+  { key: "heli_upgrades", icon: "renovate.svg", match: n => !n.endsWith(".model") && n.startsWith("heli_") },
   // авиация: сами самолёты и вызовы авиаударов одним разделом
-  { key: "airplanes", icon: "velocity.svg", match: n => n === "airplanes.xml" || n === "airstrikes.xml" },
+  // (.model с теми же именами — туда же)
+  { key: "airplanes", icon: "velocity.svg", match: n => n === "airplanes.xml" || n === "airstrikes.xml" || (n.endsWith(".model") && /f117|f35|su_57|fighter|harrier|ac130/.test(n)) },
   // «Вооружение»: стволы, крепления, слоты, ракеты и боеприпасы одним разделом
-  { key: "guns", icon: "dart.svg", match: n => n === "guns.xml" || n === "gun_mounts.xml" || n === "weapon_slots.xml" || n === "missiles.xml" || n === "ammunition.xml" },
+  // (.model вертолётного подвеса — туда же; guntruck остаётся в Машинах:
+  // голого «gun» в ключевых словах нет, техника матчится ниже по папке)
+  { key: "guns", icon: "dart.svg", match: (n, p) => n === "guns.xml" || n === "gun_mounts.xml" || n === "weapon_slots.xml" || n === "missiles.xml" || n === "ammunition.xml" || (n.endsWith(".model") && (/(^|[\\/])weapons([\\/]|$)/.test(p || "") || /minigun|hidra|hellfire|sidewinder|missile|mortar|cannon|rifle|howitzer/.test(n))) },
   { key: "modules", icon: "lib.svg", match: n => n === "modules.xml" },
-  { key: "animations", icon: "lottie.svg", match: n => n === "animations.xml" || n.startsWith("animations_") },
+  { key: "animations", icon: "lottie.svg", match: n => !n.endsWith(".model") && (n === "animations.xml" || n.startsWith("animations_")) },
   { key: "inventory", icon: "package_json.svg", match: n => n === "inventory_items.xml" },
   { key: "exp", icon: "chart.svg", match: n => n === "exp.xml" },
   { key: "reinforcements", icon: "nest.svg", match: n => n === "reinforcements.xml" },
@@ -55,8 +60,25 @@ const TREE_CATEGORIES = [
   // match получает вторым аргументом путь папки (см. categorizeNodeFiles).
   { key: "shop_campaign", icon: "database.svg", match: (n, p) => n === "shop_presets.xml" && !/(^|[\\/])dlc([\\/]|$)/i.test(p || "") },
   { key: "shop_uprising", icon: "database.svg", match: (n, p) => n === "shop_presets.xml" && /(^|[\\/])dlc([\\/]|$)/i.test(p || "") },
-  // сценарии миссий: свой раздел в дереве, открываются в SWT-редакторе
-  { key: "swt_scripts", icon: "xml.svg", match: n => n.endsWith(".swt") },
+  // сценарии миссий делятся ПО РАСПОЛОЖЕНИЮ И ИМЕНИ, как species по видам:
+  // DLC-оверлеи (Legion → WAL, остальной dlc → Uprising), затем суффиксы
+  // мультиплеера, префиксы стычек, остаток — кампания. Порядок важен:
+  // Legion тоже лежит под dlc/, WAL проверяется раньше Uprising.
+  { key: "swt_wal", icon: "sentry.svg", match: (n, p) => n.endsWith(".swt") && (/(^|[\\/])legion([\\/]|$)/i.test(p || "") || /_dlc_mission/i.test(n) || /^skirmish_dlc_/i.test(n) || /^dlc1_/i.test(n)) },
+  { key: "swt_uprising", icon: "nest.svg", match: (n, p) => n.endsWith(".swt") && (/(^|[\\/])dlc([\\/]|$)/i.test(p || "") || /^(dlc2_|uprising_)/i.test(n)) },
+  { key: "swt_multiplayer", icon: "command.svg", match: n => n.endsWith(".swt") && (/^mp_map/i.test(n) || /_(1vs1|2vs2|2vs1|coop)\.swt$/i.test(n)) },
+  { key: "swt_skirmish", icon: "dart.svg", match: n => n.endsWith(".swt") && (/^skirmish_/i.test(n) || /^sk_map/i.test(n)) },
+  { key: "swt_campaign", icon: "storybook.svg", match: n => n.endsWith(".swt") },
+  // .model из папки models — разбивка по видам, как species: сначала точные
+  // типы по имени (танки/вертолёты/авиация), затем папки и ключевые слова
+  // (машины/вооружение/строения/пехота/реквизит). Порядок важен: guntruck
+  // из vehicles не должен уйти в вооружение, а uh1_minigun — в вертолёты.
+  { key: "mdl_tanks", icon: "sentry.svg", match: n => n.endsWith(".model") && /tank|abrams|apc/.test(n) },
+  { key: "mdl_helicopters", icon: "velocity.svg", match: n => n.endsWith(".model") && /heli|flyer|blackhawk|little_bird|chinook|comanche|(^|_)(uh1|uh60|md500|ah1|oh58|ch53|mi_26|ka_)/.test(n) },
+  { key: "mdl_vehicles", icon: "cargo.svg", match: (n, p) => n.endsWith(".model") && (/(^|[\\/])vehicles([\\/]|$)/.test(p || "") || /car|truck|humvee|hemtt|stryker|bradley|m113|m109|himars|panhard|caravan|tractor|trailer|buldozer|mech|mammoth|sheridan|lav|ambulance|bus|jeep|bike|guntruck/.test(n)) },
+  { key: "mdl_buildings", icon: "command.svg", match: (n, p) => n.endsWith(".model") && (/(^|[\\/])buildings([\\/]|$)/.test(p || "") || /building|bunker|tower|gate|hq|outpost|wall|bridge/.test(n)) },
+  { key: "mdl_infantry", icon: "robots.svg", match: (n, p) => n.endsWith(".model") && (/(^|[\\/])(infantry|soldiers|humans|characters|troops)([\\/]|$)/.test(p || "") || /^inf_|soldier|human|trooper/.test(n)) },
+  { key: "mdl_props", icon: "package_json.svg", match: (n, p) => n.endsWith(".model") && /(^|[\\/])props([\\/]|$)/.test(p || "") },
 ];
 
 function fileExt(name) {
