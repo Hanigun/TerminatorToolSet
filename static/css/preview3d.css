@@ -1,26 +1,36 @@
-/* Редактор preview_config: тело вкладки — тот же вьюер model3d
-(бар сверху, сцена слева), справа — панель координат и конфигов */
-.preview-tab {
-  overflow: hidden;
-  background: #222326;
+/* Редактор preview_config: попап как превью модели, но шире —
+тело делят сцена слева и панель координат справа */
+.pv3-pop {
+  width: min(1140px, 94vw);
+}
+.pv3-pop .m3d-view {
+  width: auto;
 }
 .pv3-body {
-  flex: 1;
   display: flex;
   flex-direction: row;
   min-height: 0;
 }
-.preview-tab .m3d-view {
+.pv3-body .m3d-view {
   flex: 1;
-  height: auto;
-  min-height: 0;
   min-width: 0;
+}
+/* Подпись юнита вверху панели */
+.pv3-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e8ebf0;
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* Боковая панель редактора позы */
 .pv3-side {
   width: 248px;
   flex: none;
   overflow-y: auto;
+  max-height: min(60vh, 560px);
   padding: 10px 12px 14px;
   background: #2a2c30;
   border-left: 1px solid #3a3d43;

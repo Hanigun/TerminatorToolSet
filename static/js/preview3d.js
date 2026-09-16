@@ -3,7 +3,7 @@
 // (m3dLibs/m3dStage/m3dShowData/кэш) и дорисовываем свою боковую панель.
 // Точка входа — openPreviewEditor({root, mesh, sys, cat, config}):
 // переиспользуется из редактора юнитов, а позже — из древа и других
-// редакторов. Вкладка типа "preview" (создаёт grid.js).
+// редакторов. Открывается попапом поверх всего (как превью модели).
 // Соответствие координатам игры: у игры Z вверх, у three — Y, плюс
 // поворот кадра: бэкенд кладёт вершины как (-y, z, -x)
 // (model3d_service.py) — позу камеры конвертим тем же переходом M,
@@ -94,9 +94,9 @@ function pv3ConfigName(ref) {
   return s.endsWith(".config") ? s : s + ".config";
 }
 
-// Открыть редактор превью вкладкой. mesh — сырое значение колонки mesh
-// (тот же value, что ест /api/model_preview). Повторный вызов по тому же
-// юниту — переключение на готовую вкладку.
+// Открыть редактор превью попапом (как обычное превью модели, чуть шире —
+// справа влезает панель полей). Повторный вызов — новый попап вместо
+// старого. Вкладки не создаём: редактор — диалог поверх всего.
 function openPreviewEditor(opts) {
   opts = opts || {};
   const root = opts.root || "", mesh = opts.mesh || "";
@@ -104,23 +104,22 @@ function openPreviewEditor(opts) {
     toast(t("m3d_err_nofile") || "3D error", "err");
     return;
   }
+  if (typeof m3dClose === "function") m3dClose();
   const sys = opts.sys || mesh;
-  try {
-    const hit = (state.tabs || []).find(t => t.type === "preview"
-      && t._pv3 && t._pv3.root === root && t._pv3.mesh === mesh);
-    if (hit) { activateTab(hit.id); return; }
-  } catch (e) { /* вкладок ещё нет */ }
-  const tab = createTab("preview", {title: sys});
-  const pv3 = tab._pv3 = {root: root, mesh: mesh, sys: sys,
+  const pv3 = {root: root, mesh: mesh, sys: sys,
     cat: opts.cat || "", config: pv3ConfigName(opts.config),
     names: [], base: null, cam: null, st: null, ui: null};
-  tab.sub = pv3.config || "";
-  const panel = document.createElement("section");
-  panel.className = "tab-panel preview-tab";
-  panel.dataset.tabId = tab.id;
-  panel.role = "tabpanel";
+  // Фон-подложка: клик мимо окна закрывает редактор (как в превью)
+  const back = document.createElement("div");
+  back.className = "m3d-back";
+  back.onclick = () => m3dClose();
+  document.body.appendChild(back);
+  const pop = document.createElement("div");
+  pop.className = "m3d-pop pv3-pop";
+  pop._back = back;
   const bar = document.createElement("div");
   bar.className = "m3d-bar";
+  pop.appendChild(bar);
   const body = document.createElement("div");
   body.className = "pv3-body";
   const view = document.createElement("div");
@@ -136,19 +135,20 @@ function openPreviewEditor(opts) {
   catch (e) { /* подпись необязательна */ }
   const side = document.createElement("aside");
   side.className = "pv3-side";
+  const title = document.createElement("div");
+  title.className = "pv3-title";
+  title.textContent = sys;
+  side.appendChild(title);
   body.appendChild(view);
   body.appendChild(side);
-  panel.appendChild(bar);
-  panel.appendChild(body);
-  $("#tab-panels").appendChild(panel);
-  renderTabBar();
-  activateTab(tab.id);
-  if (state.config && state.config.auto_hide_tree) {
-    state.sidebarCollapsed = true;
-    try { updateSidebarVisibility(); } catch (e) {}
-  }
+  pop.appendChild(body);
+  document.body.appendChild(pop);
+  m3dPopEl = pop;
+  // Esc закрывает диалог
+  pop._esc = e => { if (e.key === "Escape") m3dClose(); };
+  document.addEventListener("keydown", pop._esc);
   m3dLibs(ok => {
-    if (!panel.isConnected) return;
+    if (!pop.isConnected) return;
     const fail = msg => {
       try { view.querySelector(".m3d-cube").remove(); } catch (e) {}
       try { view.querySelector(".m3d-status").remove(); } catch (e2) {}
@@ -160,19 +160,18 @@ function openPreviewEditor(opts) {
       fail(t("m3d_err_lib") || "3D error");
       return;
     }
-    // Сцена ядром model3d — та же, что в обычном превью
-    const st = m3dStage(panel, view, bar, root);
+    // Сцена ядром model3d — та же, что в обычном превью.
+    // Крестик в баре вьюера закрывает попап (дефолт m3dBuildBar).
+    const st = m3dStage(pop, view, bar, root);
     if (!st) { fail(t("m3d_err_lib") || "3D error"); return; }
-    st.onClose = () => { try { closeTab(tab.id); } catch (e) {} };
-    tab._m3d = st;
     pv3.st = st;
-    pv3FetchModel(tab, pv3, st, fail);
+    pv3FetchModel(pv3, st, fail);
   });
 }
 
 // Геометрия — тем же эндпоинтом и тем же показом, что обычное превью
 // (m3dShowData), дальше поза камеры — наша.
-function pv3FetchModel(tab, pv3, st, fail) {
+function pv3FetchModel(pv3, st, fail) {
   const key = m3dCacheKey(pv3.root, pv3.mesh, pv3.cat, pv3.sys);
   st.cacheKey = key;
   const done = data => {
@@ -185,7 +184,7 @@ function pv3FetchModel(tab, pv3, st, fail) {
     }
     if (st.cacheKey) m3dCachePut(st.cacheKey, {data: data});
     m3dShowData(st, data, true);
-    pv3AfterLoad(tab, pv3, st);
+    pv3AfterLoad(pv3, st);
   };
   const hit = m3dCacheGet(key);
   if (hit && hit.data && hit.data.ok) {
@@ -210,8 +209,8 @@ function pv3FetchModel(tab, pv3, st, fail) {
 
 // Модель встала: строим боковую панель, грузим список конфигов
 // и применяем позу текущего конфига юнита.
-function pv3AfterLoad(tab, pv3, st) {
-  pv3BuildSide(tab, pv3, st);
+function pv3AfterLoad(pv3, st) {
+  pv3BuildSide(pv3, st);
   try {
     st.ctl.addEventListener("change", () => pv3Update(pv3));
   } catch (e) { /* без живого readout — только по кнопкам */ }
@@ -351,8 +350,6 @@ function pv3Save(pv3) {
     }
     ui.sel.value = res.name;
     ui.name.value = res.name;
-    const tab = (state.tabs || []).find(t => t._pv3 === pv3);
-    if (tab) { tab.sub = res.name; renderTabBar(); }
     toast(t("pv3_saved") || "saved", "ok");
   });
 }
@@ -376,7 +373,7 @@ function pv3FillSelect(pv3) {
 
 // Боковая панель редактора: выбор конфига, живые координаты,
 // угол обзора, имя файла, сохранить/сбросить.
-function pv3BuildSide(tab, pv3, st) {
+function pv3BuildSide(pv3, st) {
   const side = st.pop.querySelector(".pv3-side");
   if (!side || pv3.ui) return;
   const L = key => t(key) || key;
