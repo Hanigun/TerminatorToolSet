@@ -1120,30 +1120,67 @@ function untFailSave() {
     localStorage.setItem(k, JSON.stringify(Object.keys(state.units.iconFail || {})));
   } catch (e) { /* переполнение/блок — не критично */ }
 }
-// Иконки своим батчем — РОВНО как карта (uprEnsureIcons, uprising.js:1958)
-// и кампания (cmpEnsureIcons, campaign.js:347): один POST
-// /api/uprising_icons_data, готовность и перерисовка СРАЗУ, недолёт
-// дожимается фоном. Сервер у нас HTTP/1.0 без keep-alive — сотни отдельных
-// <img> запрещены, только батч. Имена без иконок запоминаем в iconFail
-// (как campaign.iconFail) и больше не запрашиваем — иначе каждая загрузка
-// гнала предзагрузку несуществующих иконок. Флаг готовности свой —
+// Строка состояния иконок в шапке вкладки: видно без девтулзов, что
+// происходит (мс батча, счётчики, известные missing). Создаёт span сама.
+function untIconStatus(text) {
+  try {
+    let el = document.getElementById("unt-icon-status");
+    if (!el) {
+      const anchor = document.getElementById("unt-analyze")
+        || document.getElementById("unt-reload");
+      if (!anchor || !anchor.parentNode) return;
+      el = document.createElement("span");
+      el.id = "unt-icon-status";
+      el.className = "unt-icon-status";
+      anchor.parentNode.insertBefore(el, anchor.nextSibling);
+    }
+    el.textContent = text || "";
+    el.title = text || "";
+  } catch (e) { /* шапки нет — молча */ }
+}
+// Иконки своим батчем — URL-карта /api/uprising_icon_map (sysname -> URL
+// готовой webp, кэш браузера immutable), НЕ data-URL /api/uprising_icons_data:
+// data-URL тянули мегабайты base64 при КАЖДОМ запуске (браузер их не кэширует),
+// а прямые <img> качаются один раз и дальше отдаются с диска без единого
+// запроса — как карта и кампания, которые не тормозят. Готовность и
+// перерисовка СРАЗУ, недолёт дожимается фоном. Сервер у нас HTTP/1.0 без
+// keep-alive — сотни отдельных <img> запрещены, только батч. Имена без иконок
+// запоминаем в iconFail (как campaign.iconFail, переживает перезапуски через
+// localStorage) и больше не запрашиваем. Флаг готовности свой —
 // uprIconsReady и uprIconMap карты не трогаем.
+// Пакет icon_urls — чанками по 700 (лимит сервера 800 на запрос).
+async function untIconMapBatch(root, names) {
+  const merged = {};
+  const CH = 700;
+  for (let i = 0; i < (names || []).length; i += CH) {
+    const r = await api("/api/uprising_icon_map", { method: "POST",
+      body: JSON.stringify({ root, names: names.slice(i, i + CH) }),
+      timeout: 60000 });
+    const j = await r.json();
+    Object.assign(merged, (j && j.icons) || {});
+  }
+  return merged;
+}
 async function untFetchNames(names) {
   if (!state.units || !names.length) return;
   const my = ++state.units.iconSeq;
   const root = untSrcRoot();
+  const now = () => {
+    try { return performance.now(); } catch (e) { return Date.now(); }
+  };
+  const t0 = now();
   state.units.iconsLoading = true;
   const fresh = () => my === state.units.iconSeq && !!state.units;
   const done = () => {
     if (state.units && my === state.units.iconSeq)
       state.units.iconsLoading = false;
   };
+  const secs = t => (((now() - t) / 1000).toFixed(1)) + "с";
   try {
-    const r = await api("/api/uprising_icons_data", { method: "POST",
-      body: JSON.stringify({ root, names }), timeout: 60000 });
-    const j = await r.json();
+    untIconStatus("Иконки: запрос " + names.length + "…");
+    const merged = await untIconMapBatch(root, names);
     if (!fresh()) { done(); return; }
-    Object.assign(state.units.iconMap, j.icons || {});
+    Object.assign(state.units.iconMap, merged);
     // Готовы и на экран сразу — как карта: батч видит только готовый
     // webp-индекс, свежие dds дожмутся фоном ниже, чипы проявятся сами.
     state.units.iconsReady = true;
@@ -1151,12 +1188,16 @@ async function untFetchNames(names) {
       try { uprEnsureIconStates(root, names); } catch (e) {}
     }
     untPaintAllLists();
-    const missing = names.filter(n => !((j.icons || {})[n]));
+    const real = names.filter(n => merged[n]).length;
+    const missing = names.filter(n => !merged[n]);
+    untIconStatus("Иконки: " + real + "/" + names.length + " за " + secs(t0) +
+      (missing.length ? " · нет " + missing.length + "…" : " · все на месте"));
     if (!missing.length) { done(); return; }
     // Фон: persistent-предзагрузка (dds->webp в общий CustomImages/<слой>
-    // чанками), затем добивка батчем. Готовность НЕ ждёт — иначе каждая
+    // чанками), затем добивка URL-картой. Готовность НЕ ждёт — иначе каждая
     // холодная загрузка держала спиннеры, пока жмутся сотни dds.
     (async () => {
+      const tp = now();
       try {
         const CH = 100;
         for (let i = 0; i < missing.length; i += CH) {
@@ -1169,12 +1210,8 @@ async function untFetchNames(names) {
         }
         if (!fresh()) return;
         try {
-          const r2 = await api("/api/uprising_icons_data", { method: "POST",
-            body: JSON.stringify({ root, names: missing }),
-            timeout: 60000 });
-          const j2 = await r2.json();
-          if (j2 && j2.ok && fresh())
-            Object.assign(state.units.iconMap, j2.icons || {});
+          const re = await untIconMapBatch(root, missing);
+          if (fresh()) Object.assign(state.units.iconMap, re);
         } catch (e) { /* чипы добирают одиночными через uprChipIcon */ }
         if (!fresh()) return;
         // После дожатия иконки точно нет — в iconFail, больше не просим
@@ -1189,6 +1226,10 @@ async function untFetchNames(names) {
         if (changed) untPaintAllLists();
         // missing зафиксировать между перезапусками — больше не просим
         try { untFailSave(); } catch (e) {}
+        const real2 = missing.filter(n => state.units.iconMap[n]).length;
+        untIconStatus("Иконки: " + (real + real2) + "/" + names.length +
+          " · нет " + (missing.length - real2) + " (запомнены, больше не тянем)" +
+          " · фон " + secs(tp));
       } finally { done(); }
     })().catch(() => { done(); });
   } catch (e) { done(); /* чипы добирают одиночными через uprChipIcon */ }
@@ -1201,6 +1242,9 @@ async function untEnsureIcons() {
     if (state.units) {
       state.units.iconsReady = true;
       untPaintAllLists();
+      const known = Object.keys(state.units.iconFail || {}).length;
+      untIconStatus("Иконки: запросов нет (карточки закрыты)" +
+        (known ? " · без иконок " + known + " — не тянем" : ""));
     }
     return;
   }
