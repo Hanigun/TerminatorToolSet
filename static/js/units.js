@@ -1024,9 +1024,11 @@ async function untOpenUnit(cat, sys) {
 }
 
 // Иконки всех слоёв своим батчем (образец cmpEnsureIcons): имена без
-// иконок — одним запросом /api/uprising_icons_data, затем только перерисовка
-// списков (тела от иконок не зависят). Флаг готовности свой — uprIconsReady
-// и uprIconMap карты не трогаем.
+// иконок — запросами /api/uprising_icon_map, затем только перерисовка
+// списков (тела от иконок не зависят). Карта хранит СТАБИЛЬНЫЕ URL готовых
+// webp (/assets/upr-webp/..., immutable-кэш браузера): повторный запуск
+// берёт иконки из кэша, а не качает base64-пачку заново через icons_data.
+// Флаг готовности свой — uprIconsReady и uprIconMap карты не трогаем.
 async function untEnsureIcons() {
   if (!state.units) return;
   const my = ++state.units.iconSeq;
@@ -1053,46 +1055,55 @@ async function untEnsureIcons() {
   }
   state.units.iconsLoading = true;
   const root = untSrcRoot();
+  // icon_map отдаёт максимум 800 имён за запрос — режем чанками и клеим.
+  const fetchMap = async list => {
+    const acc = {};
+    const CH = 500;
+    for (let i = 0; i < list.length; i += CH) {
+      if (my !== state.units.iconSeq || !state.units) return null;
+      const r = await api("/api/uprising_icon_map", { method: "POST",
+        body: JSON.stringify({ root, names: list.slice(i, i + CH) }),
+        timeout: 60000 });
+      const j = await r.json();
+      if (!j || !j.ok) return null;
+      Object.assign(acc, j.icons || {});
+    }
+    return acc;
+  };
   try {
-    const r = await api("/api/uprising_icons_data", { method: "POST",
-      body: JSON.stringify({ root, names }), timeout: 60000 });
-    const j = await r.json();
+    const got = await fetchMap(names);
+    if (!got) throw new Error("icon_map not ok");
     if (my !== state.units.iconSeq) return;
     if (!state.units) return;
-    if (j && j.ok) {
-      Object.assign(state.units.iconMap, j.icons || {});
-      // Недолёт батча — не temp-одиночки, а persistent-предзагрузка
-      // (образец uprPreloadMissing карты): мисс пишет webp в общий
-      // CustomImages/<слой>, затем батч добирается. Иначе каждая
-      // холодная загрузка гнала сотни dds->png во временную папку.
-      const missing = names.filter(n => !((j.icons || {})[n]));
-      const CH = 100;
-      for (let i = 0; i < missing.length; i += CH) {
-        if (my !== state.units.iconSeq || !state.units) return;
-        try {
-          await api("/api/uprising_icon_preload", { method: "POST",
-            body: JSON.stringify({ root,
-              names: missing.slice(i, i + CH) }), timeout: 180000 });
-        } catch (e) { /* чанк не дожался — остальные всё равно идут */ }
-      }
-      if (missing.length && my === state.units.iconSeq && state.units) {
-        try {
-          const r2 = await api("/api/uprising_icons_data", { method: "POST",
-            body: JSON.stringify({ root, names: missing }),
-            timeout: 60000 });
-          const j2 = await r2.json();
-          if (j2 && j2.ok)
-            Object.assign(state.units.iconMap, j2.icons || {});
-        } catch (e) { /* чипы добирают одиночными через uprChipIcon */ }
-      }
+    Object.assign(state.units.iconMap, got);
+    // Недолёт батча — не temp-одиночки, а persistent-предзагрузка
+    // (образец uprPreloadMissing карты): мисс пишет webp в общий
+    // CustomImages/<слой>, затем карта добирается тем же icon_map.
+    // Пустая строка в карте = иконки точно нет (чип остаётся
+    // на категорийном плейсхолдере, синглы не дёргаем).
+    const missing = names.filter(n => !(got[n]));
+    const CH = 100;
+    for (let i = 0; i < missing.length; i += CH) {
       if (my !== state.units.iconSeq || !state.units) return;
-      state.units.iconsReady = true;
-      // ховер/selected-пары иконок — тем же батчем, что карты.
-      if (typeof uprEnsureIconStates === "function") {
-        try { uprEnsureIconStates(root, names); } catch (e) {}
-      }
-      untPaintAllLists();
+      try {
+        await api("/api/uprising_icon_preload", { method: "POST",
+          body: JSON.stringify({ root,
+            names: missing.slice(i, i + CH) }), timeout: 180000 });
+      } catch (e) { /* чанк не дожался — остальные всё равно идут */ }
     }
+    if (missing.length && my === state.units.iconSeq && state.units) {
+      try {
+        const got2 = await fetchMap(missing);
+        if (got2) Object.assign(state.units.iconMap, got2);
+      } catch (e) { /* чипы добирают одиночными через uprChipIcon */ }
+    }
+    if (my !== state.units.iconSeq || !state.units) return;
+    state.units.iconsReady = true;
+    // ховер/selected-пары иконок — тем же батчем, что карты.
+    if (typeof uprEnsureIconStates === "function") {
+      try { uprEnsureIconStates(root, names); } catch (e) {}
+    }
+    untPaintAllLists();
   } catch (e) { /* чипы добирают одиночными через uprChipIcon */ }
   finally {
     if (state.units && my === state.units.iconSeq) state.units.iconsLoading = false;

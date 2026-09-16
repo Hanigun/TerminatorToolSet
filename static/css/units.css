@@ -109,10 +109,13 @@
 #units-tab .upr-cat-body .upr-chip.cmp-span { grid-column: span 2; }
 #units-tab .upr-cat-body .upr-chip.cmp-span .upr-chip-icon {
   width: 100%; height: auto; display: block; }
-/* широкие слоты в трек 2x72+2=146px, как витрина кампании */
+/* широкие слоты в трек 2x72+2=146px, как витрина кампании; две колонки
+   занимаем СРАЗУ (а не когда cmpSpanChip добавит cmp-span после загрузки
+   иконки): иначе слот 146px сидит в треке 72px и фоны соседних слотов
+   наезжают друг на друга, пока висит спиннер */
 #units-tab .upr-cat-body .upr-chip.upr-card.veh,
 #units-tab .upr-cat-body .upr-chip.upr-card.inf {
-  min-width: 146px; }
+  min-width: 146px; grid-column: span 2; }
 #units-tab .upr-cat-body .upr-chip.upr-card.veh.cmp-span .upr-chip-icon {
   width: 124px; height: auto; }
 #units-tab .upr-cat-body .upr-chip.upr-card.inf.cmp-span .upr-chip-icon {
