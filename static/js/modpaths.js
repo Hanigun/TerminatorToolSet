@@ -179,11 +179,14 @@ function syncModSubClear() {
 
 // Привязка кнопки-меню и двух пунктов (id только этого модуля).
 (function wireModPaths() {
-  const arrow = document.getElementById("mod-path-toggle");
+  const block = document.querySelector("#mod-path-group .set-mod-row");
   const menu = document.getElementById("mod-path-menu");
-  // саб-меню открывает только стрелка; текст подписи некликабелен
-  if (arrow) {
-    arrow.addEventListener("click", e => {
+  // кнопка — весь блок, кроме текста подписи, поля ввода и кнопок:
+  // клик по ним игнорируем (текст некликабелен, поле фокусится,
+  // у кнопок свои действия), остальное переключает саб-меню
+  if (block) {
+    block.addEventListener("click", e => {
+      if (e.target.closest("input, button, #mod-path-label")) return;
       e.stopPropagation();
       toggleModPathMenu();
     });
