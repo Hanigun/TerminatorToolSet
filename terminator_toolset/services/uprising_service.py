@@ -825,15 +825,17 @@ class Uprising:
         return [c for c in out
                 if c and not (c.lower() in seen or seen.add(c.lower()))]
 
-    def icon_webp(self, root, name, _idx=None, _amap=None, _guns=None):
+    def icon_webp(self, root, name, _idx=None, _amap=None, _guns=None,
+                    _pref=None):
         """Ready-made webp icon for a sysname -> (bucket, file) | None.
         Direct name -> @-preset/base and preset->gun fallbacks -> preset->base
         (via the species map) -> icon file name from species. Custom: из всех
         подпапок слоя выбирается та, что выше в _custom_preference (тот же
         порядок, что icon_file). No dds search.
-        _idx/_amap/_guns — готовые снепшоты для батчей (icons_data снимает
-        один раз на все имена, иначе каждое имя повторяло бы stat-проверки
-        webp_index/icon_map: сотни лишних сисколов на запрос)."""
+        _idx/_amap/_guns/_pref — готовые снепшоты для батчей (icon_urls и
+        icons_data снимают один раз на все имена, иначе каждое имя повторяло
+        бы stat-проверки webp_index/icon_map и слоёв _custom_preference:
+        сотни лишних сисколов на запрос)."""
         idx = _idx if _idx is not None else self.webp_index()
         key = (name or "").strip()
         if not key:
@@ -865,27 +867,31 @@ class Uprising:
                     hit = idx.get(stem)
                     base = stem
             if hit and hit[0] == "custom":
-                pick = self._custom_pick(root, base)
+                pick = self._custom_pick(root, base, _pref)
                 if pick:
                     return ("custom", pick)
             elif hit:
                 return hit
         return None
 
-    def _custom_pick(self, root, base):
+    def _custom_pick(self, root, base, _pref=None):
         """Лучший relfn custom-слоя для base: первая подпапка из
         _custom_preference, где файл есть; иначе плоский legacy; иначе ''.
-        Зеркалит порядок слоёв icon_file."""
+        Зеркалит порядок слоёв icon_file. _pref — готовый снепшот
+        (батчи снимают один раз, иначе stat-обход слоёв на каждый хит)."""
         try:
             cands = self.webp_idx.get("custom", {}).get(base, [])
         except Exception:  # noqa: BLE001
             cands = []
         if not cands:
             return ""
-        try:
-            pref = self._custom_preference(root)
-        except Exception:  # noqa: BLE001
-            pref = []
+        if _pref is not None:
+            pref = _pref
+        else:
+            try:
+                pref = self._custom_preference(root)
+            except Exception:  # noqa: BLE001
+                pref = []
         for nm in pref:
             want = nm + "/"
             for relfn in cands:
@@ -1720,12 +1726,31 @@ class Uprising:
     def icon_urls(self, root, names):
         """sysname -> ready-made webp URL in one request. The frontend sets
         direct <img>: zero dds conversion and sprite assembly, then the
-        browser cache does the work."""
+        browser cache does the work.
+        Снепшоты один раз на батч (как icons_data): иначе каждое имя
+        повторяло бы stat-обходы webp_index/icon_map/_custom_preference —
+        тёплый батч 827 имён стоил 1.3с чистого CPU."""
         names = sorted({str(n).strip() for n in (names or [])
                         if str(n).strip()})[:800]
+        try:
+            _idx = self.webp_index()
+        except Exception:  # noqa: BLE001
+            _idx = {}
+        try:
+            _amap = self.icon_map(root)
+        except Exception:  # noqa: BLE001
+            _amap = {}
+        try:
+            _guns = self.gun_index(root)
+        except Exception:  # noqa: BLE001
+            _guns = {}
+        try:
+            _pref = self._custom_preference(root)
+        except Exception:  # noqa: BLE001
+            _pref = []
         icons = {}
         for n in names:
-            hit = self.icon_webp(root, n)
+            hit = self.icon_webp(root, n, _idx, _amap, _guns, _pref)
             icons[n] = self.webp_asset_url(*hit) if hit else ""
         return {"ok": True, "icons": icons}
 
@@ -1753,10 +1778,14 @@ class Uprising:
             _guns = self.gun_index(root)
         except Exception:  # noqa: BLE001
             _guns = {}
+        try:
+            _pref = self._custom_preference(root)
+        except Exception:  # noqa: BLE001
+            _pref = []
 
         def one(n):
             try:
-                hit = self.icon_webp(root, n, _idx, _amap, _guns)
+                hit = self.icon_webp(root, n, _idx, _amap, _guns, _pref)
             except Exception:  # noqa: BLE001
                 return (n, "")
             if not hit:

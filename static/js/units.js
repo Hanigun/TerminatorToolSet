@@ -261,13 +261,16 @@ async function openUnits(opts) {
 
 // Привязка кнопок шапки и сегмента-источника (зовётся из init один раз).
 // Обновить — как кампания (#cmp-reload): досмотр недогруженных иконок
-// на месте + добивка цен + перечитывание слоёв.
+// на месте + добивка цен + перечитывание слоёв с диска.
 function setupUnits() {
   // реестр истории — здесь же (init бежит после всех скриптов): страница
   // в ядре undo/redo и журнала без правок history.js
   untRegisterHistPage();
   const rel = $("#unt-reload");
   if (rel) rel.onclick = () => {
+    // что делает кнопка — видно в строке состояния иконок шапки
+    try { untIconStatus("Обновление: досмотр иконок, цены, слои с диска…"); }
+    catch (e) {}
     untReloadImages();
     untEnsurePrices().catch(() => {});
     renderUnits(true).catch(() => {});
@@ -343,7 +346,10 @@ async function renderUnits(force) {
   const basisByCat = {};
   const ovByCat = {};
   try {
-    for (const cat of UNT_CATS) {
+    // Виды — параллельно пачкой (5 units_list + оверлеи): сервер многопоточный,
+    // парсинг XML — в C с отпущенным GIL, сессии под замком (session_store).
+    // Порядок оверлеев сохраняем (иначе слои DLC перетасуются).
+    await Promise.all(UNT_CATS.map(async cat => {
       if (!fresh()) return;
       let j = null;
       try {
@@ -351,21 +357,25 @@ async function renderUnits(force) {
           body: JSON.stringify({ root: root || "", cat, src }) });
         j = await r.json();
       } catch (e) { j = null; }
-      if (!j || !j.ok || !Array.isArray(j.rows)) continue;
+      if (!j || !j.ok || !Array.isArray(j.rows)) return;
       basisByCat[cat] = { path: j.path || "", columns: j.columns || [],
         rows: j.rows || [] };
-      for (const op of (j.overlays || [])) {
-        if (!fresh()) return;
+      const got = await Promise.all((j.overlays || []).map(async op => {
+        if (!fresh()) return null;
         try {
           const or = await api("/api/file?path=" + encodeURIComponent(op));
           const oj = await or.json();
-          if (!oj || !oj.ok || !Array.isArray(oj.rows)) continue;
-          if (!ovByCat[cat]) ovByCat[cat] = [];
-          ovByCat[cat].push({ path: op, dlc: untDlcName(op),
-            columns: oj.columns || [], rows: oj.rows || [] });
-        } catch (e) { /* оверлей не прочитался — слоя не будет */ }
-      }
-    }
+          if (!oj || !oj.ok || !Array.isArray(oj.rows)) return null;
+          return { op, oj };
+        } catch (e) { return null; } // оверлей не прочитался — слоя не будет
+      }));
+      got.forEach(x => {
+        if (!x) return;
+        if (!ovByCat[cat]) ovByCat[cat] = [];
+        ovByCat[cat].push({ path: x.op, dlc: untDlcName(x.op),
+          columns: x.oj.columns || [], rows: x.oj.rows || [] });
+      });
+    }));
     if (!fresh()) return;
     // Порядок слоёв: basis, затем DLC по первому появлению в классах.
     const dlcOrder = [];
@@ -1948,8 +1958,15 @@ async function untAnalyze() {
       if (acc.converted) parts.push("+" + acc.converted);
       if (acc.ready) parts.push("=" + acc.ready);
       if (acc.failed) parts.push("!" + acc.failed);
+      // «?» — имён без исходников (ни webp, ни dds): иконок для них нет
+      // в принципе, чипы остаются на плейсхолдерах и больше не запрашиваются
+      if (acc.missing) parts.push("?" + acc.missing);
       toast((t("swt_analyzed_tt") || "Готово") +
         (parts.length ? " (" + parts.join(" ") + ")" : ""), "ok");
+      try {
+        untIconStatus("Анализ: +" + acc.converted + " =" + acc.ready +
+          " !" + acc.failed + " ?" + acc.missing + " (без исходников)");
+      } catch (e) {}
     } else toast(lastErr, "err");
   } catch (e) { toast(String((e && e.message) || e), "err"); }
   finally {

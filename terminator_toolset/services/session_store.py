@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import threading
 
 from ..domain import spreadsheet_ml as spreadsheet_ml_mod
 from ..domain.spreadsheet_ml import SpreadsheetML
@@ -17,6 +18,10 @@ class SessionStore:
         self.order: "list[str]" = []      # LRU: least recently used first
         self.dirty: "set[str]" = set()    # in-memory edits not yet saved to disk
         self.max = max_sessions
+        # Параллельные запросы (вкладка юнитов грузит виды пачкой):
+        # парсинг вне замка, подмена/учёт — под замком (кто второй —
+        # забирает готовую чужую сессию, двойной парсинг не вредит).
+        self._lock = threading.Lock()
 
     # -- path helper ----------------------------------------------------------
     @staticmethod
@@ -40,26 +45,39 @@ class SessionStore:
     def drop(self, path_key: str) -> None:
         """Forget one session entirely (rollback / forced reopen)."""
         pk = self.normal(path_key)
-        self.dirty.discard(pk)
-        self.sessions.pop(pk, None)
-        if pk in self.order:
-            self.order.remove(pk)
+        with self._lock:
+            self.dirty.discard(pk)
+            self.sessions.pop(pk, None)
+            if pk in self.order:
+                self.order.remove(pk)
 
     def get(self, path_key: str, recover: bool = False) -> Session:
-        """Get or open the editing session for a file (LRU-cached)."""
+        """Get or open the editing session for a file (LRU-cached).
+
+        Потокобезопасно для параллельных чтений: тяжёлый парсинг — вне
+        замка, публикация — под замком (гонку выигрывает первый, второй
+        забирает его сессию и выбрасывает свою)."""
         pk = self.normal(path_key)
         s = self.sessions.get(pk)
         if s is not None:
-            if pk in self.order:
-                self.order.remove(pk)
-            self.order.append(pk)
+            with self._lock:
+                if pk in self.order:
+                    self.order.remove(pk)
+                self.order.append(pk)
             return s
         d = SpreadsheetML()
         d.load(pk, recover=recover)
         s = Session(d, 0)
-        self.sessions[pk] = s
-        self.order.append(pk)
-        self.evict()
+        with self._lock:
+            old = self.sessions.get(pk)
+            if old is not None:
+                s = old
+            else:
+                self.sessions[pk] = s
+            if pk in self.order:
+                self.order.remove(pk)
+            self.order.append(pk)
+            self.evict()
         return s
 
     # -- light grid --------------------------------------------------------------
