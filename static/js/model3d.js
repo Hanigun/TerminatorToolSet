@@ -411,12 +411,12 @@ function m3dAddMeshes(st, meshes, materials) {
     const md = (materials && materials[mi]) || null;
     // Программный GL (SwiftShader): лёгкий Lambert вместо Standard —
     // иначе компиляция и кадры тяжёлого шейдера дают слайд-шоу
-    // Материалы модели туман игнорируют (fog:false): туман гасит только
-    // сетку и оси, модель видна всегда целиком при любом размере и зуме
+    // Материалы обычные: туман общий на сцену (сетка и модель тонут
+    // в фоне одинаково, как в Blender)
     const mat = st.softGL
-      ? new THREE.MeshLambertMaterial({color: 0xffffff, fog: false})
+      ? new THREE.MeshLambertMaterial({color: 0xffffff})
       : new THREE.MeshStandardMaterial({
-        color: 0xffffff, metalness: 0.05, roughness: 0.85, fog: false,
+        color: 0xffffff, metalness: 0.05, roughness: 0.85,
       });
     mat.userData.tex = [];
     mat.userData.slots = {map: null, normalMap: null, roughnessMap: null};
@@ -569,25 +569,6 @@ function m3dFetchTurret(st, rel, slot, mg) {
   });
 }
 
-// Туман под зум: край сетки всегда в полном тумане (конца не видно),
-// модель — вне тумана (её материалы туман игнорируют, см. fog:false).
-// Дистанция — от камеры до цели: ближняя граница в полу-сетке за целью,
-// дальняя — за дальним углом сетки (полу-диагональ ~1.41 половины).
-// Дальнюю плоскость камеры тянем за сеткой, иначе при отдалении сетку
-// срежет раньше, чем туман её спрячет.
-function m3dFog(st) {
-  try {
-    const fog = st.scene && st.scene.fog;
-    if (!fog) return;
-    const half = st.gridHalf || 60;
-    const d = st.camera.position.distanceTo(st.ctl.target);
-    fog.near = d + half * 0.55;
-    fog.far = d + half * 1.5;
-    st.camera.far = d + half * 3 + 100;
-    st.camera.updateProjectionMatrix();
-  } catch (e) { /* туман необязателен */ }
-}
-
 // Вторая стадия: геометрия приехала — сетка, меши, камера, кнопки
 function m3dShowData(st, data, first) {
   const tb0 = (typeof performance !== "undefined" && performance.now)
@@ -649,17 +630,16 @@ function m3dShowData(st, data, first) {
   axZ.position.y = y0;
   st.gridHolder.add(axX);
   st.gridHolder.add(axZ);
-  // Туман в цвет фона (тоже линейный, иначе горизонт светлее фона):
-  // гасит ТОЛЬКО сетку и оси — материалы модели с fog:false туман
-  // не трогает вообще, размер модели на туман не влияет никак.
-  // Границы считает m3dFog от сетки и дистанции камеры (см. ниже):
-  // край сетки всегда за дальней границей — конца не видно.
-  scene.fog = new THREE.Fog(0x38383c, 10, 100);
-  st.gridHalf = gridSize / 2;
-  if (!st.fogHook) {
-    st.fogHook = true;
-    ctl.addEventListener("change", () => m3dFog(st));
-  }
+  // Туман в цвет фона (тоже линейный, иначе горизонт светлее фона).
+  // Границы ФИКСИРОВАНЫ от сетки и домашнего вида, за зумом не ездят —
+  // как в Blender: отъехал далеко — всё (сетка и модель) тонет в фоне.
+  // Ближняя — за моделью домашнего вида с запасом, дальняя — за дальним
+  // углом сетки (полу-диагональ ~1.41 половины): края сетки не видно.
+  // Ближняя всегда меньше дальней: сетка шире модели минимум на 2 м.
+  const dHome = (maxDim * 1.5 + 1) * 0.62;
+  scene.fog = new THREE.Fog(0x38383c,
+    Math.max(gridSize * 0.25, dHome + maxDim * 0.75),
+    dHome + (gridSize / 2) * 1.5);
   st.disposables.push(gh.geometry, gh.material,
     ghBig.geometry, ghBig.material,
     axX.geometry, axX.material, axZ.geometry, axZ.material);
@@ -675,7 +655,7 @@ function m3dShowData(st, data, first) {
   // нос модели в −Z, правый борт в +X
   st.home = () => {
     ctl.target.copy(center);
-    const d = (maxDim * 1.5 + 1) * 0.62;
+    const d = dHome;
     camera.position.set(center.x - d * 1.0, center.y + d * 0.3, center.z - d * 0.65);
     camera.near = Math.max(d / 500, 0.01);
     camera.far = d * 60 + 100;
@@ -683,8 +663,6 @@ function m3dShowData(st, data, first) {
     ctl.update();
   };
   if (first) st.home();
-  // Туман под текущие сетку и камеру (и под каждый зум через хук выше)
-  m3dFog(st);
   if (!st.barBuilt) {
     st.barBuilt = true;
     m3dBuildBar(st);
