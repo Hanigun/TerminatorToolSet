@@ -5,9 +5,10 @@
 // Древо уже приходит обрезанным с бэкенда (walk_tree: 5 уровней папок —
 // хватает на DLC-оверлеи dlc/<Имя>/basis/... — только TREE_KEEP_EXTS) —
 // меню фильтров показывает ровно это: расширения xml+swt+model, папки в пределах
-// 5 уровней (.model живут в basis/models). Правило ADR-001 §14: поддержка
-// нового расширения = добавить его в TREE_KEEP_EXTS бэкенда И в exts ниже.
-const TREE_FILTER_DEFAULTS = { exts: ["xml", "swt", "model"], folders: ["scripts", "spawns", "models"] };
+// 5 уровней (.model живут в basis/models и basis/animations/new/skin).
+// Правило ADR-001 §14: поддержка нового расширения = добавить его в
+// TREE_KEEP_EXTS бэкенда И в exts ниже.
+const TREE_FILTER_DEFAULTS = { exts: ["xml", "swt", "model"], folders: ["scripts", "spawns", "models", "animations"] };
 const TREE_EDITABLE_EXTS = new Set(["xml"]);
 const TREE_MATCH_CAP = 400;
 const TREE_RENDER_CHUNK = 250;
@@ -139,6 +140,7 @@ function loadTreeFilters(forceDefaults) {
       { exts: ["xml"], folders: ["scripts"] },
       { exts: ["xml", "swt", "set"], folders: ["scripts", "spawns"] },
       { exts: ["xml", "swt"], folders: ["scripts", "spawns"] },
+      { exts: ["xml", "swt", "model"], folders: ["scripts", "spawns", "models"] },
     ].map(norm);
     if (olds.includes(norm(saved))) saved = null;
   }

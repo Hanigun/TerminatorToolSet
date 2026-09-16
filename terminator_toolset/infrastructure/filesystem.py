@@ -38,7 +38,8 @@ _TREE_SKIP_DIRS = {".git", "__pycache__", ".codebase-memory", ".codegraph",
 
 # Древо проекта: 5 уровней папок от выбранного корня — хватает и на
 # basis/scripts/species (3), и на DLC-оверлеи dlc/<Имя>/basis/scripts/species
-# (5), и на модели basis/models (3) / dlc/<Имя>/basis/models (5).
+# (5), и на модели basis/models (3) / dlc/<Имя>/basis/models (5),
+# и на пехоту basis/animations/new/skin (4).
 # Файлы — только открываемые расширения (.model — 3D-превью вкладкой).
 # Глубже/шире не лезем: scandir
 # по текстурам/аудио распакованной игры и гигантский JSON тормозили открытие
