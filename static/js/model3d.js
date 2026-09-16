@@ -826,13 +826,17 @@ function m3dBuildBar(st) {
   bar.appendChild(msel);
   st.mgSel = msel;
   mkBtn("m3d_reset", false, () => { if (st.home) st.home(); });
-  // Крестик — последним в ряду кнопок (верхней панели больше нет)
+  // Крестик — последним в ряду кнопок (верхней панели больше нет);
+  // во вкладке древа закрывает вкладку, в попапе — диалог
   const x = document.createElement("button");
   x.type = "button";
   x.className = "m3d-btn m3d-xbtn";
   x.textContent = "✕";
   x.title = t("m3d_close") || "";
-  x.onclick = () => m3dClose();
+  x.onclick = () => {
+    if (st && typeof st.onClose === "function") st.onClose();
+    else m3dClose();
+  };
   bar.appendChild(x);
 }
 
@@ -955,4 +959,123 @@ function m3dArmorKindBtn(st) {
   }
   const n = known.filter(k => on.has(k)).length;
   btn.textContent = base + " (" + n + "/" + known.length + ") ▾";
+}
+
+// rel модели от слоя basis для /api/model_preview: всё после последнего
+// /basis/ (DLC-оверлей бьёт базу тем же путём, ищет find_file бэкенда).
+// Нет сегмента — файл не из игровых данных, превью не строим.
+function m3dRelFromPath(path) {
+  const v = String(path || "").replace(/\\/g, "/");
+  const i = v.toLowerCase().lastIndexOf("/basis/");
+  if (i === -1) return "";
+  return v.slice(i + 7).replace(/^\/+/, "");
+}
+
+// Открыть .model из древа вкладкой: тело — тот же вьюер, что в редакторе
+// юнитов (m3dStage/m3dFetch/m3dShowData, тот же /api/model_preview),
+// попап не создаём. Повторный клик — переключение на готовую вкладку.
+async function openModelFile(path) {
+  if (!path) return;
+  const np = (typeof normPath === "function") ? normPath(path) : String(path);
+  const same = p => ((typeof normPath === "function") ? normPath(p) : String(p)) === np;
+  try {
+    const hit = (state.tabs || []).find(t => t.type === "model" && same(t.path || ""));
+    if (hit) {
+      activateTab(hit.id);
+      try { markActiveTreeFile(path); } catch (e) {}
+      return;
+    }
+  } catch (e) { /* древо ещё не готово */ }
+  const origin = ((typeof fileOrigin === "function") ? fileOrigin(path) : null)
+    || state.treeView || "project";
+  const root = (typeof srcRoot === "function") ? (srcRoot(origin) || "") : "";
+  const rel = m3dRelFromPath(path);
+  if (!root || !rel) {
+    toast(t("m3d_err_nofile") || "3D error", "err");
+    return;
+  }
+  const tab = createTab("model", { path });
+  const panel = document.createElement("section");
+  panel.className = "tab-panel model-tab";
+  panel.dataset.tabId = tab.id;
+  panel.role = "tabpanel";
+  const bar = document.createElement("div");
+  bar.className = "m3d-bar";
+  const view = document.createElement("div");
+  view.className = "m3d-view";
+  view.innerHTML = '<div class="m3d-cube"><div class="m3d-cube-inner">' +
+    '<i></i><i></i><i></i><i></i><i></i><i></i></div></div>' +
+    '<div class="m3d-status"></div>' +
+    '<div class="m3d-pbar"><i></i></div>' +
+    '<div class="m3d-tprog" style="display:none"><span></span><i><b></b></i></div>' +
+    '<div class="m3d-perf"></div>' +
+    '<div class="m3d-err" hidden></div>';
+  try { view.querySelector(".m3d-status").textContent = t("m3d_loading") || ""; }
+  catch (e) { /* подпись необязательна */ }
+  panel.appendChild(bar);
+  panel.appendChild(view);
+  $("#tab-panels").appendChild(panel);
+  renderTabBar();
+  activateTab(tab.id);
+  try { markActiveTreeFile(path); } catch (e) {}
+  if (state.config && state.config.auto_hide_tree) {
+    state.sidebarCollapsed = true;
+    try { updateSidebarVisibility(); } catch (e) {}
+  }
+  m3dLibs(ok => {
+    if (!panel.isConnected) return;
+    const fail = msg => {
+      try { view.querySelector(".m3d-cube").remove(); } catch (e) {}
+      try { view.querySelector(".m3d-status").remove(); } catch (e2) {}
+      try { view.querySelector(".m3d-pbar").remove(); } catch (e3) {}
+      const box = view.querySelector(".m3d-err");
+      if (box) { box.textContent = msg; box.hidden = false; }
+    };
+    if (!ok) { fail(t("m3d_err_lib") || "3D error"); return; }
+    // Сцена сразу: свет и камера есть до прихода геометрии
+    const st = m3dStage(panel, view, bar, root);
+    if (!st) { fail(t("m3d_err_lib") || "3D error"); return; }
+    // Крестик в баре вьюера закрывает вкладку (в попапе — диалог)
+    st.onClose = () => { try { closeTab(tab.id); } catch (e) {} };
+    tab._m3d = st;
+    const key = m3dCacheKey(root, rel, "", path);
+    st.cacheKey = key;
+    const hitC = m3dCacheGet(key);
+    if (hitC && hitC.data && hitC.data.ok) {
+      // Модель уже загружена: строим мгновенно, сеть не трогаем
+      st.params = { root: root, value: rel, cat: "", sys: "",
+        turret: (hitC.data.turret && hitC.data.turret.rel) || "@@auto@@" };
+      st.fromCache = true;
+      m3dShowData(st, hitC.data, true);
+      return;
+    }
+    m3dProgress(st, 0.15);
+    m3dFetch(st, { root: root, value: rel, cat: "", sys: "",
+      turret: m3dTurretPick.get(key) || "@@auto@@" }, true);
+  });
+}
+
+// Уборка вкладки 3D-превью (зовёт closeTab): гасим цикл рендера,
+// снимаем наблюдатели и чистим GL-ресурсы. Панель сносит сам closeTab.
+function m3dDisposeTab(tab) {
+  const st = (tab && tab._m3d) || null;
+  if (tab) { try { tab._m3d = null; } catch (e) {} }
+  if (!st) return;
+  const host = st.pop;
+  try { if (host && host._raf) cancelAnimationFrame(host._raf); } catch (e) {}
+  try { if (host && host._ro) host._ro.disconnect(); } catch (e) {}
+  try {
+    if (host && host._armorDoc)
+      document.removeEventListener("click", host._armorDoc);
+  } catch (e) {}
+  try {
+    (st.disposables || []).forEach(d => {
+      try { if (d.dispose) d.dispose(); else d(); } catch (e2) {}
+    });
+  } catch (e) {}
+  try {
+    Object.keys(st.texCache || {}).forEach(k => {
+      try { st.texCache[k].dispose(); } catch (e2) {}
+    });
+  } catch (e) {}
 }

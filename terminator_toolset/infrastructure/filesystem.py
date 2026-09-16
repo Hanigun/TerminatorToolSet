@@ -38,13 +38,15 @@ _TREE_SKIP_DIRS = {".git", "__pycache__", ".codebase-memory", ".codegraph",
 
 # Древо проекта: 5 уровней папок от выбранного корня — хватает и на
 # basis/scripts/species (3), и на DLC-оверлеи dlc/<Имя>/basis/scripts/species
-# (5). Файлы — только редактируемые расширения. Глубже/шире не лезем: scandir
+# (5), и на модели basis/models (3) / dlc/<Имя>/basis/models (5).
+# Файлы — только открываемые расширения (.model — 3D-превью вкладкой).
+# Глубже/шире не лезем: scandir
 # по текстурам/аудио распакованной игры и гигантский JSON тормозили открытие
 # папки. Правило ADR-001 §14: поддержка нового расширения = добавить его в
 # TREE_KEEP_EXTS И в дефолты фильтров фронта (static/js/tree.js
 # TREE_FILTER_DEFAULTS).
 TREE_MAX_DEPTH = 5
-TREE_KEEP_EXTS = ("xml", "swt")
+TREE_KEEP_EXTS = ("xml", "swt", "model")
 
 
 def _tree_keep_file(name: str) -> bool:

@@ -1561,7 +1561,7 @@ async function closeTreeSource(v) {
 async function handleExternalPaths(paths, dirs) {
   paths = paths || [];
   dirs = dirs || [];
-  const openables = paths.filter(p => /\.(xml|swt)$/i.test(String(p || "")));
+  const openables = paths.filter(p => /\.(xml|swt|model)$/i.test(String(p || "")));
   if (!openables.length && !dirs.length) return;
   // папка = открыть как проект; файлы + папка: сначала проект, потом файлы
   if (dirs.length) await loadProject(dirs[0]);

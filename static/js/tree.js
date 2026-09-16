@@ -4,10 +4,10 @@
 // ---------- tree filters (compact dropdown over the full project tree) ----------
 // Древо уже приходит обрезанным с бэкенда (walk_tree: 5 уровней папок —
 // хватает на DLC-оверлеи dlc/<Имя>/basis/... — только TREE_KEEP_EXTS) —
-// меню фильтров показывает ровно это: расширения xml+swt, папки в пределах
-// 5 уровней. Правило ADR-001 §14: поддержка нового расширения = добавить
-// его в TREE_KEEP_EXTS бэкенда И в exts ниже.
-const TREE_FILTER_DEFAULTS = { exts: ["xml", "swt"], folders: ["scripts", "spawns"] };
+// меню фильтров показывает ровно это: расширения xml+swt+model, папки в пределах
+// 5 уровней (.model живут в basis/models). Правило ADR-001 §14: поддержка
+// нового расширения = добавить его в TREE_KEEP_EXTS бэкенда И в exts ниже.
+const TREE_FILTER_DEFAULTS = { exts: ["xml", "swt", "model"], folders: ["scripts", "spawns", "models"] };
 const TREE_EDITABLE_EXTS = new Set(["xml"]);
 const TREE_MATCH_CAP = 400;
 const TREE_RENDER_CHUNK = 250;
@@ -17,6 +17,7 @@ const TREE_DIR_ICONS = {
   species: ["folder_robot.svg", "folder_robot__open.svg"],
   spawns: ["folder_database.svg", "folder_database__open.svg"],
   animations: ["folder_animation.svg", "folder_animation__open.svg"],
+  models: ["folder_unity.svg", "folder_unity__open.svg"],
   audio: ["folder_audio.svg", "folder_audio__open.svg"],
   sound: ["folder_audio.svg", "folder_audio__open.svg"],
   sounds: ["folder_audio.svg", "folder_audio__open.svg"],
@@ -85,6 +86,7 @@ function loadTreeFilters(forceDefaults) {
     const olds = [
       { exts: ["xml"], folders: ["scripts"] },
       { exts: ["xml", "swt", "set"], folders: ["scripts", "spawns"] },
+      { exts: ["xml", "swt"], folders: ["scripts", "spawns"] },
     ].map(norm);
     if (olds.includes(norm(saved))) saved = null;
   }
@@ -623,6 +625,8 @@ function buildTreeFileRow(fname, depth, path) {
     if (state.treeSel && state.treeSel.size) clearTreeSel();
     markActiveTreeFile(path);
     if (/\.swt$/i.test(fname)) openSwt(path);
+    // .model — 3D-превью вкладкой (тот же вьюер, что в редакторе юнитов)
+    else if (/\.model$/i.test(fname)) openModelFile(path);
     // shop_presets.xml — карта Uprising или редактор кампании: чистое
     // содержимое решает само (секторы → карта, магазины → кампания),
     // смешанный файл — приоритет пути (dlc → карта, база → кампания)
@@ -1294,7 +1298,7 @@ async function loadDisplayNames(root, mapPath) {
 window.__tshExternalDrop = function (data) {
   if (!data) return;
   if (data.folder) { loadProject(data.folder); return; }
-  handleExternalPaths((data.files || []).filter(p => /\.(xml|swt)$/i.test(p || "")),
+  handleExternalPaths((data.files || []).filter(p => /\.(xml|swt|model)$/i.test(p || "")),
     data.dirs || []);
 };
 

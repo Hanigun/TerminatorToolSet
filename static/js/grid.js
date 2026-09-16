@@ -243,7 +243,7 @@ function renderTabBar() {
   // восстановления (иначе первый render в init затрёт сохранённый список)
   if (window.__tshRestored) {
     try {
-      const openPaths = state.tabs.filter(tb => tb.type === "file" && tb.path)
+      const openPaths = state.tabs.filter(tb => (tb.type === "file" || tb.type === "model") && tb.path)
         .map(tb => tb.path);
       sessionStorage.setItem("tsh_tabs", JSON.stringify(openPaths));
     } catch (e) { /* noop */ }
@@ -340,7 +340,8 @@ async function activateTab(tabId) {
   
   // Update toolbar visibility
   const isWelcome = tab.type === "welcome";
-  $("#sheet-toolbar").hidden = isWelcome;
+  // У 3D-превью своей панели инструментов нет (только бар вьюера в теле)
+  $("#sheet-toolbar").hidden = isWelcome || tab.type === "model";
   
   // Update current file state for the active tab
   if (tab.type === "file" && tab.fileData) {
@@ -373,6 +374,15 @@ async function activateTab(tabId) {
       }
       if (!tab.linksLoaded) loadLinks();
     }
+  } else if (tab.type === "model") {
+    // 3D-превью .model: серверных сессий нет, в шапке — путь файла
+    state.currentFile = null;
+    state.dirty = false;
+    updateDirty();
+    paintSyncBoxes();
+    const mfp = $("#file-path");
+    mfp.textContent = tab.path || "";
+    mfp.title = tab.path || "";
   } else if (tab.type === "welcome" || tab.type === "compare"
       || tab.type === "create-mod" || tab.type === "unpacker" || tab.type === "swt"
       || tab.type === "uprising" || tab.type === "uprising-rnd"
@@ -498,6 +508,20 @@ function createTab(type, data) {
       sub: "",
       icon: "/assets/icons/dark/icons/xml.svg"
     };
+  } else if (type === "model") {
+    // Вкладка 3D-превью .model: тело — тот же вьюер, что в редакторе юнитов
+    // (строит openModelFile в model3d.js); правок нет, дискеты нет.
+    const fileName = data.path.split(/[\\/]/).pop();
+    tab = {
+      id,
+      type: "model",
+      title: fileName,
+      path: data.path,
+      sub: computeOverlaySub(data.path),
+      origin: fileOrigin(data.path),
+      dirty: false,
+      icon: getFileIcon(data.path)
+    };
   }
 
   state.tabs.push(tab);
@@ -542,6 +566,10 @@ function closeTab(tabId) {
     // Панель юнитов статическая, как карта: состояние сбрасываем через фабрику.
     if (tab.type === "units" && typeof untFreshState === "function") {
       state.units = untFreshState();
+    }
+    // 3D-превью .model: гасим цикл рендера и чистим GL-ресурсы вкладки
+    if (tab.type === "model" && typeof m3dDisposeTab === "function") {
+      try { m3dDisposeTab(tab); } catch (e) {}
     }
 
     updateSidebarVisibility();
@@ -706,6 +734,8 @@ function addFileTab(fileData) {
 async function openFile(path, opts) {
   // .swt открывается в отдельном редакторе триггеров
   if (/\.swt$/i.test(path)) { await openSwt(path); return { ok: true }; }
+  // .model открывается вкладкой 3D-превью (тот же вьюер, что в редакторе юнитов)
+  if (/\.model$/i.test(path)) { await openModelFile(path); return { ok: true }; }
   // Reuse the existing tab when the file is already open
   const existingTab = getOrCreateFileTab(path);
   if (existingTab) {

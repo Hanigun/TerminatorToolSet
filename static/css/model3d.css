@@ -66,6 +66,17 @@
   width: 100%;
   height: 100%;
 }
+/* Вкладка .model из древа: тот же вьюер в теле вкладки (без попапа) —
+бар сверху, сцена тянется на всё тело */
+.model-tab {
+  overflow: hidden;
+  background: #222326;
+}
+.model-tab .m3d-view {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
 .m3d-cube {
   position: absolute;
   left: 50%;
