@@ -706,6 +706,40 @@ def _origin_root(mod_ent):
         return None
 
 
+def _stock_turret_bone(host_ent, mount_name):
+    """Кость штатной башни шасси: прямой родитель маунта с 'turret' в имени.
+
+    Шасси возит геометрию штатной башни (integrator_transport_v1:
+    spiders_turret — родитель mount_point_guns и mount_point_rocket_pods).
+    При монтировании варианта она заменяется (меши прячутся), при
+    turret='' остаётся штатной комплектацией. Имя строго с 'turret':
+    'gun' в имени кузова (towed_gun_chassis — родитель
+    turret_mount_point) — не признак, там лафет со щитом, а не башня
+    (рендер-проверка 09.2026). Возвращает имя кости или ''.
+    """
+    try:
+        if not mount_name:
+            return ""
+        nodes = host_ent["model"].nodes or []
+        idx = None
+        for i, n in enumerate(nodes):
+            if (getattr(n, "name", "") or "") == mount_name:
+                idx = i
+                break
+        if idx is None:
+            return ""
+        try:
+            par = int(getattr(nodes[idx], "parent", -1))
+        except (TypeError, ValueError):
+            return ""
+        if par == ROOT_PARENT or not 0 <= par < len(nodes):
+            return ""
+        bone = getattr(nodes[par], "name", "") or ""
+        return bone if "turret" in bone.lower() else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _muzzle_keep(meshes):
     """Дульные устройства — телу башни, а не броне (глобально).
 
@@ -1080,6 +1114,16 @@ def preview_payload(upr, root, value, turret="@@auto@@", mg="@@auto@@"):
                         base + len(tmtrl), ovl)
                     materials += mg_mats
                     meshes += mg_meshes
+                    stock = _stock_turret_bone(host_ent, mount)
+                    if stock:
+                        # Штатная башня заменена вариантом: её геометрия
+                        # шасси прячется, иначе с любым вариантом
+                        # стоят сдвоенные пушки (Int_heavy_guntruck).
+                        meshes = [
+                            m for m in meshes
+                            if not (m.get("part") == "hull"
+                                    and m.get("group") == "turret"
+                                    and m.get("node") == stock)]
                     _muzzle_keep(meshes)
                     _gun_keep(meshes)
                     for c in choices:
@@ -1088,6 +1132,15 @@ def preview_payload(upr, root, value, turret="@@auto@@", mg="@@auto@@"):
                                    "anchor": anchor, "choices": choices,
                                    "mat_base": base, "mg": mg_rel,
                                    "mg_choices": mg_union}
+    else:
+        # Штатная комплектация (turret=''): геометрия штатной башни —
+        # часть башни (тумблер и обмен её видят), а не неснимаемый
+        # корпус. Кости строго с 'turret' в имени.
+        for m in meshes:
+            if (m.get("part") == "hull"
+                    and m.get("group") == "turret"
+                    and "turret" in str(m.get("node") or "").lower()):
+                m["part"] = "turret"
     ms_total = round((time.perf_counter() - t_all) * 1000)
     return {"ok": True, "path": path, "value": rel,
             "version": host.version, "meshes": meshes,

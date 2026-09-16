@@ -30,6 +30,31 @@ def dds_fourcc(path):
         return b""
 
 
+def dds_needs_blue_rebuild(path):
+    """Контент-признак двухканальной normal-карты в любом контейнере.
+
+    B-канал плоский (~0), а R/G разбросаны (XY нормалей):
+    int_small_tug_normal.dds — DXT1 с нулевым B, FourCC BC5U её
+    не ловит, и three.js нормализует (x, y, 0) — свет гаснет,
+    модель «тёмная» при живых текстурах. Порог B<8 тот же, что
+    и сторож внутри _rebuilt_bc5_blue; разброс R/G отсекает
+    просто тёмные картинки.
+    """
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            rgb = (im if im.mode in ("RGB", "RGBA")
+                   else im.convert("RGB"))
+            r, g, b = rgb.split()[:3]
+            if b.getextrema()[1] >= 8:
+                return False
+            rlo, rhi = r.getextrema()
+            glo, ghi = g.getextrema()
+            return (rhi - rlo) > 32 and (ghi - glo) > 32
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _rebuilt_bc5_blue(im):
     """Восстановить B-канал двухканальной (BC5) normal-карты.
 

@@ -68,11 +68,16 @@ def register_model3d(app, ctx):
         p = m3.find_file(root, rel, ovl) if rel else ""
         if p and p.lower().endswith(".dds"):
             try:
-                # Двухканальные BC5-нормали: Z чинить по содержимому
-                # (FourCC), не по имени — *_normal_v2.dds иначе даёт
-                # чёрные поверхности (свет инвертирован).
+                # Двухканальные нормали: Z чинить по содержимому, не по
+                # контейнеру — FourCC ловит BC5U, а DXT1-пустышки с
+                # нулевым B (int_small_tug_normal.dds — «тёмный» трактор)
+                # детектит dds_needs_blue_rebuild. Маска 'normal' в имени:
+                # albedo с плоским B под пересчёт не подставлять.
                 from terminator_toolset.services import dds_converter as _dc
-                nr = _dc.dds_fourcc(p) == b"BC5U"
+                stem = os.path.basename(p).lower()
+                nr = (_dc.dds_fourcc(p) == b"BC5U" or
+                      ("normal" in stem and
+                       _dc.dds_needs_blue_rebuild(p)))
                 p = upr.dds_webp(p, root=root, normal_fix=nr) or ""
             except Exception:  # noqa: BLE001
                 p = ""
