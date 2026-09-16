@@ -120,3 +120,53 @@ def kill_child_processes(names=_WEBVIEW_NAMES, pid=0, log=None):
         _log_silent(log, "webview children killed: %d (pid %d)"
                     % (dead, pid))
     return int(dead or 0)
+
+
+# Держать Ctrl-колбэки живыми: Windows зовёт их из своего потока, сборщик
+# мусора не должен освободить функцию раньше времени.
+_CONSOLE_HANDLERS = []
+
+
+def install_fast_console_exit(log=None):
+    """Мгновенный выход по Ctrl+C / закрытию консоли.
+
+    Пока крутится нативный цикл WebView2 (webview.start), интерпретатор
+    заблокирован в чужом коде и Python-обработчик SIGINT/KeyboardInterrupt
+    не выполняется — консоль выглядит зависшей, а падает уже teardown
+    Chromium с его шумом в stderr. Нативный Ctrl-обработчик (его Windows
+    зовёт из отдельного потока) срабатывает сразу: быстро бьёт прямых
+    детей-msedgewebview2 чистым ctypes и выходит через os._exit. Сироты
+    прошлых запусков всё равно подбираются чисткой следующего старта,
+    профиль не клинит. Возвращает True, если обработчик встал.
+    Вне Windows — молча False (там SIGINT и так работает)."""
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+        _HANDLER_T = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.DWORD)
+        # C, BREAK, CLOSE, LOGOFF, SHUTDOWN: все требуют быстрого выхода.
+        _CTRLS = (0, 1, 2, 5, 6)
+
+        def _on_ctrl(kind):
+            try:
+                if int(kind) in _CTRLS:
+                    _log_silent(log, "console event %d: fast exit"
+                                % int(kind))
+                    try:
+                        _kill_children_ctypes(os.getpid(), _WEBVIEW_NAMES)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    os._exit(0)
+            except Exception:  # noqa: BLE001
+                pass
+            return True
+
+        _cb = _HANDLER_T(_on_ctrl)
+        _CONSOLE_HANDLERS.append(_cb)
+        try:
+            return bool(ctypes.windll.kernel32.SetConsoleCtrlHandler(_cb, True))
+        except Exception:  # noqa: BLE001
+            return False
+    except Exception:  # noqa: BLE001
+        return False

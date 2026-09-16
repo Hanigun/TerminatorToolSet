@@ -21,6 +21,7 @@ from ..services.update_service import Updates
 from .filesystem import pick_app_dir as _pick_app_dir
 from .logging import boot_log as _log
 from .procutil import kill_child_processes as _kill_kids
+from .procutil import install_fast_console_exit as _fast_console_exit
 from terminator_toolset import __version__ as _APP_VERSION
 
 
@@ -648,6 +649,17 @@ def run_pywebview(url, app_dir=None, build_heavy=None, stager=None):
 
     _stage = stager if callable(stager) else _noop_stage
 
+    # Быстрый выход из консоли: пока крутится нативный цикл WebView2,
+    # Ctrl+C игнорируется (интерпретатор заблокирован в чужом коде) —
+    # консоль выглядит зависшей, а падает уже teardown Chromium.
+    # Нативный Ctrl-обработчик выходит мгновенно (детей бьёт сам, сирот
+    # подберёт чистка следующего старта). Только оконный режим: в
+    # browser-режиме Ctrl+C уже обрабатывает keep_alive.
+    try:
+        _fast_console_exit(log=_log)
+    except Exception:  # noqa: BLE001
+        pass
+
     # -- постоянный профиль WebView2 ------------------------------------------
     # private_mode=True (по умолчанию) создаёт temp-каталог на каждый запуск и
     # удаляет его при выходе; если файлы ещё заняты браузерным процессом,
@@ -1106,19 +1118,13 @@ def run_pywebview(url, app_dir=None, build_heavy=None, stager=None):
                     win.destroy()
             except Exception as e:  # noqa: BLE001
                 pass
-            # и только ПОТОМ добивка leftovers: своих webview-призраков —
-            # насильно, иначе переживают выход, держат профиль занятым и
-            # мешают следующему запуску/обновлению.
-            # Детей бьём по pid, сирот прошлой жизни — по storage-пути
+            # и только ПОТОМ добивка своих webview-детей по pid — насильно,
+            # иначе переживают выход и держат профиль занятым.
+            # Сирот прошлой жизни (по storage-пути) здесь НЕ трогаем:
+            # powershell-перебор на пути выхода задерживал закрытие, а сирот
+            # всё равно подбирает чистка следующего старта.
             try:
                 _kill_kids(log=_log)
-            except Exception:  # noqa: BLE001
-                pass
-            try:
-                _storage = os.path.join(
-                    os.environ.get("LOCALAPPDATA") or app_dir,
-                    "TerminatorToolSet", "WebView2")
-                _kill_stale_webview(_storage)
             except Exception:  # noqa: BLE001
                 pass
             # safety net in case the webview loop does not exit on its own
@@ -1555,15 +1561,12 @@ def run_pywebview(url, app_dir=None, build_heavy=None, stager=None):
     except Exception as e:  # noqa: BLE001
         _browser_fallback("webview backend: %s" % e)
         return
-    # штатный выход через X: своих webview-призраков — насильно, чтобы не
-    # висели в фоне и не держали профиль/файлы для следующего запуска.
-    # Детей — по pid, сирот — по storage (пережили прошлый os._exit).
+    # Штатный выход через X: своих webview-детей — насильно по pid, чтобы
+    # не висели в фоне и не держали профиль/файлы для следующего запуска.
+    # Синхронной чистки сирот (powershell по storage) здесь нет: она
+    # тормозила выход, а сироты подбираются чисткой следующего старта.
     try:
         _kill_kids(log=_log)
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        _kill_stale_webview(storage)
     except Exception:  # noqa: BLE001
         pass
 
