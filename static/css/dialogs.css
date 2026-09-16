@@ -132,40 +132,56 @@
    тянет её на шапку — даём нормальные внутренние отступы */
 .modal-card > .settings-hint { margin-top: 0; padding: 10px 16px 0; }
 .set-mod-hint { color: var(--text-mute); }
-/* Строки путей проекта и игры — отдельные прямоугольные блоки,
-   как дочерние саб-пути мода: тёмный фон, без скруглений */
+/* Строки путей проекта и игры — отдельные прямоугольные блоки
+   с описанием внутри; скруглений нет */
 .set-path-block {
   background: var(--bg, #1e2126); border-radius: 0;
   padding: 8px 10px; margin: 0;
+  display: flex; flex-direction: column; gap: 6px;
 }
+.set-path-block .settings-hint,
+.set-mod-row .settings-hint,
+.modpath-menu .settings-hint { margin-top: 0; }
 /* Путь мода — ещё и кнопка: вся строка, кроме поля и кнопок, раскрывает
-   саб-меню. Основная строка без фона; ховер без аутлайна — блок темнеет.
-   Каждый путь — отдельный прямоугольный блок, скруглений нет. */
-.modpath-group { display: flex; flex-direction: column; gap: 8px; }
+   саб-меню. Сама без фона; ховер без аутлайна — темнее цвета блоков,
+   чтобы не путался с их обычным фоном. Описание — внутри зоны. */
 .set-mod-row { padding: 6px 8px; margin: 0 -8px; border-radius: 0; }
-.set-mod-row:hover { background: var(--bg, #1e2126); }
+.set-mod-row:hover { background: rgba(0, 0, 0, 0.45); }
 .modpath-label {
-  flex: 1; align-self: stretch; display: flex; align-items: center; gap: 8px;
+  flex: 1; align-self: stretch; display: flex; align-items: center; gap: 10px;
   cursor: pointer; min-width: 0;
 }
 .modpath-label:hover { color: var(--accent); }
-/* статическая стрелка-подсказка (часть кнопки-строки, не отдельная кнопка) */
+/* большая серая стрелка-треугольник (часть строки-кнопки) */
 .modpath-label::after {
-  content: "▸"; color: var(--accent); font-size: 11px;
-  display: inline-block; transition: transform .15s ease;
+  content: ""; width: 0; height: 0; flex: none;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-left: 12px solid var(--text-mute);
+  transform-origin: center; transition: transform .15s ease;
 }
 .modpath-group.open .modpath-label::after { transform: rotate(90deg); }
-/* Дочерние пути — тёмные прямоугольные блоки */
-.modpath-menu { display: flex; flex-direction: column; gap: 8px; }
-.modpath-menu[hidden] { display: none; }
-.modpath-menu .setting-row {
+/* Саб-меню — один тёмный блок; отдельные блоки у пунктов убраны.
+   Дочерность видна деревом: направляющая слева + отводы к строкам. */
+.modpath-menu {
   background: var(--bg, #1e2126); border-radius: 0;
-  padding: 8px 10px; margin: 0;
+  padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.modpath-menu[hidden] { display: none; }
+.modsp-items {
+  border-left: 2px solid var(--text-faint, #5a6068);
+  margin-left: 4px; padding-left: 14px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.modsp-items .setting-row { position: relative; }
+.modsp-items .setting-row::before {
+  content: ""; position: absolute; left: -14px; top: 50%;
+  width: 12px; border-top: 2px solid var(--text-faint, #5a6068);
 }
 /* Статусы саб-путей внутри саб-меню */
 .modsp-panel {
-  border: 1px solid var(--border); border-radius: 0;
-  background: var(--bg, #1e2126); padding: 10px 12px;
+  background: none; border: none; border-radius: 0; padding: 2px 0 0;
   display: flex; flex-direction: column; gap: 10px;
   max-height: 220px; overflow-y: auto;
 }
