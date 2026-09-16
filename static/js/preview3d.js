@@ -4,13 +4,69 @@
 // Точка входа — openPreviewEditor({root, mesh, sys, cat, config}):
 // переиспользуется из редактора юнитов, а позже — из древа и других
 // редакторов. Вкладка типа "preview" (создаёт grid.js).
-// Соответствие координатам игры: position/target(fov — как есть;
-// rotation в превью всегда смотрит в origin (OrbitControls держит
-// lookAt), поэтому читаем и пишем фактический кватернион камеры;
-// zoom игры — дистанция камера→origin (у абрамса |pos|≈20.3,
-// zoom=20.58 — сходится).
+// Соответствие координатам игры: у игры Z вверх, у three — Y, плюс
+// поворот кадра: бэкенд кладёт вершины как (-y, z, -x)
+// (model3d_service.py) — позу камеры конвертим тем же переходом M,
+// иначе камера уходит под модель. rotation в превью всегда смотрит
+// в origin (OrbitControls держит lookAt), поэтому читаем и пишем
+// фактический кватернион камеры; zoom игры — дистанция камера→origin
+// (у абрамса |pos|≈20.3, zoom=20.58 — сходится).
 var PV3_RAD2DEG = 180 / Math.PI;
 var PV3_DEG2RAD = Math.PI / 180;
+
+// Переход кадра игра→three (та же M, что у вершин): (X,Y,Z)->(-Y,Z,-X);
+// обратно — транспонированием (поворот, инверсия = транспонирование).
+function pv3G2T(p) {
+  return {x: -(+p.y || 0), y: (+p.z || 0), z: -(+p.x || 0)};
+}
+function pv3T2G(p) {
+  return {x: -(+p.z || 0), y: -(+p.x || 0), z: (+p.y || 0)};
+}
+function pv3QMul(a, b) {
+  return {
+    w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+    x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+    y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+    z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+  };
+}
+function pv3QConj(q) {
+  return {w: q.w, x: -q.x, y: -q.y, z: -q.z};
+}
+// Кватернион перехода M (матрица→кватернион классикой по следу):
+// поворот кадра сопрягается им с обеих сторон.
+var PV3_QM = (function () {
+  const m = [0, -1, 0, 0, 0, 1, -1, 0, 0];
+  const tr = m[0] + m[4] + m[8];
+  let w, x, y, z;
+  if (tr > 0) {
+    const s = Math.sqrt(tr + 1) * 2;
+    w = 0.25 * s;
+    x = (m[7] - m[5]) / s;
+    y = (m[2] - m[6]) / s;
+    z = (m[3] - m[1]) / s;
+  } else if (m[0] > m[4] && m[0] > m[8]) {
+    const s = Math.sqrt(1 + m[0] - m[4] - m[8]) * 2;
+    w = (m[7] - m[5]) / s;
+    x = 0.25 * s;
+    y = (m[1] + m[3]) / s;
+    z = (m[2] + m[6]) / s;
+  } else if (m[4] > m[8]) {
+    const s = Math.sqrt(1 + m[4] - m[0] - m[8]) * 2;
+    w = (m[2] - m[6]) / s;
+    x = (m[1] + m[3]) / s;
+    y = 0.25 * s;
+    z = (m[5] + m[7]) / s;
+  } else {
+    const s = Math.sqrt(1 + m[8] - m[0] - m[4]) * 2;
+    w = (m[3] - m[1]) / s;
+    x = (m[2] + m[6]) / s;
+    y = (m[5] + m[7]) / s;
+    z = 0.25 * s;
+  }
+  return {w: w, x: x, y: y, z: z};
+})();
+var PV3_QMI = pv3QConj(PV3_QM);
 
 // Свет для нового конфига с нуля: копия значений игры (abrams.config) —
 // редактор свет не крутит, но файл обязан остаться полным.
@@ -171,12 +227,13 @@ function pv3AfterLoad(tab, pv3, st) {
 
 // Применить позу из конфига: точка прицеливания, угол обзора, затем
 // камера на сохранённой дистанции (zoom) по направлению позы.
+// Координаты игры (Z вверх) — через переход кадра в three.
 function pv3ApplyPose(pv3, cam) {
   const st = pv3.st;
   if (!st || !cam) return;
-  const o = cam.origin || {}, p = cam.position || {}, r = cam.rotation || {};
-  const origin = new THREE.Vector3(+o.x || 0, +o.y || 0, +o.z || 0);
-  const pos = new THREE.Vector3(+p.x || 0, +p.y || 0, +p.z || 0);
+  const o = pv3G2T(cam.origin || {}), p = pv3G2T(cam.position || {});
+  const origin = new THREE.Vector3(o.x, o.y, o.z);
+  const pos = new THREE.Vector3(p.x, p.y, p.z);
   const dir = pos.clone().sub(origin);
   if (dir.lengthSq() < 1e-8) dir.set(1, 0.5, -1);
   dir.normalize();
@@ -191,14 +248,18 @@ function pv3ApplyPose(pv3, cam) {
 }
 
 // Текущая поза сцены в формате конфига игры (полная точность,
-// без округлений — округление только в подписях).
+// без округлений — округление только в подписях). Координаты three
+// возвращаем в кадр игры тем же переходом; поворот сопрягаем.
 function pv3ReadPose(pv3) {
   const st = pv3.st;
-  const c = st.camera, q = c.quaternion, tg = st.ctl.target;
+  const c = st.camera, tg = st.ctl.target;
+  const q = pv3QMul(pv3QMul(PV3_QMI,
+    {w: c.quaternion.w, x: c.quaternion.x,
+     y: c.quaternion.y, z: c.quaternion.z}), PV3_QM);
   return {
     fov: c.fov * PV3_DEG2RAD,
-    origin: {x: tg.x, y: tg.y, z: tg.z},
-    position: {x: c.position.x, y: c.position.y, z: c.position.z},
+    origin: pv3T2G(tg),
+    position: pv3T2G(c.position),
     rotation: {w: q.w, x: q.x, y: q.y, z: q.z},
     zoom: c.position.distanceTo(tg),
   };
