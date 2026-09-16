@@ -923,7 +923,8 @@ function cmpChip(sys, cat, items, i) {
   // карта иконок у кампании своя
   if (typeof uprChipIcon === "function")
     uprChipIcon(img, chip, it.name, cat,
-      { map: state.campaign.iconMap, ready: state.campaign.iconsReady });
+      { map: state.campaign.iconMap, ready: state.campaign.iconsReady,
+        fail: state.campaign.iconFail });
   else img.src = uprIconUrl(it.name, cat);
   // data-URL из кэша может быть complete до первого onload — спан ставим
   // сразу, иначе широкая иконка займёт одну колонку до перерисовки

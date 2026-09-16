@@ -1767,6 +1767,9 @@ function uprPlaceholderUrl(cat, name) {
 // синглов душили сервер по HTTP/1.0, а чипы висели пустыми). Реальная
 // иконка подменяет плейсхолдер; недолёт сингла — остаёмся на плейсхолдере.
 // src — чужой источник ({map, ready}, кампания держит свою карту иконок).
+// src.fail — известные missing (campaign.iconFail / units.iconFail): такие
+// чипы сразу встают на плейсхолдер БЕЗ спиннера и сольного запроса — иначе
+// каждое открытие сыпало сотнями HTTP/1.0-синглов заведомого несуществующего.
 function uprChipIcon(img, chip, name, cat, src) {
   if (!img) return;
   // имя/категория — на img для досмотра недогруженных (uprReloadImages)
@@ -1780,6 +1783,15 @@ function uprChipIcon(img, chip, name, cat, src) {
   }
   const ph = (typeof uprPlaceholderUrl === "function")
     ? (uprPlaceholderUrl(cat, name) || "") : "";
+  const failed = !!(src && src.fail && src.fail[name]);
+  if (failed) {
+    // заведомо нет иконки: честный плейсхолдер без спиннера и сингла
+    // (спиннер от прошлого прохода — снять, real — сбросить для досмотра)
+    if (chip) chip.classList.remove("upr-loading");
+    delete img.dataset.uprReal;
+    if (ph) { if (chip) chip.classList.add("upr-chip-ph"); img.src = ph; }
+    return;
+  }
   const ready = src ? !!src.ready
     : ((typeof uprIconsReady !== "undefined") && uprIconsReady);
   const icons = (src && src.map)

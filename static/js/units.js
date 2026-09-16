@@ -615,6 +615,9 @@ function untLayerSec(L) {
 // Pill «развернуть/свернуть всё» слоя: две кнопки в одну линию на одном
 // уровне; действуют только на карточки типов СВОЕГО слоя (флаги _open +
 // синхронизация открытых карточек через card.__item, без перерисовки).
+// Массовое раскрытие «все» — per-card fetch гасим флагом (иначе N мелких
+// батчей), в конце один общий добрать открытых карточек.
+let untBulkOpen = false;
 function untLayerAllWrap(L, bodyEl) {
   const wrap = document.createElement("span");
   wrap.className = "unt-all-wrap";
@@ -628,13 +631,20 @@ function untLayerAllWrap(L, bodyEl) {
     b.innerHTML = expand ? UNT_ALL_EXPAND_SVG : UNT_ALL_COLLAPSE_SVG;
     b.onclick = e => {
       e.stopPropagation();
-      UNT_CATS.forEach(cat => {
-        const data = (L.cats || {})[cat];
-        if (data) data._open = expand;
-      });
-      if (bodyEl) bodyEl.querySelectorAll(".swt-item").forEach(c => {
-        if (c.__item) untApplyTypeOpen(c, c.__item);
-      });
+      untBulkOpen = true;
+      try {
+        UNT_CATS.forEach(cat => {
+          const data = (L.cats || {})[cat];
+          if (data) data._open = expand;
+        });
+        if (bodyEl) bodyEl.querySelectorAll(".swt-item").forEach(c => {
+          if (c.__item) untApplyTypeOpen(c, c.__item);
+        });
+      } finally { untBulkOpen = false; }
+      // развернули всё — один общий батч открытых (без него только DOM);
+      // свернули — запросов нет вообще
+      if (expand && typeof untEnsureIcons === "function")
+        untEnsureIcons().catch(() => {});
     };
     return b;
   };
@@ -652,6 +662,23 @@ function untApplyTypeOpen(card, data) {
   const chev = card.querySelector(".swt-item-chev");
   if (chev) chev.title = o ? (t("swt_collapse") || "Свернуть")
                            : (t("swt_expand") || "Развернуть");
+  // Раскрыли — построить список (ленивый: в закрытой его не было) и
+  // добрать иконки строк карточки (закрытые иконок не просят вообще,
+  // на старте тишина). Массовое «развернуть все» fetch не дёргает —
+  // оно добирает всё одним батчем само (флаг untBulkOpen).
+  if (o && card) {
+    try {
+      const li = card.querySelector ? card.querySelector(".unt-list") : null;
+      if (li && !li.dataset.painted) untPaintTypeList(li);
+    } catch (e) { /* список построит следующий рендер */ }
+    if (!untBulkOpen && card.dataset) {
+      try {
+        const lk = card.dataset.layer, cc = card.dataset.cat;
+        if (lk && cc && typeof untEnsureTypeIcons === "function")
+          untEnsureTypeIcons(lk, cc).catch(() => {});
+      } catch (e) { /* чипы живут на плейсхолдерах */ }
+    }
+  }
 }
 
 // Карточка типа внутри слоя — механика swtItemCard (swt.js:844-954):
@@ -748,7 +775,9 @@ function untTypeCard(L, cat, data) {
   wrap.appendChild(detail);
   body.appendChild(wrap);
   card.appendChild(body);
-  untPaintTypeList(list);
+  // Чипы — только раскрытой карточке (ленивый список: закрытые карточки
+  // чипов не показывают, DOM не строят и иконок не просят вообще).
+  if (data._open) untPaintTypeList(list);
   untPaintTypeDetail(detail);
   return card;
 }
@@ -805,6 +834,7 @@ function untFirstSlot(optCat) {
 // (чип — untChipCtx, пустое место ряда — untCatCtx); попапа нет.
 function untPaintTypeList(list) {
   if (!list) return;
+  list.dataset.painted = "1";
   const st = list.scrollTop;
   const layerKey = list.dataset.layer;
   const cat = list.dataset.cat;
@@ -832,9 +862,13 @@ function untPaintTypeList(list) {
   list.scrollTop = st;
 }
 
-// Все списки вкладки (после батча иконок): скролл каждого сохраняем.
+// Все списки вкладки (после батча иконок): только раскрытые карточки
+// (закрытые списков не имеют — ленивые); скролл каждого сохраняем.
 function untPaintAllLists() {
-  document.querySelectorAll("#unt-main .unt-list").forEach(untPaintTypeList);
+  document.querySelectorAll("#unt-main .unt-list").forEach(li => {
+    if (li.closest(".swt-item-closed")) return;
+    untPaintTypeList(li);
+  });
 }
 
 // Чип списка — РОВНО чип кампании (cmpChip, campaign.js:901-969):
@@ -867,7 +901,8 @@ function untRow(layerKey, it, cat) {
   // ожидании иконки) — без дубля здесь, иначе мигание при каждом рендере
   if (typeof uprChipIcon === "function")
     uprChipIcon(img, row, it.sys, cat,
-      { map: state.units.iconMap, ready: state.units.iconsReady });
+      { map: state.units.iconMap, ready: state.units.iconsReady,
+        fail: state.units.iconFail });
   else if (typeof uprIconUrl === "function") img.src = uprIconUrl(it.sys, cat);
   if (img.complete && img.naturalWidth && typeof cmpSpanChip === "function")
     cmpSpanChip(row, img);
@@ -978,6 +1013,9 @@ async function untOpenUnit(cat, sys) {
   if (L) L.open = true;
   if (data) data._open = true;
   untPaint();
+  // иконки раскрытой карточки — дождаться до выбора: иначе тело встанет
+  // на плейсхолдере (тела батч не перерисовывает, только списки)
+  try { await untEnsureTypeIcons(layerKey, cat).catch(() => {}); } catch (e) {}
   untSelect(layerKey, cat, sys);
   // чип — перебором по dataset (sysname в селектор не экранируем)
   let list = null, row = null;
@@ -1024,40 +1062,46 @@ async function untOpenUnit(cat, sys) {
   } catch (e) { /* rAF недоступен — первый скролл уже сделан */ }
 }
 
-// Иконки всех слоёв своим батчем — РОВНО как карта (uprEnsureIcons,
-// uprising.js:1958) и кампания (cmpEnsureIcons, campaign.js:347): один POST
+// Имена без иконок для батча: вся витрина (карточки открыты) или одна
+// карточка (layerKey+cat заданы И карточка открыта). Закрытые карточки чипов
+// не показывают — их иконки не просим вообще: на старте все карточки сложены,
+// и первый вход вообще без запросов иконок (как пустая выдача кампании).
+// Пропускаем готовые (iconMap) и заведомо отсутствующие (iconFail).
+function untCollectNames(layerKey, cat) {
+  const out = [];
+  if (!state.units) return out;
+  const map = state.units.iconMap || {};
+  const fail = state.units.iconFail || {};
+  const seen = new Set();
+  const push = x => {
+    if (x && x.sys && !map[x.sys] && !fail[x.sys] && !seen.has(x.sys)) {
+      seen.add(x.sys);
+      out.push(x.sys);
+    }
+  };
+  ((state.units && state.units.layers) || []).forEach(L => {
+    if (layerKey && L.key !== layerKey) return;
+    UNT_CATS.forEach(c => {
+      if (cat && c !== cat) return;
+      const data = ((L.cats || {})[c]) || {};
+      if ((layerKey || cat) && !data._open) return;
+      ((data.items) || []).forEach(push);
+    });
+  });
+  return out;
+}
+// Иконки своим батчем — РОВНО как карта (uprEnsureIcons, uprising.js:1958)
+// и кампания (cmpEnsureIcons, campaign.js:347): один POST
 // /api/uprising_icons_data, готовность и перерисовка СРАЗУ, недолёт
 // дожимается фоном. Сервер у нас HTTP/1.0 без keep-alive — сотни отдельных
 // <img> запрещены, только батч. Имена без иконок запоминаем в iconFail
 // (как campaign.iconFail) и больше не запрашиваем — иначе каждая загрузка
 // гнала предзагрузку несуществующих иконок. Флаг готовности свой —
 // uprIconsReady и uprIconMap карты не трогаем.
-async function untEnsureIcons() {
-  if (!state.units) return;
+async function untFetchNames(names) {
+  if (!state.units || !names.length) return;
   const my = ++state.units.iconSeq;
-  const map = state.units.iconMap || {};
-  const fail = state.units.iconFail || {};
-  const seen = new Set();
-  const names = [];
-  ((state.units && state.units.layers) || []).forEach(L => {
-    UNT_CATS.forEach(cat => {
-      ((((L.cats || {})[cat] || {}).items) || []).forEach(x => {
-        if (x && x.sys && !map[x.sys] && !fail[x.sys] && !seen.has(x.sys)) {
-          seen.add(x.sys);
-          names.push(x.sys);
-        }
-      });
-    });
-  });
   const root = untSrcRoot();
-  if (!names.length) {
-    state.units.iconsReady = true;
-    if (typeof uprEnsureIconStates === "function") {
-      try { uprEnsureIconStates(root, names); } catch (e) {}
-    }
-    untPaintAllLists();
-    return;
-  }
   state.units.iconsLoading = true;
   const fresh = () => my === state.units.iconSeq && !!state.units;
   const done = () => {
@@ -1117,6 +1161,29 @@ async function untEnsureIcons() {
     })().catch(() => { done(); });
   } catch (e) { done(); /* чипы добирают одиночными через uprChipIcon */ }
 }
+// Витрина: имена только ОТКРЫТЫХ карточек (закрытые чипов не показывают).
+// На старте всё сложено — запросов иконок нет вообще.
+async function untEnsureIcons() {
+  const names = untCollectNames();
+  if (!names.length) {
+    if (state.units) {
+      state.units.iconsReady = true;
+      untPaintAllLists();
+    }
+    return;
+  }
+  await untFetchNames(names).catch(() => {});
+}
+// Раскрытая карточка: добрать иконки только её строк. На время полёта
+// готовность снята — чипы стоят на плейсхолдерах без сольных запросов,
+// по прилёту батча встают реальные (сольный шторм этим закрыт).
+async function untEnsureTypeIcons(layerKey, cat) {
+  if (!state.units) return;
+  const names = untCollectNames(layerKey, cat);
+  if (!names.length) return;
+  state.units.iconsReady = false;
+  await untFetchNames(names).catch(() => {});
+}
 
 // Тело карточки типа: ВСЯ строка species-файла своего слоя без исключений
 // (все колонки файла, кроме sysname — он правится полем в шапке рядом
@@ -1163,7 +1230,8 @@ async function untPaintTypeDetail(box) {
   dicho.classList.add("upr-loading");
   if (typeof uprChipIcon === "function")
     uprChipIcon(diimg, dicho, item.sys, cat,
-      { map: state.units.iconMap, ready: state.units.iconsReady });
+      { map: state.units.iconMap, ready: state.units.iconsReady,
+        fail: state.units.iconFail });
   else if (typeof uprIconUrl === "function") diimg.src = uprIconUrl(item.sys, cat);
   if (diimg.complete && diimg.naturalWidth && typeof cmpSpanChip === "function")
     cmpSpanChip(dicho, diimg);
@@ -1737,6 +1805,7 @@ function untReloadImages() {
   if (!main || typeof uprChipIcon !== "function") return 0;
   const ready = !!(state.units && state.units.iconsReady);
   const map = (state.units && state.units.iconMap) || {};
+  const fail = (state.units && state.units.iconFail) || {};
   let n = 0;
   main.querySelectorAll("img.upr-chip-icon").forEach(img => {
     if (!img.isConnected) return;
@@ -1750,7 +1819,8 @@ function untReloadImages() {
     try {
       const chip = (img.closest && img.closest(".upr-chip")) || img.parentNode;
       delete img.dataset.uprReal;
-      uprChipIcon(img, chip, name, img.dataset.uprCat || "", { map, ready });
+      uprChipIcon(img, chip, name, img.dataset.uprCat || "",
+        { map, ready, fail });
       n++;
     } catch (e) {}
   });
