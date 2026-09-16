@@ -471,18 +471,12 @@ async function renderUnits(force) {
     }
     untPaintHeader(root, src);
     untPaint();
-    // Иконки всех слоёв — своим батчем (карту uprising не трогаем);
-    // цены (cost) — тем же /api/uprising_prices, что кампания.
-    untEnsureIcons().catch(() => {});
-    untEnsurePrices().catch(() => {});
-    // Фоновая ленивая догрузка найденных иконок: в простое после отрисовки
-    // греем кэш браузера, чтобы раскрытие карточек было мгновенным.
-    try {
-      const idle = window.requestIdleCallback || null;
-      if (idle) idle(() => { untPrefetchExisting().catch(() => {}); },
-        { timeout: 4000 });
-      else setTimeout(() => { untPrefetchExisting().catch(() => {}); }, 2000);
-    } catch (e) {}
+    // Иконки и цены — в загрузку страницы: ждём батч до гашения спиннера,
+    // чтобы раскрытие карточек было мгновенным (как карта/кампания: один
+    // data-URL батч в память, ноль отдельных <img> по HTTP/1.0 без keep-alive).
+    // Спиннеры на чипах после этого — только у конвертируемых иконок.
+    try { await untEnsureIcons(); } catch (e) {}
+    try { await untEnsurePrices(); } catch (e) {}
     // Досмотр зависших иконок (рваный коннект без error): один проход
     // через 5с после отрисовки, как cmpImgSweepT у кампании.
     try {
@@ -1135,22 +1129,19 @@ function untFailSave() {
     localStorage.setItem(k, JSON.stringify(Object.keys(state.units.iconFail || {})));
   } catch (e) { /* переполнение/блок — не критично */ }
 }
-// Иконки своим батчем — URL-карта /api/uprising_icon_map (sysname -> URL
-// готовой webp, кэш браузера immutable), НЕ data-URL /api/uprising_icons_data:
-// data-URL тянули мегабайты base64 при КАЖДОМ запуске (браузер их не кэширует),
-// а прямые <img> качаются один раз и дальше отдаются с диска без единого
-// запроса — как карта и кампания, которые не тормозят. Готовность и
-// перерисовка СРАЗУ, недолёт дожимается фоном. Сервер у нас HTTP/1.0 без
-// keep-alive — сотни отдельных <img> запрещены, только батч. Имена без иконок
-// запоминаем в iconFail (как campaign.iconFail, переживает перезапуски через
-// localStorage) и больше не запрашиваем. Флаг готовности свой —
-// uprIconsReady и uprIconMap карты не трогаем.
-// Пакет icon_urls — чанками по 700 (лимит сервера 800 на запрос).
-async function untIconMapBatch(root, names) {
+// Иконки тем же батчем, что карта и кампания — /api/uprising_icons_data
+// (sysname -> data-URL webp в память, ноль отдельных <img> по HTTP/1.0 без
+// keep-alive: сотни отдельных запросов давали секунды оверхеда на соединения,
+// чипы висели со спиннерами при уже готовых иконках). Карту uprising
+// не трогаем — своя iconMap в state.units. Имена без иконок запоминаем
+// в iconFail (как campaign.iconFail, переживает перезапуски через
+// localStorage) и больше не запрашиваем. Флаг готовности свой.
+// Пакет — чанками по 600 (лимит сервера 1200 на запрос).
+async function untIconsDataBatch(root, names) {
   const merged = {};
-  const CH = 700;
+  const CH = 600;
   for (let i = 0; i < (names || []).length; i += CH) {
-    const r = await api("/api/uprising_icon_map", { method: "POST",
+    const r = await api("/api/uprising_icons_data", { method: "POST",
       body: JSON.stringify({ root, names: names.slice(i, i + CH) }),
       timeout: 60000 });
     const j = await r.json();
@@ -1169,7 +1160,7 @@ async function untFetchNames(names) {
       state.units.iconsLoading = false;
   };
   try {
-    const merged = await untIconMapBatch(root, names);
+    const merged = await untIconsDataBatch(root, names);
     if (!fresh()) { done(); return; }
     Object.assign(state.units.iconMap, merged);
     // Готовы и на экран сразу — как карта: батч видит только готовый
@@ -1182,8 +1173,11 @@ async function untFetchNames(names) {
     const missing = names.filter(n => !merged[n]);
     if (!missing.length) { done(); return; }
     // Фон: persistent-предзагрузка (dds->webp в общий CustomImages/<слой>
-    // чанками), затем добивка URL-картой. Готовность НЕ ждёт — иначе каждая
-    // холодная загрузка держала спиннеры, пока жмутся сотни dds.
+    // чанками), затем добивка data-URL батчем. Готовность НЕ ждёт — иначе
+    // каждая холодная загрузка держала спиннеры, пока жмутся сотни dds.
+    // Прогресс — баром под шапкой: спиннеры на чипах только при конвертации.
+    if (missing.length) untConvShow(missing.length);
+    let convDone = 0;
     (async () => {
       try {
         const CH = 100;
@@ -1194,10 +1188,14 @@ async function untFetchNames(names) {
               body: JSON.stringify({ root,
                 names: missing.slice(i, i + CH) }), timeout: 180000 });
           } catch (e) { /* чанк не дожался — остальные всё равно идут */ }
+          if (fresh()) {
+            convDone = Math.min(i + CH, missing.length);
+            untConvPaint(convDone, missing.length);
+          }
         }
         if (!fresh()) return;
         try {
-          const re = await untIconMapBatch(root, missing);
+          const re = await untIconsDataBatch(root, missing);
           if (fresh()) Object.assign(state.units.iconMap, re);
         } catch (e) { /* чипы добирают одиночными через uprChipIcon */ }
         if (!fresh()) return;
@@ -1213,14 +1211,15 @@ async function untFetchNames(names) {
         if (changed) untPaintAllLists();
         // missing зафиксировать между перезапусками — больше не просим
         try { untFailSave(); } catch (e) {}
-      } finally { done(); }
-    })().catch(() => { done(); });
-  } catch (e) { done(); /* чипы добирают одиночными через uprChipIcon */ }
+      } finally { untConvHide(); done(); }
+    })().catch(() => { untConvHide(); done(); });
+  } catch (e) { untConvHide(); done(); /* чипы добирают одиночными через uprChipIcon */ }
 }
-// Витрина: имена только ОТКРЫТЫХ карточек (закрытые чипов не показывают).
-// На старте всё сложено — запросов иконок нет вообще.
+// Витрина: ВСЕ имена слоёв сразу (открытые и закрытые) — батч идёт в загрузку
+// страницы (renderUnits ждёт до гашения спиннера), раскрытие карточек после
+// этого мгновенное без единого запроса, как карта/кампания.
 async function untEnsureIcons() {
-  const names = untCollectNames();
+  const names = untAllNames();
   if (!names.length) {
     if (state.units) {
       state.units.iconsReady = true;
@@ -1230,20 +1229,20 @@ async function untEnsureIcons() {
   }
   await untFetchNames(names).catch(() => {});
 }
-// Раскрытая карточка: добрать иконки только её строк. На время полёта
-// готовность снята — чипы стоят на плейсхолдерах без сольных запросов,
-// по прилёту батча встают реальные (сольный шторм этим закрыт).
+// Раскрытая карточка: добрать только имена, добавленные после загрузки
+// страницы (правки). Готовность не снимаем — готовые чипы стоят без
+// спиннеров, батч добирает лишь недостающее.
 async function untEnsureTypeIcons(layerKey, cat) {
   if (!state.units) return;
   const names = untCollectNames(layerKey, cat);
   if (!names.length) return;
-  state.units.iconsReady = false;
   await untFetchNames(names).catch(() => {});
 }
 
 // Все sysname витрины (все слои и классы, открытые и закрытые), кроме уже
-// готовых (iconMap) и заведомо отсутствующих (iconFail) — для фонового
-// прогрева, не для отрисовки.
+// готовых (iconMap) и заведомо отсутствующих (iconFail) — для батча загрузки
+// страницы (untEnsureIcons): раскрытие карточек после него мгновенное,
+// отдельных <img>-запросов нет вообще.
 function untAllNames() {
   const out = [];
   if (!state.units) return out;
@@ -1261,56 +1260,6 @@ function untAllNames() {
     });
   });
   return out;
-}
-
-// Фоновая ленивая догрузка УЖЕ НАЙДЕННЫХ иконок (в простое после отрисовки):
-// один URL-батч на всю витрину + тихий префетч найденных URL в кэш браузера.
-// Чипы не строим, DOM не трогаем, спиннеров нет — когда пользователь раскроет
-// карточку, иконки берутся из кэша мгновенно. Missing ("") не трогаем вообще:
-// новые иконки — стандартное поведение при раскрытии (спиннер, предзагрузка,
-// конвертер, отображение). Действие пользователя важнее: любой новый батч
-// (iconSeq вырос) останавливает прогрев.
-async function untPrefetchExisting() {
-  if (!state.units) return;
-  const my = state.units.iconSeq;
-  const fresh = () => !!state.units && my === state.units.iconSeq;
-  const names = untAllNames();
-  if (!names.length) return;
-  const root = untSrcRoot();
-  let merged;
-  try {
-    merged = await untIconMapBatch(root, names);
-  } catch (e) { return; }
-  if (!fresh()) return;
-  Object.assign(state.units.iconMap, merged);
-  state.units.iconsReady = true;
-  // чипы открытых карточек — проявить сразу; закрытые чипов не имеют
-  untPaintAllLists();
-  const urls = [];
-  names.forEach(n => { if (merged[n]) urls.push(merged[n]); });
-  const CH = 40;
-  for (let i = 0; i < urls.length; i += CH) {
-    if (!fresh()) return;
-    await new Promise(res => {
-      let left = 0;
-      let done = false;
-      const fin = () => { if (!done) { done = true; res(); } };
-      // зависший коннект не держит прогрев: потолок 15с на чанк
-      const timer = setTimeout(fin, 15000);
-      try {
-        urls.slice(i, i + CH).forEach(u => {
-          left++;
-          const im = new Image();
-          im.onload = im.onerror = () => {
-            try { im.onload = im.onerror = null; } catch (e) {}
-            if (--left <= 0) { clearTimeout(timer); fin(); }
-          };
-          im.src = u;
-        });
-      } catch (e) { clearTimeout(timer); fin(); }
-      if (!left) { clearTimeout(timer); fin(); }
-    });
-  }
 }
 
 // Тело карточки типа: ВСЯ строка species-файла своего слоя без исключений
