@@ -7,6 +7,12 @@
 /* мини-прогресс конвертации иконок висит абсолютом под шапкой (классы
    .upr-conv из uprising.css) — якорь относительного позиционирования */
 #units-tab .swt-head { position: relative; }
+/* мини-бар «Анализа» — абсолютом под шапкой справа (как .upr-conv под
+   сегментом в uprising, но без переезда разметки): страницу не раздвигает */
+#units-tab .swt-head > .upr-conv {
+  position: absolute; top: calc(100% + 2px); right: 2px; left: auto;
+  width: 240px; pointer-events: none; z-index: 5;
+}
 /* враппер витрины — якорь оверлея загрузки */
 .unt-main-wrap { flex: 1; min-height: 0; display: flex; position: relative; }
 /* контейнер витрины: секции слоёв друг под другом, скролл страницы */
