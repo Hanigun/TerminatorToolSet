@@ -34,11 +34,38 @@ os.environ.setdefault("PYTHONNET_RUNTIME", "netfx")
 # WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS подхватывает сам загрузчик WebView2
 # при создании окружения — действует на все окна и наследуется дочерними
 # процессами (включая self-restart). Ставится ДО создания WebView2.
+# Но флаги ненадёжны: нативный Chromium пишет мимо Python прямо в fd 2,
+# поэтому каноничный фильтр уровня дескриптора живёт в
+# terminator_toolset.infrastructure.logging (режет только эту безвредную
+# строку, остальной stderr идёт как раньше). Ставится ДО создания WebView2,
+# чтобы дочерние процессы унаследовали трубу.
+try:
+    from terminator_toolset.infrastructure.logging import (
+        install_chromium_stderr_filter as _install_chromium_filter)
+    _install_chromium_filter()
+except Exception:  # noqa: BLE001
+    pass
 _extra_wv_args = os.environ.get("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "")
 if "--disable-logging" not in _extra_wv_args:
     os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = (
         (_extra_wv_args + " --disable-logging --log-level=3").strip())
 del _extra_wv_args
+
+# Второй рубеж — фильтр ОС-stderr от той же гонки Chromium
+# (см. install_chromium_stderr_filter): --disable-logging давит часть
+# логов, но «Failed to unregister class Chrome_WidgetWin_0» прилетает
+# нативным write(2) мимо него. Ставится ДО любых импортов, способных
+# создать WebView2. Без консоли (frozen GUI) — безопасный no-op.
+try:
+    from terminator_toolset.infrastructure.logging import (
+        install_chromium_stderr_filter as _quiet_chromium)
+    _quiet_chromium()
+    del _quiet_chromium
+except Exception:
+    try:
+        del _quiet_chromium
+    except Exception:
+        pass
 
 import threading
 import time

@@ -104,6 +104,137 @@ def setup_logging(base_dir: str):
         print("logging setup failed: %s" % e, file=sys.stderr)
 
 
+# -- тихий Chromium ------------------------------------------------------------
+# WebView2/Chromium при выходе пишет в ОС-stderr свою внутреннюю гонку
+# «Failed to unregister class Chrome_WidgetWin_0. Error = 1411»
+# (класс окна уже снят, Chromium ругается в пустоту). Флаг
+# WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--disable-logging --log-level=3
+# (ставится в main.py) давит часть логов, но именно это сообщение
+# прилетает мимо него — нативным write(2) из msedgewebview2, в обход
+# logging и sys.stderr. Поэтому второй рубеж — фильтр fd 2 здесь:
+# нативные записи уходят в pipe, фоновая нить выкидывает только
+# известные безвредные строки и отдаёт остальное в исходный stderr.
+_CHROMIUM_NOISE = (
+    "Chrome_WidgetWin_0",
+    "Failed to unregister class",
+    "window_impl.cc",
+)
+
+_CHROMIUM_FILTER_ON = False
+
+
+def _is_chromium_noise(line: str) -> bool:
+    """Только точное совпадение известной безвредной гонки выхода."""
+    try:
+        return any(p in line for p in _CHROMIUM_NOISE)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def install_chromium_stderr_filter():
+    """Поставить фильтр ОС-stderr от шума Chromium. Идемпотентно,
+    безопасно без консоли (frozen GUI): тогда просто ничего не делает.
+    Ставится как можно раньше — до создания WebView2."""
+    global _CHROMIUM_FILTER_ON
+    if _CHROMIUM_FILTER_ON:
+        return
+    _CHROMIUM_FILTER_ON = True
+    try:
+        orig = sys.stderr
+        # 1) уровень Python: print(..., file=sys.stderr) и logging-потоки
+        try:
+            _py_orig = orig
+
+            class _Filter:
+                def __init__(self, inner):
+                    self._inner = inner
+
+                def write(self, s):
+                    try:
+                        if not s:
+                            return 0
+                        text = s if isinstance(s, str) else str(s)
+                        kept = "".join(
+                            ln for ln in text.splitlines(keepends=True)
+                            if not _is_chromium_noise(ln))
+                        if kept:
+                            return self._inner.write(kept)
+                        return len(text)
+                    except Exception:  # noqa: BLE001
+                        return 0
+
+                def writelines(self, lines):
+                    for ln in lines:
+                        self.write(ln)
+
+                def flush(self):
+                    try:
+                        self._inner.flush()
+                    except Exception:  # noqa: BLE001
+                        pass
+
+                def __getattr__(self, name):
+                    return getattr(self._inner, name)
+
+            sys.stderr = _Filter(_py_orig)
+        except Exception:  # noqa: BLE001
+            pass
+        # 2) уровень ОС: нативные write(2) из Chromium в обход Python.
+        # Pipe + фоновая нить-фильтр; остальное — в спасённый дескриптор.
+        try:
+            fd = sys.__stderr__.fileno()
+        except Exception:  # noqa: BLE001
+            return
+        try:
+            saved = os.dup(fd)
+        except Exception:  # noqa: BLE001
+            return  # нет консоли (frozen GUI) — фильтровать нечего
+        try:
+            rfd, wfd = os.pipe()
+            os.dup2(wfd, fd)
+            try:
+                os.close(wfd)
+            except Exception:  # noqa: BLE001
+                pass
+        except Exception:  # noqa: BLE001
+            try:
+                os.close(saved)
+            except Exception:  # noqa: BLE001
+                pass
+            return
+
+        def _pump():
+            buf = b""
+            while True:
+                try:
+                    chunk = os.read(rfd, 65536)
+                except Exception:  # noqa: BLE001
+                    return
+                if not chunk:
+                    try:
+                        if buf and not _is_chromium_noise(
+                                buf.decode("utf-8", "replace")):
+                            os.write(saved, buf)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    return
+                buf += chunk
+                *lines, buf = buf.split(b"\n")
+                for raw in lines:
+                    try:
+                        if _is_chromium_noise(raw.decode("utf-8", "replace")):
+                            continue
+                        os.write(saved, raw + b"\n")
+                    except Exception:  # noqa: BLE001
+                        pass
+
+        th = threading.Thread(target=_pump, daemon=True,
+                              name="chromium-stderr-filter")
+        th.start()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 # -- boot log ------------------------------------------------------------------
 def _boot_dir() -> str:
     from .filesystem import pick_app_dir
