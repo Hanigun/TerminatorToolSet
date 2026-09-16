@@ -599,8 +599,10 @@ function m3dShowData(st, data, first) {
   const size = bbox.getSize(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z, 1);
   // Сетка в духе Blender: мелкие клетки 1 м тускло, крупные 10 м
-  // чуть ярче, оси X красная / Z зелёная; туман гасит всё к горизонту
-  const gridSize = Math.max(Math.ceil(maxDim / 2) * 2 + 2, 120);
+  // чуть ярче, оси X красная / Z зелёная; туман гасит всё к горизонту.
+  // Крупной модели — крупное поле: иначе край сетки сидит вплотную
+  // к корпусу и его не спрятать, не задев саму модель.
+  const gridSize = Math.max(Math.ceil(maxDim * 1.5) * 2 + 2, 120);
   // Линии сетки свет и тонирование игнорируют (toneMapped=false) —
   // иначе ACES+sRGB осветляют заданный цвет почти вдвое («белый»).
   // Цвета заданы в линейном виде, чтобы на экране было ровно как
@@ -610,7 +612,7 @@ function m3dShowData(st, data, first) {
   gh.material.toneMapped = false;
   gh.position.y = bbox.min.y - 0.01;
   st.gridHolder.add(gh);
-  const ghBig = new THREE.GridHelper(gridSize, gridSize / 10, 0x1a1a1e, 0x141418);
+  const ghBig = new THREE.GridHelper(gridSize, Math.max(Math.round(gridSize / 10), 1), 0x1a1a1e, 0x141418);
   ghBig.material.toneMapped = false;
   ghBig.position.y = bbox.min.y - 0.008;
   st.gridHolder.add(ghBig);
@@ -631,15 +633,10 @@ function m3dShowData(st, data, first) {
   st.gridHolder.add(axX);
   st.gridHolder.add(axZ);
   // Туман в цвет фона (тоже линейный, иначе горизонт светлее фона).
-  // Границы ФИКСИРОВАНЫ от сетки и домашнего вида, за зумом не ездят —
-  // как в Blender: отъехал далеко — всё (сетка и модель) тонет в фоне.
-  // Ближняя — за моделью домашнего вида с запасом, дальняя — за дальним
-  // углом сетки (полу-диагональ ~1.41 половины): края сетки не видно.
-  // Ближняя всегда меньше дальней: сетка шире модели минимум на 2 м.
+  // Дальность — ниже, у домашнего вида: считаем от фактической дистанции
+  // камеры, границы ФИКСИРОВАНЫ и за зумом не ездят — как в Blender:
+  // отъехал далеко — всё (сетка и модель) тонет в фоне.
   const dHome = (maxDim * 1.5 + 1) * 0.62;
-  scene.fog = new THREE.Fog(0x38383c,
-    Math.max(gridSize * 0.25, dHome + maxDim * 0.75),
-    dHome + (gridSize / 2) * 1.5);
   st.disposables.push(gh.geometry, gh.material,
     ghBig.geometry, ghBig.material,
     axX.geometry, axX.material, axZ.geometry, axZ.material);
@@ -663,6 +660,18 @@ function m3dShowData(st, data, first) {
     ctl.update();
   };
   if (first) st.home();
+  // Туман от фактической дистанции камеры: ближняя — сразу за моделью
+  // (корпус чист целиком), дальняя — за бортом сетки, но до её угла
+  // (полу-диагональ ~1.41): борт тает, угол уже в полном тумане —
+  // края не видно. Полоса не схлопывается: минимум 0.3 половины.
+  {
+    const half = gridSize / 2;
+    const radius = size.length() / 2;
+    const camD = camera.position.distanceTo(ctl.target);
+    const fogNear = camD + radius;
+    scene.fog = new THREE.Fog(0x38383c, fogNear,
+      Math.max(fogNear + half * 0.3, camD + half * 1.05));
+  }
   if (!st.barBuilt) {
     st.barBuilt = true;
     m3dBuildBar(st);
