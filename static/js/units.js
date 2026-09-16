@@ -434,7 +434,8 @@ async function renderUnits(force) {
     if (srcChanged) {
       state.units.iconMap = {};
       state.units.iconsReady = false;
-      state.units.iconFail = {};
+      // missing прошлого запуска не запрашиваем снова (localStorage)
+      state.units.iconFail = untFailLoad();
       state.units.prices = {};
       state.units.stats = {};
       state.units.pricesReady = false;
@@ -1062,11 +1063,11 @@ async function untOpenUnit(cat, sys) {
   } catch (e) { /* rAF недоступен — первый скролл уже сделан */ }
 }
 
-// Имена без иконок для батча: вся витрина (карточки открыты) или одна
-// карточка (layerKey+cat заданы И карточка открыта). Закрытые карточки чипов
-// не показывают — их иконки не просим вообще: на старте все карточки сложены,
-// и первый вход вообще без запросов иконок (как пустая выдача кампании).
-// Пропускаем готовые (iconMap) и заведомо отсутствующие (iconFail).
+// Имена без иконок для батча: ТОЛЬКО открытые карточки (закрытые чипов
+// не показывают — их иконки не просим вообще: на старте всё сложено,
+// и первый вход вообще без запросов иконок, как пустая выдача кампании).
+// Пропускаем готовые (iconMap) и заведомо отсутствующие (iconFail,
+// переживает перезапуски в localStorage — missing не запрашиваем никогда).
 function untCollectNames(layerKey, cat) {
   const out = [];
   if (!state.units) return out;
@@ -1084,11 +1085,40 @@ function untCollectNames(layerKey, cat) {
     UNT_CATS.forEach(c => {
       if (cat && c !== cat) return;
       const data = ((L.cats || {})[c]) || {};
-      if ((layerKey || cat) && !data._open) return;
+      if (!data._open) return;
       ((data.items) || []).forEach(push);
     });
   });
   return out;
+}
+// iconFail между перезапусками: localStorage профиля WebView2 постоянный,
+// missing-имена не запрашиваем ни батчем, ни предзагрузкой никогда
+// (конвертер сбрасывает через untFailSave после создания иконок).
+function untFailKey() {
+  try {
+    return "unt_iconfail_" + (state.treeView || "?") + "|" + (untSrcRoot() || "");
+  } catch (e) { return ""; }
+}
+function untFailLoad() {
+  const fail = {};
+  try {
+    const k = untFailKey();
+    if (!k || typeof localStorage === "undefined") return fail;
+    const raw = localStorage.getItem(k);
+    if (!raw) return fail;
+    const arr = JSON.parse(raw);
+    (Array.isArray(arr) ? arr : []).forEach(n => {
+      if (n) fail[n] = 1;
+    });
+  } catch (e) { /* хранилище недоступно — как раньше, за сессию */ }
+  return fail;
+}
+function untFailSave() {
+  try {
+    const k = untFailKey();
+    if (!k || typeof localStorage === "undefined" || !state.units) return;
+    localStorage.setItem(k, JSON.stringify(Object.keys(state.units.iconFail || {})));
+  } catch (e) { /* переполнение/блок — не критично */ }
 }
 // Иконки своим батчем — РОВНО как карта (uprEnsureIcons, uprising.js:1958)
 // и кампания (cmpEnsureIcons, campaign.js:347): один POST
@@ -1157,6 +1187,8 @@ async function untFetchNames(names) {
           }
         });
         if (changed) untPaintAllLists();
+        // missing зафиксировать между перезапусками — больше не просим
+        try { untFailSave(); } catch (e) {}
       } finally { done(); }
     })().catch(() => { done(); });
   } catch (e) { done(); /* чипы добирают одиночными через uprChipIcon */ }
@@ -1863,6 +1895,7 @@ async function untAnalyze() {
       state.units.iconMap = {};
       state.units.iconsReady = false;
       state.units.iconFail = {};
+      try { untFailSave(); } catch (e) {}
       state.units.iconSeq++;
       untEnsureIcons().catch(() => {});
       untEnsurePrices().catch(() => {});
