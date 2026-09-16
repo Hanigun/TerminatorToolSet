@@ -29,6 +29,8 @@ var UNT_ALL_COLLAPSE_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill
 var UNT_EXPAND_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>';
 // Иконка кнопки предпросмотра картинки поля (колонки image/pic).
 var UNT_EYE_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+// Иконка кнопки 3D-превью модели (колонка mesh): куб.
+var UNT_M3D_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7l8.7 5 8.7-5M12 22V12"/></svg>';
 // Кнопка поля в стиле разворота: та же геометрия и то же место (справа
 // от поля). title — ключ локали; новые кнопки по запросу — той же
 // фабрикой, в тот же ряд после поля.
@@ -1349,6 +1351,20 @@ function untPaintRowField(r, ctx, s) {
       untPicPreview(pv, untPicUrl(cat, sys, c, inp.value));
     };
     r.appendChild(pv);
+  }
+  // Колонка mesh: кнопка 3D-превью модели — диалог model3d.js
+  // (тёмная тема, сетка Blender, текстуры, вращение мышью).
+  if (String(c || "").trim().toLowerCase() === "mesh") {
+    const m3 = untFieldBtn(UNT_M3D_SVG, "m3d_preview");
+    m3.onclick = e => {
+      e.stopPropagation();
+      if (typeof openModelPreview !== "function") {
+        toast(t("m3d_err_lib") || "3D error", "err");
+        return;
+      }
+      openModelPreview(untSrcRoot() || "", inp.value || "", sys, {cat: cat, sys: sys});
+    };
+    r.appendChild(m3);
   }
 }
 // Открыть добавление пункта перечисления (фокус в новое поле): после

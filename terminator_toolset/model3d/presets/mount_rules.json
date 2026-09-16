@@ -1,0 +1,16 @@
+{
+    "version": 1,
+    "note": "Mount-chain rules: host mount points vs module root bones. Module roots sit at file origin (bashnya_*, fnd_small_turret_*) and snap onto host mount bones. Ordered host preference: tower_mount_point (hull side) first, then the main battle ring (turret_main_mount_point / turret_mount_point* — roof, replaces the stock turret on upgrade), then other *_mount_point, then smoke_launchers. First case-insensitive substring match wins.",
+    "host_mounts": [
+        {"name": "tower_mount_point", "patterns": ["tower_mount_point"]},
+        {"name": "turret_main_mount_point", "patterns": ["turret_main_mount_point", "turret_mount_point"]},
+        {"name": "mount_point", "patterns": ["mount_point"]},
+        {"name": "smoke_launchers", "patterns": ["smoke_launcher"]}
+    ],
+    "module_roots": [
+        {"name": "bashnya", "patterns": ["bashnya"]},
+        {"name": "small_turret", "patterns": ["fnd_small_turret"]},
+        {"name": "mortar", "patterns": ["mortar"]},
+        {"name": "tower", "patterns": ["tower", "turret"]}
+    ]
+}

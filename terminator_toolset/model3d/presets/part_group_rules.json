@@ -1,0 +1,14 @@
+{
+    "version": 1,
+    "note": "Ordered rules, first case-insensitive substring match wins. Mesh name (Maya shading-group name) is checked first, MTRL material path second. Anything unmatched falls back to hull (body, intentionally uncolored). '_burn' damaged variants match their base group via substring.",
+    "groups": [
+        {"name": "wheel", "patterns": ["wheel", "koleso"]},
+        {"name": "track", "patterns": ["track", "caterpillar", "gusen"]},
+        {"name": "armor", "patterns": ["armor", "brony"]},
+        {"name": "cage", "patterns": ["cage", "karkas", "reshet"]},
+        {"name": "turret", "patterns": ["turret", "gun", "cannon", "weapon", "bashnya"]},
+        {"name": "chassis", "patterns": ["chassis", "frame", "rama", "shassi"]},
+        {"name": "hull", "patterns": ["hull", "body", "korpus"]}
+    ],
+    "fallback": "hull"
+}

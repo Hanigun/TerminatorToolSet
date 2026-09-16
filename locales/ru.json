@@ -1021,5 +1021,21 @@
   "unt_class_humans": "Пехота",
   "unt_src_project": "Проект",
   "unt_src_game": "Игра",
-  "unt_src_mod": "Мод"
+  "unt_src_mod": "Мод",
+  "m3d_title": "3D-превью",
+  "m3d_close": "Закрыть",
+  "m3d_grid": "Сетка",
+  "m3d_textures": "Текстуры",
+  "m3d_reset": "Сброс вида",
+  "m3d_armor": "Броня",
+  "m3d_turret": "Башня",
+  "m3d_turret_pick": "Башня:",
+  "m3d_loading": "Загрузка модели…",
+  "m3d_preview": "3D-превью модели",
+  "m3d_err_lib": "Не загрузился 3D-движок",
+  "m3d_err_bad": "Некорректное значение mesh",
+  "m3d_err_nofile": "Файл модели не найден",
+  "m3d_err_parse": "Не удалось прочитать модель",
+  "m3d_armor_kind": "Вид брони:",
+  "m3d_mg_pick": "Пулемёт:"
 }

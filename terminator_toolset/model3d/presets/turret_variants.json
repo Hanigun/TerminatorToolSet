@@ -1,0 +1,1537 @@
+{
+ "models/vehicles/panhard_v1.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/vehicles/caravan_1.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/props/cliff_destructible_1.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/vehicles/fnd_hemtt_ammunition.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/vehicles/fnd_hemtt_fuel.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/vehicles/fnd_hemtt_transport.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/vehicles/fnd_himars_chassis.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/fnd_himars_turret.model",
+    "label": "turret",
+    "slot": "turret_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/fnd_himars_turret.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/fnd_himars_turret.model"
+ },
+ "models/vehicles/fnd_abrams_chassis.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/fnd_abrams_turret_cannon.model",
+    "label": "turret_cannon",
+    "slot": "tower_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_abrams_turret_twinplasma.model",
+    "label": "turret_twinplasma",
+    "slot": "tower_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_abrams_turret_plasma.model",
+    "label": "turret_plasma",
+    "slot": "tower_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_abrams_turret_vulkan.model",
+    "label": "turret_vulkan",
+    "slot": "tower_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_abrams_turret_railcannon.model",
+    "label": "turret_railcannon",
+    "slot": "tower_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/fnd_abrams_turret_cannon.model": [
+    {
+     "rel": "models/vehicles/fnd_small_turret_browning.model",
+     "slot": "gunnerturret_mount_point"
+    }
+   ],
+   "models/vehicles/fnd_abrams_turret_twinplasma.model": [],
+   "models/vehicles/fnd_abrams_turret_plasma.model": [],
+   "models/vehicles/fnd_abrams_turret_vulkan.model": [],
+   "models/vehicles/fnd_abrams_turret_railcannon.model": []
+  },
+  "mg_spare": [
+   {
+    "rel": "models/vehicles/fnd_small_turret_browning.model",
+    "slot": "gunnerturret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_small_turret_atgm_launcher.model",
+    "slot": "gunnerturret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_small_turret_recoilless_gun.model",
+    "slot": "gunnerturret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_small_turret_plasma_recoilless_gun.model",
+    "slot": "gunnerturret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_small_turret_minigun.model",
+    "slot": "gunnerturret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_small_turret_grenade_launcher.model",
+    "slot": "gunnerturret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_small_turret_plasma_hmg.model",
+    "slot": "gunnerturret_mount_point"
+   }
+  ],
+  "default": "models/vehicles/fnd_abrams_turret_cannon.model"
+ },
+ "models/vehicles/heli_blackhawk_v2.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/vehicles/heli_blackhawk_v2_mp.model": {
+  "choices": [
+   {
+    "rel": "models/weapons/uh60_hidra.model",
+    "label": "uh60_hidra",
+    "slot": "mount_point_1"
+   },
+   {
+    "rel": "models/weapons/uh60_minigun.model",
+    "label": "uh60_minigun",
+    "slot": "mount_point_2"
+   },
+   {
+    "rel": "models/weapons/uh60_sidewinder.model",
+    "label": "uh60_sidewinder",
+    "slot": "mount_point_1"
+   },
+   {
+    "rel": "models/weapons/uh60_hidra_big.model",
+    "label": "uh60_hidra_big",
+    "slot": "mount_point_1"
+   },
+   {
+    "rel": "models/weapons/uh60_hellfire.model",
+    "label": "uh60_hellfire",
+    "slot": "mount_point_1"
+   }
+  ],
+  "mg": {
+   "models/weapons/uh60_hidra.model": [],
+   "models/weapons/uh60_minigun.model": [],
+   "models/weapons/uh60_sidewinder.model": [],
+   "models/weapons/uh60_hidra_big.model": [],
+   "models/weapons/uh60_hellfire.model": []
+  },
+  "mg_spare": [],
+  "default": "models/weapons/uh60_hidra.model"
+ },
+ "models/vehicles/fnd_bradley_chassis.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/fnd_bradley_turret_cannon.model",
+    "label": "turret_cannon",
+    "slot": "tower_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_bradley_turret_vulkan.model",
+    "label": "turret_vulkan",
+    "slot": "tower_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_bradley_turret_plasma.model",
+    "label": "turret_plasma",
+    "slot": "tower_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_bradley_tow.model",
+    "label": "tow",
+    "slot": "missile_launcher_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/fnd_bradley_turret_cannon.model": [],
+   "models/vehicles/fnd_bradley_turret_vulkan.model": [],
+   "models/vehicles/fnd_bradley_turret_plasma.model": [],
+   "models/vehicles/fnd_bradley_tow.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/fnd_bradley_turret_cannon.model"
+ },
+ "models/vehicles/fnd_humvee_chassis.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/fnd_humvee_turret_browning.model",
+    "label": "turret_browning",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_humvee_turret_atgm_launcher.model",
+    "label": "turret_atgm_launcher",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_humvee_turret_recoilless_gun.model",
+    "label": "turret_recoilless_gun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_humvee_turret_plasma_recoilless_gun.model",
+    "label": "turret_plasma_recoilless_gun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_humvee_turret_minigun.model",
+    "label": "turret_minigun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_humvee_turret_grenade_launcher.model",
+    "label": "turret_grenade_launcher",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_humvee_turret_plasma_hmg.model",
+    "label": "turret_plasma_hmg",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_humvee_mortar_gun.model",
+    "label": "mortar_gun",
+    "slot": "turret_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/fnd_humvee_turret_browning.model": [],
+   "models/vehicles/fnd_humvee_turret_atgm_launcher.model": [],
+   "models/vehicles/fnd_humvee_turret_recoilless_gun.model": [],
+   "models/vehicles/fnd_humvee_turret_plasma_recoilless_gun.model": [],
+   "models/vehicles/fnd_humvee_turret_minigun.model": [],
+   "models/vehicles/fnd_humvee_turret_grenade_launcher.model": [],
+   "models/vehicles/fnd_humvee_turret_plasma_hmg.model": [],
+   "models/vehicles/fnd_humvee_mortar_gun.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/fnd_humvee_turret_browning.model"
+ },
+ "models/vehicles/fnd_m109_chassis.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/fnd_m109_turret.model",
+    "label": "turret",
+    "slot": "tower_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/fnd_m109_turret.model": [
+    {
+     "rel": "models/vehicles/fnd_small_turret_browning.model",
+     "slot": "gunnerturret_mount_point1"
+    }
+   ]
+  },
+  "mg_spare": [
+   {
+    "rel": "models/vehicles/fnd_small_turret_atgm_launcher.model",
+    "slot": "gunnerturret_mount_point1"
+   },
+   {
+    "rel": "models/vehicles/fnd_small_turret_recoilless_gun.model",
+    "slot": "gunnerturret_mount_point1"
+   },
+   {
+    "rel": "models/vehicles/fnd_small_turret_plasma_recoilless_gun.model",
+    "slot": "gunnerturret_mount_point1"
+   },
+   {
+    "rel": "models/vehicles/fnd_small_turret_minigun.model",
+    "slot": "gunnerturret_mount_point1"
+   },
+   {
+    "rel": "models/vehicles/fnd_small_turret_grenade_launcher.model",
+    "slot": "gunnerturret_mount_point1"
+   },
+   {
+    "rel": "models/vehicles/fnd_small_turret_plasma_hmg.model",
+    "slot": "gunnerturret_mount_point1"
+   }
+  ],
+  "default": "models/vehicles/fnd_m109_turret.model"
+ },
+ "models/vehicles/fnd_m113_chassis.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/fnd_m113_turret_browning.model",
+    "label": "turret_browning",
+    "slot": "tower_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_m113_turret_atgm_launcher.model",
+    "label": "turret_atgm_launcher",
+    "slot": "tower_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_m113_turret_recoilless_gun.model",
+    "label": "turret_recoilless_gun",
+    "slot": "tower_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_m113_turret_plasma_recoilless_gun.model",
+    "label": "turret_plasma_recoilless_gun",
+    "slot": "tower_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_m113_turret_minigun.model",
+    "label": "turret_minigun",
+    "slot": "tower_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_m113_turret_grenade_launcher.model",
+    "label": "turret_grenade_launcher",
+    "slot": "tower_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_m113_turret_plasma_chaingun.model",
+    "label": "turret_plasma_chaingun",
+    "slot": "tower_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/fnd_m113_turret_browning.model": [],
+   "models/vehicles/fnd_m113_turret_atgm_launcher.model": [],
+   "models/vehicles/fnd_m113_turret_recoilless_gun.model": [],
+   "models/vehicles/fnd_m113_turret_plasma_recoilless_gun.model": [],
+   "models/vehicles/fnd_m113_turret_minigun.model": [],
+   "models/vehicles/fnd_m113_turret_grenade_launcher.model": [],
+   "models/vehicles/fnd_m113_turret_plasma_chaingun.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/fnd_m113_turret_browning.model"
+ },
+ "models/vehicles/fnd_turret_base.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/fnd_turret_plasma.model",
+    "label": "plasma",
+    "slot": "tower_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_turret_vulkan.model",
+    "label": "vulkan",
+    "slot": "tower_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/fnd_turret_plasma.model": [],
+   "models/vehicles/fnd_turret_vulkan.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/fnd_turret_plasma.model"
+ },
+ "models/vehicles/fnd_turret_base_upped.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/fnd_turret_plasma.model",
+    "label": "plasma",
+    "slot": "tower_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/fnd_turret_plasma.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/fnd_turret_plasma.model"
+ },
+ "models/vehicles/fnd_stryker_chassis.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/fnd_stryker_turret_machinegun.model",
+    "label": "turret_machinegun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_stryker_turret_minigun.model",
+    "label": "turret_minigun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_stryker_turret_grenade_launcher.model",
+    "label": "turret_grenade_launcher",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_stryker_turret_plasma_hmg.model",
+    "label": "turret_plasma_hmg",
+    "slot": "turret_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/fnd_stryker_turret_machinegun.model": [],
+   "models/vehicles/fnd_stryker_turret_minigun.model": [],
+   "models/vehicles/fnd_stryker_turret_grenade_launcher.model": [],
+   "models/vehicles/fnd_stryker_turret_plasma_hmg.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/fnd_stryker_turret_machinegun.model"
+ },
+ "models/vehicles/fnd_turret_base_supply.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/fnd_m113_turret_browning.model",
+    "label": "m113_turret_browning",
+    "slot": "tower_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/fnd_m113_turret_browning.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/fnd_m113_turret_browning.model"
+ },
+ "models/vehicles/integrator_tractor_v1.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [
+   {
+    "rel": "models/vehicles/fnd_m113_turret_browning.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_m113_turret_atgm_launcher.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_m113_turret_recoilless_gun.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_m113_turret_plasma_recoilless_gun.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_m113_turret_minigun.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_m113_turret_grenade_launcher.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_m113_turret_plasma_chaingun.model",
+    "slot": "turret_machinegun_mount_point"
+   }
+  ],
+  "default": ""
+ },
+ "models/vehicles/integrator_ford150_guntruck.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/fnd_stryker_turret_machinegun.model",
+    "label": "fnd_stryker_turret_machinegun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_stryker_turret_minigun.model",
+    "label": "fnd_stryker_turret_minigun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_stryker_turret_grenade_launcher.model",
+    "label": "fnd_stryker_turret_grenade_launcher",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_stryker_turret_plasma_hmg.model",
+    "label": "fnd_stryker_turret_plasma_hmg",
+    "slot": "turret_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/fnd_stryker_turret_machinegun.model": [],
+   "models/vehicles/fnd_stryker_turret_minigun.model": [],
+   "models/vehicles/fnd_stryker_turret_grenade_launcher.model": [],
+   "models/vehicles/fnd_stryker_turret_plasma_hmg.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/fnd_stryker_turret_machinegun.model"
+ },
+ "models/vehicles/integrator_transport_v1.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/spider_cannons.model",
+    "label": "spider_cannons",
+    "slot": "mount_point_guns"
+   },
+   {
+    "rel": "models/vehicles/spider_rotary_cannons.model",
+    "label": "spider_rotary_cannons",
+    "slot": "mount_point_guns"
+   },
+   {
+    "rel": "models/vehicles/spider_missile_at.model",
+    "label": "spider_missile_at",
+    "slot": "mount_point_rocket_pods"
+   },
+   {
+    "rel": "models/vehicles/spider_missile_nurs.model",
+    "label": "spider_missile_nurs",
+    "slot": "mount_point_rocket_pods"
+   },
+   {
+    "rel": "models/vehicles/spider_missile_aa.model",
+    "label": "spider_missile_aa",
+    "slot": "mount_point_rocket_pods"
+   }
+  ],
+  "mg": {
+   "models/vehicles/spider_cannons.model": [],
+   "models/vehicles/spider_rotary_cannons.model": [],
+   "models/vehicles/spider_missile_at.model": [],
+   "models/vehicles/spider_missile_nurs.model": [],
+   "models/vehicles/spider_missile_aa.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/spider_cannons.model"
+ },
+ "models/vehicles/integrator_transport_plasma_artillery.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/vehicles/integrator_small_tractor.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/vehicles/integrator_towed_chassis.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/vehicles/integrator_towed_tank_trailer_1.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/vehicles/integrator_armor_caravan.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/int_apc_machinegun.model",
+    "label": "int_apc_machinegun",
+    "slot": "turret_mount_point_1"
+   },
+   {
+    "rel": "models/vehicles/int_apc_grenade_hmg.model",
+    "label": "int_apc_grenade_hmg",
+    "slot": "turret_mount_point_1"
+   },
+   {
+    "rel": "models/vehicles/int_apc_minigun_hmg.model",
+    "label": "int_apc_minigun_hmg",
+    "slot": "turret_mount_point_1"
+   }
+  ],
+  "mg": {
+   "models/vehicles/int_apc_machinegun.model": [],
+   "models/vehicles/int_apc_grenade_hmg.model": [],
+   "models/vehicles/int_apc_minigun_hmg.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/int_apc_machinegun.model"
+ },
+ "models/vehicles/integrator_tank_v1.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/integrator_tank_turret_plasma.model",
+    "label": "turret_plasma",
+    "slot": "turret_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/integrator_tank_turret_plasma.model": [
+    {
+     "rel": "models/vehicles/fnd_m113_turret_browning.model",
+     "slot": "turret_machinegun_mount_point"
+    }
+   ]
+  },
+  "mg_spare": [
+   {
+    "rel": "models/vehicles/fnd_m113_turret_atgm_launcher.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_m113_turret_recoilless_gun.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_m113_turret_plasma_recoilless_gun.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_m113_turret_minigun.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_m113_turret_grenade_launcher.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/fnd_m113_turret_plasma_chaingun.model",
+    "slot": "turret_machinegun_mount_point"
+   }
+  ],
+  "default": "models/vehicles/integrator_tank_turret_plasma.model"
+ },
+ "models/vehicles/lgn_flyer.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/vehicles/lgn_flyer_mp.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/vehicles/lgn_artillery_chassis.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/lgn_artillery_cannon.model",
+    "label": "cannon",
+    "slot": "mount_point_guns"
+   },
+   {
+    "rel": "models/vehicles/lgn_artillery_rotary_cannon.model",
+    "label": "rotary_cannon",
+    "slot": "mount_point_guns"
+   }
+  ],
+  "mg": {
+   "models/vehicles/lgn_artillery_cannon.model": [],
+   "models/vehicles/lgn_artillery_rotary_cannon.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/lgn_artillery_cannon.model"
+ },
+ "models/props/lgnbs_feeder_1.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/props/lgnbs_cilinder_1.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/props/lgnbs_generator_left_1.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/props/lgnbs_generator_right_1.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/props/lgnbs_generator_right_2.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/vehicles/lgn_apc_chassis.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/lgn_apc_machinegun.model",
+    "label": "machinegun",
+    "slot": "turret_support_mount_point"
+   },
+   {
+    "rel": "models/vehicles/lgn_apc_plasma_hmg.model",
+    "label": "plasma_hmg",
+    "slot": "turret_support_mount_point"
+   },
+   {
+    "rel": "models/vehicles/lgn_apc_minigun_hmg.model",
+    "label": "minigun_hmg",
+    "slot": "turret_support_mount_point"
+   },
+   {
+    "rel": "models/vehicles/lgn_apc_grenade_hmg.model",
+    "label": "grenade_hmg",
+    "slot": "turret_support_mount_point"
+   },
+   {
+    "rel": "models/vehicles/lgn_apc_turret_vulkan.model",
+    "label": "turret_vulkan",
+    "slot": "turret_main_mount_point"
+   },
+   {
+    "rel": "models/vehicles/lgn_apc_turret_cannon.model",
+    "label": "turret_cannon",
+    "slot": "turret_main_mount_point"
+   },
+   {
+    "rel": "models/vehicles/lgn_apc_turret_plasma.model",
+    "label": "turret_plasma",
+    "slot": "turret_main_mount_point"
+   },
+   {
+    "rel": "models/vehicles/lgn_apc_turret_heavy_plasma.model",
+    "label": "turret_heavy_plasma",
+    "slot": "tower_mount_point"
+   },
+   {
+    "rel": "models/vehicles/lgn_apc_turret_heavy_vulkan.model",
+    "label": "turret_heavy_vulkan",
+    "slot": "tower_mount_point"
+   },
+   {
+    "rel": "models/vehicles/lgn_apc_turret_twinplasma.model",
+    "label": "turret_twinplasma",
+    "slot": "tower_mount_point"
+   },
+   {
+    "rel": "models/vehicles/lgn_apc_missile_at.model",
+    "label": "missile_at",
+    "slot": "missile_launcher_mount_point"
+   },
+   {
+    "rel": "models/vehicles/lgn_apc_missile_nurs.model",
+    "label": "missile_nurs",
+    "slot": "missile_launcher_mount_point"
+   },
+   {
+    "rel": "models/vehicles/lgn_apc_missile_aa.model",
+    "label": "missile_aa",
+    "slot": "missile_launcher_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/lgn_apc_machinegun.model": [],
+   "models/vehicles/lgn_apc_plasma_hmg.model": [],
+   "models/vehicles/lgn_apc_minigun_hmg.model": [],
+   "models/vehicles/lgn_apc_grenade_hmg.model": [],
+   "models/vehicles/lgn_apc_turret_vulkan.model": [],
+   "models/vehicles/lgn_apc_turret_cannon.model": [],
+   "models/vehicles/lgn_apc_turret_plasma.model": [],
+   "models/vehicles/lgn_apc_turret_heavy_plasma.model": [],
+   "models/vehicles/lgn_apc_turret_heavy_vulkan.model": [],
+   "models/vehicles/lgn_apc_turret_twinplasma.model": [],
+   "models/vehicles/lgn_apc_missile_at.model": [],
+   "models/vehicles/lgn_apc_missile_nurs.model": [],
+   "models/vehicles/lgn_apc_missile_aa.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/lgn_apc_machinegun.model"
+ },
+ "models/vehicles/lgn_apc_chassis_supplies.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/lgn_apc_machinegun.model",
+    "label": "machinegun",
+    "slot": "turret_support_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/lgn_apc_machinegun.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/lgn_apc_machinegun.model"
+ },
+ "models/vehicles/spider.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/spider_cannons.model",
+    "label": "cannons",
+    "slot": "mount_point_guns"
+   },
+   {
+    "rel": "models/vehicles/spider_rotary_cannons.model",
+    "label": "rotary_cannons",
+    "slot": "mount_point_guns"
+   },
+   {
+    "rel": "models/vehicles/spider_missile_at.model",
+    "label": "missile_at",
+    "slot": "mount_point_rocket_pods"
+   },
+   {
+    "rel": "models/vehicles/spider_missile_nurs.model",
+    "label": "missile_nurs",
+    "slot": "mount_point_rocket_pods"
+   },
+   {
+    "rel": "models/vehicles/spider_missile_aa.model",
+    "label": "missile_aa",
+    "slot": "mount_point_rocket_pods"
+   }
+  ],
+  "mg": {
+   "models/vehicles/spider_cannons.model": [],
+   "models/vehicles/spider_rotary_cannons.model": [],
+   "models/vehicles/spider_missile_at.model": [],
+   "models/vehicles/spider_missile_nurs.model": [],
+   "models/vehicles/spider_missile_aa.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/spider_cannons.model"
+ },
+ "models/vehicles/lgnbs_turretbase_separate.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/lgn_apc_turret_cannon.model",
+    "label": "lgn_apc_turret_cannon",
+    "slot": "turret_main_mount_point"
+   },
+   {
+    "rel": "models/vehicles/lgn_apc_missile_at.model",
+    "label": "lgn_apc_missile_at",
+    "slot": "missile_launcher_mount_point"
+   },
+   {
+    "rel": "models/vehicles/lgn_apc_missile_nurs.model",
+    "label": "lgn_apc_missile_nurs",
+    "slot": "missile_launcher_mount_point"
+   },
+   {
+    "rel": "models/vehicles/lgn_apc_missile_aa.model",
+    "label": "lgn_apc_missile_aa",
+    "slot": "missile_launcher_mount_point"
+   },
+   {
+    "rel": "models/vehicles/lgn_apc_turret_vulkan.model",
+    "label": "lgn_apc_turret_vulkan",
+    "slot": "turret_main_mount_point"
+   },
+   {
+    "rel": "models/vehicles/lgn_apc_turret_plasma.model",
+    "label": "lgn_apc_turret_plasma",
+    "slot": "turret_main_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/lgn_apc_turret_cannon.model": [],
+   "models/vehicles/lgn_apc_missile_at.model": [],
+   "models/vehicles/lgn_apc_missile_nurs.model": [],
+   "models/vehicles/lgn_apc_missile_aa.model": [],
+   "models/vehicles/lgn_apc_turret_vulkan.model": [],
+   "models/vehicles/lgn_apc_turret_plasma.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/lgn_apc_turret_cannon.model"
+ },
+ "models/vehicles/lgn_tank_chassis.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/lgn_tank_turret_plasma.model",
+    "label": "turret_plasma",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/lgn_tank_turret_cannon.model",
+    "label": "turret_cannon",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/lgn_tank_turret_vulkan.model",
+    "label": "turret_vulkan",
+    "slot": "turret_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/lgn_tank_turret_plasma.model": [],
+   "models/vehicles/lgn_tank_turret_cannon.model": [],
+   "models/vehicles/lgn_tank_turret_vulkan.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/lgn_tank_turret_plasma.model"
+ },
+ "models/props/lgnbs_warning_tower_1.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/vehicles/lgn_madrobot_chassis.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/lgn_madrobot_cannons_main.model",
+    "label": "cannons_main",
+    "slot": "mount_point_cannons_main"
+   },
+   {
+    "rel": "models/vehicles/lgn_madrobot_miniguns_front.model",
+    "label": "miniguns_front",
+    "slot": "mount_point_miniguns_front"
+   },
+   {
+    "rel": "models/vehicles/lgn_madrobot_miniguns_rear.model",
+    "label": "miniguns_rear",
+    "slot": "mount_point_miniguns_rear"
+   },
+   {
+    "rel": "models/vehicles/lgn_madrobot_missile_big_right.model",
+    "label": "missile_big_right",
+    "slot": "mount_point_missile_big_left"
+   },
+   {
+    "rel": "models/vehicles/lgn_madrobot_missile_big_left.model",
+    "label": "missile_big_left",
+    "slot": "mount_point_missile_big_right"
+   }
+  ],
+  "mg": {
+   "models/vehicles/lgn_madrobot_cannons_main.model": [],
+   "models/vehicles/lgn_madrobot_miniguns_front.model": [],
+   "models/vehicles/lgn_madrobot_miniguns_rear.model": [],
+   "models/vehicles/lgn_madrobot_missile_big_right.model": [],
+   "models/vehicles/lgn_madrobot_missile_big_left.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/lgn_madrobot_cannons_main.model"
+ },
+ "models/vehicles/md-500_v1.model": {
+  "choices": [
+   {
+    "rel": "models/weapons/md500_hellfire.model",
+    "label": "md500_hellfire",
+    "slot": "mount_point_1"
+   },
+   {
+    "rel": "models/weapons/md500_hidra.model",
+    "label": "md500_hidra",
+    "slot": "mount_point_1"
+   },
+   {
+    "rel": "models/weapons/md500_hidra_big.model",
+    "label": "md500_hidra_big",
+    "slot": "mount_point_1"
+   },
+   {
+    "rel": "models/weapons/md500_sidewinder.model",
+    "label": "md500_sidewinder",
+    "slot": "mount_point_1"
+   }
+  ],
+  "mg": {
+   "models/weapons/md500_hellfire.model": [],
+   "models/weapons/md500_hidra.model": [],
+   "models/weapons/md500_hidra_big.model": [],
+   "models/weapons/md500_sidewinder.model": []
+  },
+  "mg_spare": [],
+  "default": "models/weapons/md500_hellfire.model"
+ },
+ "models/vehicles/res_uh-1_v1.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/vehicles/res_uh-1_v1_mp.model": {
+  "choices": [
+   {
+    "rel": "models/weapons/uh1_hidra.model",
+    "label": "uh1_hidra",
+    "slot": "mount_point_1"
+   },
+   {
+    "rel": "models/weapons/uh1_minigun.model",
+    "label": "uh1_minigun",
+    "slot": "mount_point_2"
+   },
+   {
+    "rel": "models/weapons/uh1_sidewinder.model",
+    "label": "uh1_sidewinder",
+    "slot": "mount_point_1"
+   },
+   {
+    "rel": "models/weapons/uh1_hidra_big.model",
+    "label": "uh1_hidra_big",
+    "slot": "mount_point_1"
+   }
+  ],
+  "mg": {
+   "models/weapons/uh1_hidra.model": [],
+   "models/weapons/uh1_minigun.model": [],
+   "models/weapons/uh1_sidewinder.model": [],
+   "models/weapons/uh1_hidra_big.model": []
+  },
+  "mg_spare": [],
+  "default": "models/weapons/uh1_hidra.model"
+ },
+ "models/vehicles/buldozer_chassis.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [
+   {
+    "rel": "models/vehicles/small_turret_browning.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/small_turret_atgm_launcher.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/small_turret_recoilless_gun.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/small_turret_plasma_recoilless_gun.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/small_turret_minigun.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/small_turret_grenade_launcher.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/small_turret_plasma_hmg.model",
+    "slot": "turret_machinegun_mount_point"
+   }
+  ],
+  "default": ""
+ },
+ "models/vehicles/towed_refueller_v1.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/guntruck_turret_browning.model",
+    "label": "guntruck_turret_browning",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_atgm_launcher.model",
+    "label": "guntruck_turret_atgm_launcher",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_recoilless_gun.model",
+    "label": "guntruck_turret_recoilless_gun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_plasma_recoilless_gun.model",
+    "label": "guntruck_turret_plasma_recoilless_gun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_minigun.model",
+    "label": "guntruck_turret_minigun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_grenade_launcher.model",
+    "label": "guntruck_turret_grenade_launcher",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_plasma_hmg.model",
+    "label": "guntruck_turret_plasma_hmg",
+    "slot": "turret_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/guntruck_turret_browning.model": [],
+   "models/vehicles/guntruck_turret_atgm_launcher.model": [],
+   "models/vehicles/guntruck_turret_recoilless_gun.model": [],
+   "models/vehicles/guntruck_turret_plasma_recoilless_gun.model": [],
+   "models/vehicles/guntruck_turret_minigun.model": [],
+   "models/vehicles/guntruck_turret_grenade_launcher.model": [],
+   "models/vehicles/guntruck_turret_plasma_hmg.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/guntruck_turret_browning.model"
+ },
+ "models/vehicles/ford_150_v1.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/guntruck_turret_browning.model",
+    "label": "guntruck_turret_browning",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_atgm_launcher.model",
+    "label": "guntruck_turret_atgm_launcher",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_recoilless_gun.model",
+    "label": "guntruck_turret_recoilless_gun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_plasma_recoilless_gun.model",
+    "label": "guntruck_turret_plasma_recoilless_gun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_minigun.model",
+    "label": "guntruck_turret_minigun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_grenade_launcher.model",
+    "label": "guntruck_turret_grenade_launcher",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_plasma_hmg.model",
+    "label": "guntruck_turret_plasma_hmg",
+    "slot": "turret_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/guntruck_turret_browning.model": [],
+   "models/vehicles/guntruck_turret_atgm_launcher.model": [],
+   "models/vehicles/guntruck_turret_recoilless_gun.model": [],
+   "models/vehicles/guntruck_turret_plasma_recoilless_gun.model": [],
+   "models/vehicles/guntruck_turret_minigun.model": [],
+   "models/vehicles/guntruck_turret_grenade_launcher.model": [],
+   "models/vehicles/guntruck_turret_plasma_hmg.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/guntruck_turret_browning.model"
+ },
+ "models/vehicles/towed_gun_chassis_2.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/towed_heavy_tower_v1.model",
+    "label": "heavy_tower_v1",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/towed_heavy_tower_2v2.model",
+    "label": "heavy_tower_2v2",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/towed_heavy_tower_v1_twinplasma.model",
+    "label": "heavy_tower_v1_twinplasma",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/towed_heavy_tower_v1_plasma.model",
+    "label": "heavy_tower_v1_plasma",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/towed_heavy_tower_v1_vulcan.model",
+    "label": "heavy_tower_v1_vulcan",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/towed_heavy_tower_v1_railcannon.model",
+    "label": "heavy_tower_v1_railcannon",
+    "slot": "turret_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/towed_heavy_tower_v1.model": [],
+   "models/vehicles/towed_heavy_tower_2v2.model": [],
+   "models/vehicles/towed_heavy_tower_v1_twinplasma.model": [],
+   "models/vehicles/towed_heavy_tower_v1_plasma.model": [],
+   "models/vehicles/towed_heavy_tower_v1_vulcan.model": [],
+   "models/vehicles/towed_heavy_tower_v1_railcannon.model": []
+  },
+  "mg_spare": [
+   {
+    "rel": "models/vehicles/small_turret_browning.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/small_turret_atgm_launcher.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/small_turret_recoilless_gun.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/small_turret_plasma_recoilless_gun.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/small_turret_minigun.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/small_turret_grenade_launcher.model",
+    "slot": "turret_machinegun_mount_point"
+   },
+   {
+    "rel": "models/vehicles/small_turret_plasma_hmg.model",
+    "slot": "turret_machinegun_mount_point"
+   }
+  ],
+  "default": "models/vehicles/towed_heavy_tower_v1.model"
+ },
+ "models/vehicles/towed_gun_chassis_1.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/towed_gun_light_turret_cannon.model",
+    "label": "light_turret_cannon",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/towed_gun_light_turret_vulkan.model",
+    "label": "light_turret_vulkan",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/towed_gun_light_turret_plasma.model",
+    "label": "light_turret_plasma",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/towed_gun_light_turret_howitzer.model",
+    "label": "light_turret_howitzer",
+    "slot": "turret_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/towed_gun_light_turret_cannon.model": [],
+   "models/vehicles/towed_gun_light_turret_vulkan.model": [],
+   "models/vehicles/towed_gun_light_turret_plasma.model": [],
+   "models/vehicles/towed_gun_light_turret_howitzer.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/towed_gun_light_turret_cannon.model"
+ },
+ "models/vehicles/towed_blinder_v1.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/guntruck_turret_browning.model",
+    "label": "guntruck_turret_browning",
+    "slot": "turret_mount_point_1"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_atgm_launcher.model",
+    "label": "guntruck_turret_atgm_launcher",
+    "slot": "turret_mount_point_1"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_recoilless_gun.model",
+    "label": "guntruck_turret_recoilless_gun",
+    "slot": "turret_mount_point_1"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_plasma_recoilless_gun.model",
+    "label": "guntruck_turret_plasma_recoilless_gun",
+    "slot": "turret_mount_point_1"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_minigun.model",
+    "label": "guntruck_turret_minigun",
+    "slot": "turret_mount_point_1"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_grenade_launcher.model",
+    "label": "guntruck_turret_grenade_launcher",
+    "slot": "turret_mount_point_1"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_plasma_hmg.model",
+    "label": "guntruck_turret_plasma_hmg",
+    "slot": "turret_mount_point_1"
+   },
+   {
+    "rel": "models/vehicles/towed_gun_light_turret_cannon.model",
+    "label": "gun_light_turret_cannon",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/towed_gun_light_turret_vulkan.model",
+    "label": "gun_light_turret_vulkan",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/towed_gun_light_turret_plasma.model",
+    "label": "gun_light_turret_plasma",
+    "slot": "turret_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/guntruck_turret_browning.model": [],
+   "models/vehicles/guntruck_turret_atgm_launcher.model": [],
+   "models/vehicles/guntruck_turret_recoilless_gun.model": [],
+   "models/vehicles/guntruck_turret_plasma_recoilless_gun.model": [],
+   "models/vehicles/guntruck_turret_minigun.model": [],
+   "models/vehicles/guntruck_turret_grenade_launcher.model": [],
+   "models/vehicles/guntruck_turret_plasma_hmg.model": [],
+   "models/vehicles/towed_gun_light_turret_cannon.model": [],
+   "models/vehicles/towed_gun_light_turret_vulkan.model": [],
+   "models/vehicles/towed_gun_light_turret_plasma.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/guntruck_turret_browning.model"
+ },
+ "models/vehicles/towed_charger_v1.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/guntruck_turret_browning.model",
+    "label": "guntruck_turret_browning",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_atgm_launcher.model",
+    "label": "guntruck_turret_atgm_launcher",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_recoilless_gun.model",
+    "label": "guntruck_turret_recoilless_gun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_plasma_recoilless_gun.model",
+    "label": "guntruck_turret_plasma_recoilless_gun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_minigun.model",
+    "label": "guntruck_turret_minigun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_grenade_launcher.model",
+    "label": "guntruck_turret_grenade_launcher",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_plasma_hmg.model",
+    "label": "guntruck_turret_plasma_hmg",
+    "slot": "turret_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/guntruck_turret_browning.model": [],
+   "models/vehicles/guntruck_turret_atgm_launcher.model": [],
+   "models/vehicles/guntruck_turret_recoilless_gun.model": [],
+   "models/vehicles/guntruck_turret_plasma_recoilless_gun.model": [],
+   "models/vehicles/guntruck_turret_minigun.model": [],
+   "models/vehicles/guntruck_turret_grenade_launcher.model": [],
+   "models/vehicles/guntruck_turret_plasma_hmg.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/guntruck_turret_browning.model"
+ },
+ "models/vehicles/towed_truck_1.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/guntruck_turret_browning.model",
+    "label": "guntruck_turret_browning",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_atgm_launcher.model",
+    "label": "guntruck_turret_atgm_launcher",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_recoilless_gun.model",
+    "label": "guntruck_turret_recoilless_gun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_plasma_recoilless_gun.model",
+    "label": "guntruck_turret_plasma_recoilless_gun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_minigun.model",
+    "label": "guntruck_turret_minigun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_grenade_launcher.model",
+    "label": "guntruck_turret_grenade_launcher",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_plasma_hmg.model",
+    "label": "guntruck_turret_plasma_hmg",
+    "slot": "turret_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/guntruck_turret_browning.model": [],
+   "models/vehicles/guntruck_turret_atgm_launcher.model": [],
+   "models/vehicles/guntruck_turret_recoilless_gun.model": [],
+   "models/vehicles/guntruck_turret_plasma_recoilless_gun.model": [],
+   "models/vehicles/guntruck_turret_minigun.model": [],
+   "models/vehicles/guntruck_turret_grenade_launcher.model": [],
+   "models/vehicles/guntruck_turret_plasma_hmg.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/guntruck_turret_browning.model"
+ },
+ "models/vehicles/ford_350_v1.model": {
+  "choices": [
+   {
+    "rel": "models/vehicles/guntruck_turret_browning.model",
+    "label": "guntruck_turret_browning",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_atgm_launcher.model",
+    "label": "guntruck_turret_atgm_launcher",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_recoilless_gun.model",
+    "label": "guntruck_turret_recoilless_gun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_plasma_recoilless_gun.model",
+    "label": "guntruck_turret_plasma_recoilless_gun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_minigun.model",
+    "label": "guntruck_turret_minigun",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_grenade_launcher.model",
+    "label": "guntruck_turret_grenade_launcher",
+    "slot": "turret_mount_point"
+   },
+   {
+    "rel": "models/vehicles/guntruck_turret_plasma_hmg.model",
+    "label": "guntruck_turret_plasma_hmg",
+    "slot": "turret_mount_point"
+   }
+  ],
+  "mg": {
+   "models/vehicles/guntruck_turret_browning.model": [],
+   "models/vehicles/guntruck_turret_atgm_launcher.model": [],
+   "models/vehicles/guntruck_turret_recoilless_gun.model": [],
+   "models/vehicles/guntruck_turret_plasma_recoilless_gun.model": [],
+   "models/vehicles/guntruck_turret_minigun.model": [],
+   "models/vehicles/guntruck_turret_grenade_launcher.model": [],
+   "models/vehicles/guntruck_turret_plasma_hmg.model": []
+  },
+  "mg_spare": [],
+  "default": "models/vehicles/guntruck_turret_browning.model"
+ },
+ "models/vehicles/sherman_railcannon.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/buildings/rock_small_6_quest.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/mainmenu/dlc_mainmenu_main_object.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/mainmenu/dlc_mainmenu_underground_object.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/mainmenu/dlc_mainmenu_underground_object_2.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/props/fnd_gates_interactive_01.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/props/fnd_gates_interactive_02.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/props/fnd_gates_interactive_03.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/vehicles/ford_650_recharger.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/vehicles/ford_650_refueller.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ },
+ "models/vehicles/ford_650_v1.model": {
+  "choices": [],
+  "mg": {},
+  "mg_spare": [],
+  "default": ""
+ }
+}

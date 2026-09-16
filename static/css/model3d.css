@@ -1,0 +1,232 @@
+/* 3D-превью .model: тёмный диалог в духе вьюпорта Blender */
+.m3d-back {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1199;
+  background: rgba(0, 0, 0, 0.45);
+}
+.m3d-pop {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(860px, 92vw);
+  z-index: 1200;
+  background: #222326;
+  border: 1px solid #101214;
+  border-radius: 8px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+  color: #d7dae0;
+  font-size: 12px;
+  overflow: hidden;
+}
+.m3d-bar {
+  display: flex;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #26272b;
+  border-bottom: 1px solid #101214;
+  /* Селекты выше кнопок по intrinsic-высоте: без центрирования
+  stretch растягивает кнопки (видно на абрамсе — 3 селекта) */
+  align-items: center;
+}
+.m3d-btn {
+  background: #33363d;
+  color: #c9ccd4;
+  border: 1px solid #17181c;
+  border-radius: 4px;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.m3d-btn:hover {
+  background: #3d4149;
+  color: #fff;
+}
+.m3d-btn.on {
+  background: #4a5f8a;
+  border-color: #5a739f;
+  color: #fff;
+}
+.m3d-xbtn {
+  margin-left: auto;
+}
+.m3d-view {
+  position: relative;
+  width: 100%;
+  height: min(60vh, 560px);
+  min-height: 320px;
+  background: #38383c;
+}
+.m3d-view canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.m3d-cube {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 36px;
+  height: 36px;
+  margin: -18px 0 0 -18px;
+  perspective: 140px;
+  filter: drop-shadow(0 0 10px rgba(110, 150, 230, 0.35));
+}
+.m3d-cube-inner {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  animation: m3d-cube-spin 2.4s linear infinite;
+}
+.m3d-cube-inner i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, rgba(46, 54, 72, 0.92), rgba(16, 20, 28, 0.92));
+  border: 1px solid rgba(140, 170, 220, 0.6);
+  box-shadow: inset 0 0 10px rgba(120, 160, 255, 0.18);
+  font-style: normal;
+}
+.m3d-cube-inner i:nth-child(1) { transform: translateZ(18px); }
+.m3d-cube-inner i:nth-child(2) { transform: rotateY(180deg) translateZ(18px); }
+.m3d-cube-inner i:nth-child(3) { transform: rotateY(90deg) translateZ(18px); }
+.m3d-cube-inner i:nth-child(4) { transform: rotateY(-90deg) translateZ(18px); }
+.m3d-cube-inner i:nth-child(5) { transform: rotateX(90deg) translateZ(18px); }
+.m3d-cube-inner i:nth-child(6) { transform: rotateX(-90deg) translateZ(18px); }
+@keyframes m3d-cube-spin {
+  from { transform: rotateX(-22deg) rotateY(0deg); }
+  to { transform: rotateX(-22deg) rotateY(360deg); }
+}
+.m3d-status {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 34px);
+  transform: translateX(-50%);
+  color: #9a9ea8;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.m3d-perf {
+  position: absolute;
+  left: 8px;
+  bottom: 6px;
+  color: #6d7178;
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.m3d-pbar {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 56px);
+  transform: translateX(-50%);
+  width: 220px;
+  height: 4px;
+  background: #17181c;
+  border: 1px solid #101214;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.m3d-pbar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #4a5f8a, #8aa2cc);
+  transition: width 0.2s;
+}
+.m3d-sel {
+  background: #33363d;
+  color: #c9ccd4;
+  border: 1px solid #17181c;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 12px;
+  max-width: 180px;
+}
+/* Кнопка видов брони + выпадающая панель с чекбоксами:
+выглядит как селект, внутри мультивыбор. Обёртка — якорь
+позиционирования панели строго под кнопкой */
+.m3d-kindwrap {
+  position: relative;
+}
+.m3d-selbtn {
+  white-space: nowrap;
+}
+.m3d-drop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 1201;
+  background: #26272b;
+  border: 1px solid #101214;
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  padding: 4px;
+  min-width: 150px;
+}
+.m3d-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  color: #c9ccd4;
+}
+.m3d-check:hover {
+  background: #33363d;
+}
+.m3d-lab {
+  align-self: center;
+  color: #9a9ea8;
+  font-size: 12px;
+}
+.m3d-tprog {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  min-width: 120px;
+  background: rgba(20, 22, 26, 0.85);
+  border: 1px solid #101214;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: #9a9ea8;
+  pointer-events: none;
+}
+.m3d-tprog i {
+  display: block;
+  height: 3px;
+  margin-top: 3px;
+  background: #17181c;
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+.m3d-tprog i b {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #4a5f8a, #8aa2cc);
+}
+.m3d-err {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: #e08a8a;
+  background: #2a2224;
+  border: 1px solid #5a3436;
+  border-radius: 6px;
+  padding: 10px 16px;
+  max-width: 80%;
+  text-align: center;
+}

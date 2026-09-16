@@ -1040,5 +1040,21 @@
   "unt_class_humans": "步兵",
   "unt_src_project": "项目",
   "unt_src_game": "游戏",
-  "unt_src_mod": "模组"
+  "unt_src_mod": "模组",
+  "m3d_title": "3D 预览",
+  "m3d_close": "关闭",
+  "m3d_grid": "网格",
+  "m3d_textures": "纹理",
+  "m3d_reset": "重置视图",
+  "m3d_armor": "装甲",
+  "m3d_turret": "炮塔",
+  "m3d_turret_pick": "炮塔：",
+  "m3d_loading": "正在加载模型…",
+  "m3d_preview": "3D 模型预览",
+  "m3d_err_lib": "3D 引擎加载失败",
+  "m3d_err_bad": "mesh 值无效",
+  "m3d_err_nofile": "未找到模型文件",
+  "m3d_err_parse": "模型读取失败",
+  "m3d_armor_kind": "装甲类型：",
+  "m3d_mg_pick": "机枪："
 }

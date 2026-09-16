@@ -27,6 +27,7 @@ from terminator_toolset.api.config import register_config
 from terminator_toolset.api.files import register_files
 from terminator_toolset.api.game_assets import register_game_assets
 from terminator_toolset.api.history import register_history
+from terminator_toolset.api.model3d import register_model3d
 from terminator_toolset.api.mods import register_mods
 from terminator_toolset.api.project import register_project
 from terminator_toolset.api.shell import register_shell
@@ -227,6 +228,7 @@ def create_app(config: Config, db: Database, base_dir: Optional[str] = None,
     register_updates(app, ctx)
     register_game_assets(app, ctx)
     register_mods(app, ctx)
+    register_model3d(app, ctx)
     register_archive(app, ctx)
     if callable(on_stage):
         try:

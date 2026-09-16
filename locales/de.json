@@ -1040,5 +1040,21 @@
   "unt_class_humans": "Infanterie",
   "unt_src_project": "Projekt",
   "unt_src_game": "Spiel",
-  "unt_src_mod": "Mod"
+  "unt_src_mod": "Mod",
+  "m3d_title": "3D-Vorschau",
+  "m3d_close": "Schliessen",
+  "m3d_grid": "Raster",
+  "m3d_textures": "Texturen",
+  "m3d_reset": "Ansicht zuruecksetzen",
+  "m3d_armor": "Panzerung",
+  "m3d_turret": "Turm",
+  "m3d_turret_pick": "Turm:",
+  "m3d_loading": "Modell wird geladen…",
+  "m3d_preview": "3D-Modellvorschau",
+  "m3d_err_lib": "3D-Engine konnte nicht geladen werden",
+  "m3d_err_bad": "Ungueltiger mesh-Wert",
+  "m3d_err_nofile": "Modelldatei nicht gefunden",
+  "m3d_err_parse": "Modell konnte nicht gelesen werden",
+  "m3d_armor_kind": "Panzerungsart:",
+  "m3d_mg_pick": "MG:"
 }

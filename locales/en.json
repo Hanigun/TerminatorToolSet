@@ -1040,5 +1040,21 @@
   "unt_class_humans": "Infantry",
   "unt_src_project": "Project",
   "unt_src_game": "Game",
-  "unt_src_mod": "Mod"
+  "unt_src_mod": "Mod",
+  "m3d_title": "3D preview",
+  "m3d_close": "Close",
+  "m3d_grid": "Grid",
+  "m3d_textures": "Textures",
+  "m3d_reset": "Reset view",
+  "m3d_armor": "Armor",
+  "m3d_turret": "Turret",
+  "m3d_turret_pick": "Turret:",
+  "m3d_loading": "Loading model…",
+  "m3d_preview": "3D model preview",
+  "m3d_err_lib": "3D engine failed to load",
+  "m3d_err_bad": "Bad mesh value",
+  "m3d_err_nofile": "Model file not found",
+  "m3d_err_parse": "Failed to read model",
+  "m3d_armor_kind": "Armor kind:",
+  "m3d_mg_pick": "MG:"
 }

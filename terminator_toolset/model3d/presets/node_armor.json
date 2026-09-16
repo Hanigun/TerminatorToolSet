@@ -1,0 +1,3351 @@
+{
+ "models/vehicles/panhard_v1.model": {
+  "armor_base_18": [
+   "top",
+   "tank_steel_armor:87"
+  ],
+  "armor_base_14": [
+   "right",
+   "tank_steel_armor:87"
+  ],
+  "armor_base_12": [
+   "left",
+   "tank_steel_armor:87"
+  ],
+  "armor_base_17": [
+   "top",
+   "tank_steel_armor:87"
+  ],
+  "armor_base_16": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_base_13": [
+   "left",
+   "tank_steel_armor:87"
+  ],
+  "armor_base_15": [
+   "right",
+   "tank_steel_armor:87"
+  ],
+  "armor_base_10": [
+   "forward",
+   "tank_steel_armor:87"
+  ],
+  "armor_base_11": [
+   "forward",
+   "tank_steel_armor:87"
+  ],
+  "armor_base_06": [
+   "left",
+   "tank_steel_armor:87"
+  ],
+  "armor_base_07": [
+   "right",
+   "tank_steel_armor:87"
+  ],
+  "armor_base_01": [
+   "left",
+   "tank_steel_armor:87"
+  ],
+  "armor_base_02": [
+   "right",
+   "tank_steel_armor:87"
+  ],
+  "armor_base_05": [
+   "right",
+   "tank_steel_armor:87"
+  ],
+  "armor_base_03": [
+   "left",
+   "tank_steel_armor:87"
+  ],
+  "armor_base_04": [
+   "right",
+   "tank_steel_armor:87"
+  ],
+  "armor_base_08": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_base_09": [
+   "backward",
+   "tank_steel_armor:87"
+  ]
+ },
+ "models/props/cliff_destructible_1.model": {},
+ "models/vehicles/fnd_hemtt_ammunition.model": {
+  "armor_base_1": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_2": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_6": [
+   "forward",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_7": [
+   "forward",
+   "vehicle_steel_armor:40"
+  ]
+ },
+ "models/vehicles/fnd_hemtt_fuel.model": {
+  "armor_base_7": [
+   "forward",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_6": [
+   "forward",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_2": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_1": [
+   "left",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/fnd_hemtt_transport.model": {
+  "armor_base_7": [
+   "forward",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_6": [
+   "forward",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_2": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_1": [
+   "left",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/fnd_himars_chassis.model": {
+  "armor_base_6": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_3": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_2": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_5": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_1": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_4": [
+   "right",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/fnd_himars_turret.model": {},
+ "models/vehicles/fnd_abrams_chassis.model": {
+  "armor_base_front_2": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_base_front_1": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_base_right_1": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_right_2": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_right_3": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_right_4": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_right_5": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_left_1": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_left_2": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_left_3": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_left_4": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_left_5": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_rear_1": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_rear_2": [
+   "backward",
+   "tank_steel_armor:500"
+  ]
+ },
+ "models/vehicles/fnd_abrams_turret_cannon.model": {
+  "armor_base_right_7": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_left_7": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_rear_7": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_left_6": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_right_6": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_rear_6": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_rear_4": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_rear_5": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_rear_3": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_left_8": [
+   "left",
+   "tank_steel_armor:120"
+  ]
+ },
+ "models/vehicles/fnd_abrams_turret_twinplasma.model": {
+  "armor_base_right_7": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_left_7": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_rear_7": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_left_6": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_right_6": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_rear_6": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_rear_4": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_rear_5": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_rear_3": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_left_8": [
+   "left",
+   "tank_steel_armor:120"
+  ]
+ },
+ "models/vehicles/fnd_abrams_turret_plasma.model": {
+  "armor_base_right_7": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_left_7": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_rear_7": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_left_6": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_right_6": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_rear_6": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_rear_4": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_rear_5": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_rear_3": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_left_8": [
+   "left",
+   "tank_steel_armor:120"
+  ]
+ },
+ "models/vehicles/fnd_abrams_turret_vulkan.model": {
+  "armor_base_right_7": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_left_7": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_rear_7": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_left_6": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_right_6": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_rear_6": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_rear_4": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_rear_5": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_rear_3": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_left_8": [
+   "left",
+   "tank_steel_armor:120"
+  ]
+ },
+ "models/vehicles/fnd_abrams_turret_railcannon.model": {
+  "armor_base_rear_5": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_rear_4": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_rear_6": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_rear_7": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_rear_3": [
+   "backward",
+   "tank_steel_armor:500"
+  ],
+  "armor_base_left_8": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_right_8": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_right_7": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_left_7": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_left_6": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_right_6": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_left_9": [
+   "left",
+   "tank_steel_armor:120"
+  ]
+ },
+ "models/vehicles/heli_blackhawk_v2.model": {
+  "armor_base_08": [
+   "backward",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_09": [
+   "right",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_07": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_06": [
+   "right",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_05": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_04": [
+   "right",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_02": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_03": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_01": [
+   "right",
+   "vehicle_steel_armor:40"
+  ]
+ },
+ "models/vehicles/heli_blackhawk_v2_mp.model": {
+  "armor_base_09": [
+   "right",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_08": [
+   "backward",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_07": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_06": [
+   "right",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_05": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_04": [
+   "right",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_03": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_02": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_01": [
+   "right",
+   "vehicle_steel_armor:40"
+  ]
+ },
+ "models/weapons/uh60_hidra.model": {},
+ "models/weapons/uh60_minigun.model": {},
+ "models/weapons/uh60_sidewinder.model": {},
+ "models/weapons/uh60_hidra_big.model": {},
+ "models/weapons/uh60_hellfire.model": {},
+ "models/vehicles/fnd_bradley_chassis.model": {
+  "armor_base_left_1": [
+   "left",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_left_2": [
+   "left",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_left_3": [
+   "left",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_left_4": [
+   "left",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_left_5": [
+   "left",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_left_6": [
+   "left",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_left_7": [
+   "left",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_right_1": [
+   "right",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_right_2": [
+   "right",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_right_3": [
+   "right",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_right_4": [
+   "right",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_right_5": [
+   "right",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_right_6": [
+   "right",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_right_7": [
+   "right",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_front_1": [
+   "forward",
+   "vehicle_steel_armor:160"
+  ],
+  "armor_base_front_2": [
+   "forward",
+   "vehicle_steel_armor:160"
+  ],
+  "armor_base_front_3": [
+   "forward",
+   "vehicle_steel_armor:160"
+  ],
+  "armor_base_front_4": [
+   "forward",
+   "vehicle_steel_armor:160"
+  ],
+  "armor_base_front_5": [
+   "forward",
+   "vehicle_steel_armor:160"
+  ],
+  "armor_base_front_6": [
+   "forward",
+   "vehicle_steel_armor:160"
+  ],
+  "armor_base_front_7": [
+   "left",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_front_8": [
+   "left",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_rear_1": [
+   "backward",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_rear_2": [
+   "backward",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_rear_3": [
+   "backward",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_rear_4": [
+   "backward",
+   "vehicle_steel_armor:82"
+  ]
+ },
+ "models/vehicles/fnd_bradley_turret_cannon.model": {},
+ "models/vehicles/fnd_bradley_turret_vulkan.model": {},
+ "models/vehicles/fnd_bradley_turret_plasma.model": {},
+ "models/vehicles/fnd_bradley_tow.model": {},
+ "models/vehicles/fnd_humvee_chassis.model": {
+  "armor_generic_1": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_generic_2": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_generic_3": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_generic_4": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_detail_2": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_detail_1": [
+   "left",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/fnd_humvee_turret_browning.model": {
+  "armor_turret_base_3_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_hatch_01_base_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_hatch_02_base_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/fnd_humvee_turret_atgm_launcher.model": {
+  "armor_turret_base_3_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_hatch_01_base_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_hatch_02_base_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/fnd_humvee_turret_recoilless_gun.model": {
+  "armor_turret_base_3_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_hatch_01_base_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_hatch_02_base_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/fnd_humvee_turret_plasma_recoilless_gun.model": {
+  "armor_turret_base_3_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_hatch_01_base_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_hatch_02_base_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/fnd_humvee_turret_minigun.model": {
+  "armor_turret_base_3_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_hatch_01_base_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_hatch_02_base_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/fnd_humvee_turret_grenade_launcher.model": {
+  "armor_turret_base_3_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_hatch_01_base_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_hatch_02_base_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/fnd_humvee_turret_plasma_hmg.model": {
+  "armor_turret_base_3_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_hatch_01_base_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_hatch_02_base_fnd": [
+   "bottom",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/fnd_humvee_mortar_gun.model": {},
+ "models/vehicles/fnd_m109_chassis.model": {
+  "armor_base_1": [
+   "forward",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_2": [
+   "backward",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_3": [
+   "backward",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_4": [
+   "backward",
+   "vehicle_steel_armor:40"
+  ]
+ },
+ "models/vehicles/fnd_m109_turret.model": {
+  "armor_base_13": [
+   "right",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_12": [
+   "right",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_11": [
+   "right",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_10": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_9": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_8": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_7": [
+   "backward",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_6": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_5": [
+   "right",
+   "vehicle_steel_armor:40"
+  ]
+ },
+ "models/vehicles/fnd_m113_chassis.model": {
+  "armor_base_front_3": [
+   "forward",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_front_2": [
+   "forward",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_right_5": [
+   "right",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_right_6": [
+   "right",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_right_4": [
+   "right",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_right_3": [
+   "right",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_right_2": [
+   "right",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_right_1": [
+   "right",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_left_4": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_left_3": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_left_2": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_left_1": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_front_1": [
+   "forward",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_left_6": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_left_5": [
+   "left",
+   "vehicle_steel_armor:40"
+  ]
+ },
+ "models/vehicles/fnd_m113_turret_browning.model": {},
+ "models/vehicles/fnd_m113_turret_atgm_launcher.model": {},
+ "models/vehicles/fnd_m113_turret_recoilless_gun.model": {},
+ "models/vehicles/fnd_m113_turret_plasma_recoilless_gun.model": {},
+ "models/vehicles/fnd_m113_turret_minigun.model": {},
+ "models/vehicles/fnd_m113_turret_grenade_launcher.model": {},
+ "models/vehicles/fnd_m113_turret_plasma_chaingun.model": {},
+ "models/vehicles/fnd_turret_base.model": {},
+ "models/vehicles/fnd_turret_plasma.model": {},
+ "models/vehicles/fnd_turret_vulkan.model": {},
+ "models/vehicles/fnd_turret_base_upped.model": {},
+ "models/vehicles/fnd_stryker_chassis.model": {
+  "armor_base_6": [
+   "left",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_5": [
+   "left",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_4": [
+   "right",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_3": [
+   "right",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_2": [
+   "left",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_1": [
+   "left",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_7": [
+   "left",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_8": [
+   "top",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_9": [
+   "backward",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_10": [
+   "backward",
+   "vehicle_steel_armor:40"
+  ]
+ },
+ "models/vehicles/fnd_stryker_turret_machinegun.model": {},
+ "models/vehicles/fnd_stryker_turret_minigun.model": {},
+ "models/vehicles/fnd_stryker_turret_grenade_launcher.model": {},
+ "models/vehicles/fnd_stryker_turret_plasma_hmg.model": {},
+ "models/vehicles/fnd_turret_base_supply.model": {
+  "armor_1": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_2": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_3": [
+   "left",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/integrator_tractor_v1.model": {
+  "armor_steel_5": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_steel_12": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_steel_8": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_steel_7": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_steel_3": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_steel_2": [
+   "top",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_steel_1": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_chassis_1": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_chassis_4": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_chassis_6": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_grid_chassis_2": [
+   "left",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/integrator_ford150_guntruck.model": {
+  "armor_detail_chassis_1": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_steel_chassis_8": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_steel_chassis_6": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_steel_chassis_10": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_steel_chassis_16": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_steel_chassis_17": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_steel_chassis_11": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_steel_chassis_1": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_steel_chassis_2": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_steel_chassis_5": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/integrator_transport_v1.model": {
+  "armor_detail_chassis_1": [
+   "forward",
+   "tank_steel_armor:87"
+  ],
+  "armor_steel_chassis_5": [
+   "forward",
+   "tank_steel_armor:87"
+  ],
+  "armor_steel_chassis_2": [
+   "forward",
+   "tank_steel_armor:87"
+  ],
+  "armor_steel_chassis_8": [
+   "forward",
+   "tank_steel_armor:87"
+  ],
+  "armor_steel_chassis_11": [
+   "left",
+   "tank_steel_armor:87"
+  ],
+  "armor_steel_chassis_17": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_steel_chassis_16": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_steel_chassis_10": [
+   "left",
+   "tank_steel_armor:87"
+  ],
+  "armor_steel_chassis_6": [
+   "forward",
+   "tank_steel_armor:87"
+  ],
+  "armor_steel_chassis_1": [
+   "forward",
+   "tank_steel_armor:87"
+  ]
+ },
+ "models/vehicles/spider_cannons.model": {},
+ "models/vehicles/spider_rotary_cannons.model": {},
+ "models/vehicles/spider_missile_at.model": {},
+ "models/vehicles/spider_missile_nurs.model": {},
+ "models/vehicles/spider_missile_aa.model": {},
+ "models/vehicles/integrator_transport_plasma_artillery.model": {
+  "armor_detail_chassis_1": [
+   "forward",
+   "tank_steel_armor:87"
+  ],
+  "armor_steel_chassis_5": [
+   "forward",
+   "tank_steel_armor:87"
+  ],
+  "armor_steel_chassis_2": [
+   "forward",
+   "tank_steel_armor:87"
+  ],
+  "armor_steel_chassis_8": [
+   "forward",
+   "tank_steel_armor:87"
+  ],
+  "armor_steel_chassis_11": [
+   "left",
+   "tank_steel_armor:87"
+  ],
+  "armor_steel_chassis_17": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_steel_chassis_16": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_steel_chassis_10": [
+   "left",
+   "tank_steel_armor:87"
+  ],
+  "armor_steel_chassis_6": [
+   "forward",
+   "tank_steel_armor:87"
+  ],
+  "armor_steel_chassis_1": [
+   "forward",
+   "tank_steel_armor:87"
+  ]
+ },
+ "models/vehicles/integrator_small_tractor.model": {
+  "armor_steel_chassis_1": [
+   "forward",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_steel_chassis_6": [
+   "forward",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_steel_chassis_10": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_steel_chassis_11": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_steel_chassis_8": [
+   "forward",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_steel_chassis_2": [
+   "forward",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_steel_chassis_5": [
+   "forward",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_detail_chassis_1": [
+   "forward",
+   "vehicle_steel_armor:50"
+  ]
+ },
+ "models/vehicles/integrator_towed_chassis.model": {
+  "armor_base_01": [
+   "forward",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_02": [
+   "forward",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_03": [
+   "forward",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_04": [
+   "forward",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_base_05": [
+   "left",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_06": [
+   "right",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_07": [
+   "left",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_08": [
+   "right",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_09": [
+   "left",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_10": [
+   "right",
+   "vehicle_steel_armor:50"
+  ]
+ },
+ "models/vehicles/integrator_towed_tank_trailer_1.model": {},
+ "models/vehicles/integrator_armor_caravan.model": {
+  "armor_detail_06": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_detail_11": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_detail_09": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_detail_08": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_detail_01": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_detail_03": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_detail_05": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_detail_12": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_detail_10": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_detail_13": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_detail_04": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_03": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_25": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_19": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_18": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_16": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_01": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_02": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_15": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_13": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_14": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_12": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_11": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_07": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_05": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_09": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_06": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_10": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_08": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_04": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_20": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_21": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_23": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_24": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_17": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_22": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_27": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_34": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_33": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_26": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_30": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_29": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_31": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_32": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_junk_28": [
+   "right",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/int_apc_machinegun.model": {},
+ "models/vehicles/int_apc_grenade_hmg.model": {},
+ "models/vehicles/int_apc_minigun_hmg.model": {},
+ "models/vehicles/integrator_tank_v1.model": {
+  "armor_grid_chassis_6": [
+   "backward",
+   "reactive_armor2:87"
+  ],
+  "armor_grid_chassis_7": [
+   "backward",
+   "reactive_armor2:87"
+  ],
+  "armor_grid_chassis_8": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_grid_chassis_9": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_grid_chassis_10": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_grid_chassis_5": [
+   "backward",
+   "reactive_armor2:87"
+  ],
+  "armor_junk_chassis_13": [
+   "top",
+   "tank_steel_armor:87"
+  ],
+  "armor_junk_chassis_11": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_junk_chassis_12": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_junk_chassis_10": [
+   "backward",
+   "reactive_armor2:87"
+  ],
+  "armor_junk_chassis_7": [
+   "top",
+   "tank_steel_armor:87"
+  ],
+  "armor_junk_chassis_8": [
+   "backward",
+   "reactive_armor2:87"
+  ],
+  "armor_junk_chassis_9": [
+   "backward",
+   "reactive_armor2:87"
+  ],
+  "armor_junk_chassis_4": [
+   "top",
+   "tank_steel_armor:87"
+  ],
+  "armor_junk_chassis_15": [
+   "right",
+   "tank_steel_armor:180"
+  ]
+ },
+ "models/vehicles/integrator_tank_turret_plasma.model": {
+  "armor_detail_03": [
+   "backward",
+   "reactive_armor2:87"
+  ],
+  "armor_detail_01": [
+   "backward",
+   "reactive_armor2:87"
+  ],
+  "armor_detail_05": [
+   "left",
+   "tank_steel_armor:180"
+  ],
+  "armor_detail_sight": [
+   "top",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_02": [
+   "left",
+   "tank_steel_armor:180"
+  ],
+  "armor_detail_04": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_detail_meteo": [
+   "backward",
+   "reactive_armor2:87"
+  ],
+  "armor_junk_36": [
+   "top",
+   "tank_steel_armor:87"
+  ],
+  "armor_junk_35": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_junk_29": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_junk_30": [
+   "backward",
+   "reactive_armor2:87"
+  ],
+  "armor_junk_34": [
+   "left",
+   "tank_steel_armor:180"
+  ],
+  "armor_junk_32": [
+   "backward",
+   "reactive_armor2:87"
+  ],
+  "armor_junk_31": [
+   "left",
+   "tank_steel_armor:180"
+  ],
+  "armor_junk_33": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_junk_28": [
+   "left",
+   "tank_steel_armor:180"
+  ],
+  "armor_junk_27": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_junk_26": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_junk_25": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_junk_24": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_junk_23": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_junk_22": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_junk_21": [
+   "backward",
+   "reactive_armor2:87"
+  ],
+  "armor_junk_20": [
+   "left",
+   "tank_steel_armor:180"
+  ],
+  "armor_junk_19": [
+   "backward",
+   "reactive_armor2:87"
+  ],
+  "armor_junk_18": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_junk_17": [
+   "top",
+   "tank_steel_armor:87"
+  ],
+  "armor_junk_16": [
+   "left",
+   "tank_steel_armor:180"
+  ],
+  "armor_junk_15": [
+   "top",
+   "tank_steel_armor:87"
+  ],
+  "armor_junk_14": [
+   "backward",
+   "reactive_armor2:87"
+  ],
+  "armor_junk_13": [
+   "backward",
+   "reactive_armor2:87"
+  ],
+  "armor_junk_12": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_junk_11": [
+   "top",
+   "tank_steel_armor:87"
+  ],
+  "armor_junk_10": [
+   "left",
+   "tank_steel_armor:180"
+  ],
+  "armor_junk_09": [
+   "left",
+   "tank_steel_armor:180"
+  ],
+  "armor_junk_08": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_junk_07": [
+   "left",
+   "tank_steel_armor:180"
+  ],
+  "armor_junk_06": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_junk_05": [
+   "backward",
+   "reactive_armor2:87"
+  ],
+  "armor_junk_04": [
+   "left",
+   "tank_steel_armor:180"
+  ],
+  "armor_junk_03": [
+   "left",
+   "tank_steel_armor:180"
+  ],
+  "armor_junk_02": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_junk_01": [
+   "forward",
+   "tank_steel_armor:410"
+  ]
+ },
+ "models/vehicles/lgn_flyer.model": {
+  "armor_base_5": [
+   "forward",
+   "vehicle_steel_armor:85"
+  ],
+  "armor_base_2": [
+   "bottom",
+   "vehicle_steel_armor:85"
+  ],
+  "armor_base_4": [
+   "bottom",
+   "vehicle_steel_armor:85"
+  ],
+  "armor_base_1": [
+   "bottom",
+   "vehicle_steel_armor:85"
+  ],
+  "armor_base_3": [
+   "bottom",
+   "vehicle_steel_armor:85"
+  ],
+  "armor_base_14": [
+   "right",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_15": [
+   "right",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_20": [
+   "left",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_19": [
+   "right",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_18": [
+   "right",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_17": [
+   "left",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_16": [
+   "backward",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_11": [
+   "left",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_13": [
+   "left",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_10": [
+   "forward",
+   "vehicle_steel_armor:85"
+  ],
+  "armor_base_12": [
+   "left",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_8": [
+   "forward",
+   "vehicle_steel_armor:85"
+  ],
+  "armor_base_9": [
+   "forward",
+   "vehicle_steel_armor:85"
+  ],
+  "armor_base_7": [
+   "right",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_6": [
+   "left",
+   "vehicle_steel_armor:50"
+  ]
+ },
+ "models/vehicles/lgn_flyer_mp.model": {
+  "armor_base_5": [
+   "forward",
+   "vehicle_steel_armor:85"
+  ],
+  "armor_base_2": [
+   "bottom",
+   "vehicle_steel_armor:85"
+  ],
+  "armor_base_4": [
+   "bottom",
+   "vehicle_steel_armor:85"
+  ],
+  "armor_base_1": [
+   "bottom",
+   "vehicle_steel_armor:85"
+  ],
+  "armor_base_3": [
+   "bottom",
+   "vehicle_steel_armor:85"
+  ],
+  "armor_base_14": [
+   "right",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_15": [
+   "right",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_20": [
+   "left",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_19": [
+   "right",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_18": [
+   "right",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_17": [
+   "left",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_16": [
+   "backward",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_11": [
+   "left",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_13": [
+   "left",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_10": [
+   "forward",
+   "vehicle_steel_armor:85"
+  ],
+  "armor_base_12": [
+   "left",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_8": [
+   "forward",
+   "vehicle_steel_armor:85"
+  ],
+  "armor_base_9": [
+   "forward",
+   "vehicle_steel_armor:85"
+  ],
+  "armor_base_7": [
+   "right",
+   "vehicle_steel_armor:50"
+  ],
+  "armor_base_6": [
+   "left",
+   "vehicle_steel_armor:50"
+  ]
+ },
+ "models/vehicles/lgn_artillery_chassis.model": {
+  "armor_base_hip_right_01": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_hip_left_01": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_hip_left_03": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_hip_right_03": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_hip_right_02": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_hip_left_02": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_chassis_back_02": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_chassis_back_01": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_legs_05": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_legs_04": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_legs_03": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_legs_06": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_legs_01": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_legs_02": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/lgn_artillery_cannon.model": {},
+ "models/vehicles/lgn_artillery_rotary_cannon.model": {},
+ "models/props/lgnbs_feeder_1.model": {},
+ "models/props/lgnbs_cilinder_1.model": {},
+ "models/props/lgnbs_generator_left_1.model": {},
+ "models/props/lgnbs_generator_right_1.model": {},
+ "models/props/lgnbs_generator_right_2.model": {},
+ "models/vehicles/lgn_apc_chassis.model": {
+  "armor_base_08": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_07": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_06": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_05": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_04": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_03": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_02": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_01": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_wheel_01": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_stwheel_01": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_stwheel_02": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_wheel_02": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_stwheel_03": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_stwheel_04": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_09": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_10": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_11": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_12": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_13": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_14": [
+   "top",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_16": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_15": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/lgn_apc_machinegun.model": {},
+ "models/vehicles/lgn_apc_plasma_hmg.model": {},
+ "models/vehicles/lgn_apc_minigun_hmg.model": {},
+ "models/vehicles/lgn_apc_grenade_hmg.model": {},
+ "models/vehicles/lgn_apc_turret_vulkan.model": {
+  "armor_base_turret_04": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_turret_03": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_turret_02": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_turret_01": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/lgn_apc_turret_cannon.model": {
+  "armor_base_turret_04": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_turret_03": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_turret_02": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_turret_01": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/lgn_apc_turret_plasma.model": {
+  "armor_base_turret_04": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_turret_03": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_turret_02": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_turret_01": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/lgn_apc_turret_heavy_plasma.model": {
+  "armor_base_turret_03": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_turret_04": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_turret_02": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_turret_01": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/lgn_apc_turret_heavy_vulkan.model": {
+  "armor_base_turret_03": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_turret_04": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_turret_02": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_turret_01": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/lgn_apc_turret_twinplasma.model": {
+  "armor_base_turret_03": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_turret_04": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_turret_02": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_turret_01": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/lgn_apc_missile_at.model": {},
+ "models/vehicles/lgn_apc_missile_nurs.model": {},
+ "models/vehicles/lgn_apc_missile_aa.model": {},
+ "models/vehicles/lgn_apc_chassis_supplies.model": {
+  "armor_base_16": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_15": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_14": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_13": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_12": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_11": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_08": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_07": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_06": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_05": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_04": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_03": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_02": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_01": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_stwheel_04": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_stwheel_03": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_wheel_02": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_stwheel_02": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_stwheel_01": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_wheel_01": [
+   "left",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/spider.model": {
+  "armor_main_right_01": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_right_02": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_rear_03": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_rear_04": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_rear_07": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_rear_08": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_rear_05": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_rear_06": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_rear_01": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_rear_02": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_left_03": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_left_04": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_left_01": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_left_02": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_front_03": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_front_04": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_front_07": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_front_08": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_front_05": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_front_06": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_front_01": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_front_02": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_right_03": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_main_right_04": [
+   "right",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/lgnbs_turretbase_separate.model": {
+  "armor_detail_6": [
+   "forward",
+   "vehicle_steel_armor:100"
+  ],
+  "armor_detail_5": [
+   "forward",
+   "vehicle_steel_armor:100"
+  ],
+  "armor_detail_4": [
+   "right",
+   "vehicle_steel_armor:100"
+  ],
+  "armor_detail_3": [
+   "left",
+   "vehicle_steel_armor:100"
+  ],
+  "armor_detail_2": [
+   "forward",
+   "vehicle_steel_armor:100"
+  ],
+  "armor_detail_1": [
+   "forward",
+   "vehicle_steel_armor:100"
+  ]
+ },
+ "models/vehicles/lgn_tank_chassis.model": {
+  "armor_base_left_01": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_base_right_01": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_base_left_02": [
+   "left",
+   "tank_steel_armor:180"
+  ],
+  "armor_base_right_02": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_base_left_03": [
+   "left",
+   "tank_steel_armor:180"
+  ],
+  "armor_base_right_03": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_base_left_04": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_base_right_04": [
+   "backward",
+   "tank_steel_armor:87"
+  ]
+ },
+ "models/vehicles/lgn_tank_turret_plasma.model": {
+  "armor_turret_base_01": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_02": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_03": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_04": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_05": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_06": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_turret_base_right_06": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_turret_base_right_07": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_turret_base_right_05": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_turret_base_right_04": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_right_03": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_right_02": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_right_01": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_left_07": [
+   "left",
+   "tank_steel_armor:180"
+  ],
+  "armor_turret_base_left_06": [
+   "left",
+   "tank_steel_armor:180"
+  ],
+  "armor_turret_base_left_05": [
+   "left",
+   "tank_steel_armor:180"
+  ],
+  "armor_turret_base_left_04": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_left_03": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_left_02": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_left_01": [
+   "forward",
+   "tank_steel_armor:410"
+  ]
+ },
+ "models/vehicles/lgn_tank_turret_cannon.model": {
+  "armor_turret_base_02": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_01": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_right_03": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_right_02": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_right_01": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_left_03": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_left_02": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_left_01": [
+   "forward",
+   "tank_steel_armor:410"
+  ]
+ },
+ "models/vehicles/lgn_tank_turret_vulkan.model": {
+  "armor_turret_base_right_03": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_right_02": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_right_01": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_left_03": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_left_02": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_left_01": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_left_06": [
+   "left",
+   "tank_steel_armor:180"
+  ],
+  "armor_turret_base_right_06": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_turret_base_right_04": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_right_05": [
+   "right",
+   "tank_steel_armor:180"
+  ],
+  "armor_turret_base_left_04": [
+   "forward",
+   "tank_steel_armor:410"
+  ],
+  "armor_turret_base_left_05": [
+   "left",
+   "tank_steel_armor:180"
+  ]
+ },
+ "models/props/lgnbs_warning_tower_1.model": {},
+ "models/vehicles/lgn_madrobot_chassis.model": {
+  "armor_base_chassis_01": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_02": [
+   "forward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_03": [
+   "forward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_04": [
+   "forward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_05": [
+   "backward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_06": [
+   "backward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_07": [
+   "top",
+   "tank_steel_armor:180"
+  ],
+  "armor_base_chassis_09": [
+   "forward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_11": [
+   "top",
+   "tank_steel_armor:180"
+  ],
+  "armor_base_chassis_12": [
+   "backward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_16": [
+   "top",
+   "tank_steel_armor:180"
+  ],
+  "armor_base_chassis_18": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_20": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_24": [
+   "backward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_25": [
+   "backward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_54": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_53": [
+   "top",
+   "tank_steel_armor:180"
+  ],
+  "armor_base_chassis_52": [
+   "top",
+   "tank_steel_armor:180"
+  ],
+  "armor_base_chassis_51": [
+   "top",
+   "tank_steel_armor:180"
+  ],
+  "armor_base_chassis_37": [
+   "top",
+   "tank_steel_armor:180"
+  ],
+  "armor_base_chassis_50": [
+   "top",
+   "tank_steel_armor:180"
+  ],
+  "armor_base_chassis_49": [
+   "top",
+   "tank_steel_armor:180"
+  ],
+  "armor_base_chassis_48": [
+   "top",
+   "tank_steel_armor:180"
+  ],
+  "armor_base_chassis_47": [
+   "top",
+   "tank_steel_armor:180"
+  ],
+  "armor_base_chassis_46": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_19": [
+   "forward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_17": [
+   "backward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_21": [
+   "backward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_32": [
+   "backward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_35": [
+   "backward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_14": [
+   "backward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_38": [
+   "backward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_31": [
+   "backward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_36": [
+   "backward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_13": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_15": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_40": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_29": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_44": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_26": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_42": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_27": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_28": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_39": [
+   "forward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_33": [
+   "forward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_34": [
+   "forward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_43": [
+   "forward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_10": [
+   "forward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_41": [
+   "forward",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_45": [
+   "forward",
+   "tank_steel_armor:120"
+  ]
+ },
+ "models/vehicles/lgn_madrobot_cannons_main.model": {
+  "armor_base_chassis_23": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_22": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_08": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_62": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_58": [
+   "left",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_55": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_56": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_60": [
+   "right",
+   "tank_steel_armor:120"
+  ]
+ },
+ "models/vehicles/lgn_madrobot_miniguns_front.model": {},
+ "models/vehicles/lgn_madrobot_miniguns_rear.model": {},
+ "models/vehicles/lgn_madrobot_missile_big_right.model": {
+  "armor_base_chassis_57": [
+   "left",
+   "tank_steel_armor:120"
+  ]
+ },
+ "models/vehicles/lgn_madrobot_missile_big_left.model": {
+  "armor_base_chassis_61": [
+   "right",
+   "tank_steel_armor:120"
+  ],
+  "armor_base_chassis_59": [
+   "right",
+   "tank_steel_armor:120"
+  ]
+ },
+ "models/vehicles/md-500_v1.model": {},
+ "models/weapons/md500_hellfire.model": {},
+ "models/weapons/md500_hidra.model": {},
+ "models/weapons/md500_hidra_big.model": {},
+ "models/weapons/md500_sidewinder.model": {},
+ "models/vehicles/res_uh-1_v1.model": {
+  "armor_base_02": [
+   "forward",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_01": [
+   "bottom",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_08": [
+   "bottom",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_09": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_07": [
+   "right",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_06": [
+   "right",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_05": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_04": [
+   "forward",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_03": [
+   "backward",
+   "vehicle_steel_armor:40"
+  ]
+ },
+ "models/vehicles/res_uh-1_v1_mp.model": {
+  "armor_base_09": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_08": [
+   "bottom",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_07": [
+   "right",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_06": [
+   "right",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_05": [
+   "left",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_04": [
+   "forward",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_03": [
+   "backward",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_02": [
+   "forward",
+   "vehicle_steel_armor:40"
+  ],
+  "armor_base_01": [
+   "bottom",
+   "vehicle_steel_armor:40"
+  ]
+ },
+ "models/weapons/uh1_hidra.model": {},
+ "models/weapons/uh1_minigun.model": {},
+ "models/weapons/uh1_sidewinder.model": {},
+ "models/weapons/uh1_hidra_big.model": {},
+ "models/vehicles/buldozer_chassis.model": {
+  "armor_base_09": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_10": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_01": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_02": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_03": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_04": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_05": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_06": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_07": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_base_08": [
+   "right",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/towed_refueller_v1.model": {
+  "armor_detail_15": [
+   "right",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_detail_14": [
+   "forward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_detail_13": [
+   "backward",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_detail_10": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_detail_09": [
+   "right",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/guntruck_turret_browning.model": {},
+ "models/vehicles/guntruck_turret_atgm_launcher.model": {},
+ "models/vehicles/guntruck_turret_recoilless_gun.model": {},
+ "models/vehicles/guntruck_turret_plasma_recoilless_gun.model": {},
+ "models/vehicles/guntruck_turret_minigun.model": {},
+ "models/vehicles/guntruck_turret_grenade_launcher.model": {},
+ "models/vehicles/guntruck_turret_plasma_hmg.model": {},
+ "models/vehicles/ford_150_v1.model": {},
+ "models/vehicles/towed_gun_chassis_2.model": {},
+ "models/vehicles/towed_heavy_tower_v1.model": {
+  "armor_detail_2": [
+   "left",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_1": [
+   "right",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_7": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_5": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_6": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_bascket": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_3": [
+   "right",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_8": [
+   "left",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_panoram": [
+   "top",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_4": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_stair": [
+   "forward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_meteo": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_sight": [
+   "top",
+   "tank_steel_armor:87"
+  ],
+  "armor_wheel": [
+   "backward",
+   "tank_steel_armor:87"
+  ]
+ },
+ "models/vehicles/towed_heavy_tower_2v2.model": {
+  "armor_hw_detail_3": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_hw_detail_2": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_hw_antenn": [
+   "top",
+   "tank_steel_armor:87"
+  ],
+  "armor_hw_box_l": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_hw_step_l": [
+   "left",
+   "tank_steel_armor:87"
+  ],
+  "armor_hw_step_r": [
+   "right",
+   "tank_steel_armor:87"
+  ],
+  "armor_hw_stair_1": [
+   "forward",
+   "tank_steel_armor:87"
+  ],
+  "armor_hw_meteo": [
+   "top",
+   "tank_steel_armor:87"
+  ],
+  "armor_hw_detail_4": [
+   "top",
+   "tank_steel_armor:87"
+  ],
+  "armor_hw_sight": [
+   "top",
+   "tank_steel_armor:87"
+  ],
+  "armor_hw_box_r": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_hw_wire": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_hw_detail_1": [
+   "backward",
+   "tank_steel_armor:87"
+  ]
+ },
+ "models/vehicles/towed_heavy_tower_v1_twinplasma.model": {
+  "armor_detail_bascket": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_stair": [
+   "forward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_4": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_5": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_6": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_3": [
+   "right",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_8": [
+   "left",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_panoram": [
+   "top",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_2": [
+   "left",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_1": [
+   "right",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_meteo": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_sight": [
+   "top",
+   "tank_steel_armor:87"
+  ]
+ },
+ "models/vehicles/towed_heavy_tower_v1_plasma.model": {
+  "armor_detail_bascket": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_stair": [
+   "forward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_4": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_5": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_6": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_3": [
+   "right",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_8": [
+   "left",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_panoram": [
+   "top",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_2": [
+   "left",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_1": [
+   "right",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_meteo": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_sight": [
+   "top",
+   "tank_steel_armor:87"
+  ]
+ },
+ "models/vehicles/towed_heavy_tower_v1_vulcan.model": {
+  "armor_detail_bascket": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_stair": [
+   "forward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_4": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_5": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_6": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_3": [
+   "right",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_8": [
+   "left",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_panoram": [
+   "top",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_2": [
+   "left",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_1": [
+   "right",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_meteo": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_sight": [
+   "top",
+   "tank_steel_armor:87"
+  ]
+ },
+ "models/vehicles/towed_heavy_tower_v1_railcannon.model": {
+  "armor_detail_bascket": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_stair": [
+   "forward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_4": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_5": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_6": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_3": [
+   "right",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_8": [
+   "left",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_panoram": [
+   "top",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_2": [
+   "left",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_1": [
+   "right",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_meteo": [
+   "backward",
+   "tank_steel_armor:87"
+  ],
+  "armor_detail_sight": [
+   "top",
+   "tank_steel_armor:87"
+  ]
+ },
+ "models/vehicles/towed_gun_chassis_1.model": {},
+ "models/vehicles/towed_gun_light_turret_cannon.model": {
+  "armor_basket": [
+   "backward",
+   "vehicle_steel_armor:30"
+  ],
+  "armor_detail_5": [
+   "backward",
+   "vehicle_steel_armor:30"
+  ],
+  "armor_detail_3": [
+   "backward",
+   "vehicle_steel_armor:30"
+  ],
+  "armor_detail_4": [
+   "backward",
+   "vehicle_steel_armor:30"
+  ],
+  "armor_detail_1": [
+   "left",
+   "vehicle_steel_armor:30"
+  ]
+ },
+ "models/vehicles/towed_gun_light_turret_vulkan.model": {
+  "armor_detail_1": [
+   "left",
+   "vehicle_steel_armor:30"
+  ],
+  "armor_detail_3": [
+   "backward",
+   "vehicle_steel_armor:30"
+  ],
+  "armor_detail_2": [
+   "backward",
+   "vehicle_steel_armor:30"
+  ]
+ },
+ "models/vehicles/towed_gun_light_turret_plasma.model": {
+  "armor_basket": [
+   "backward",
+   "vehicle_steel_armor:30"
+  ],
+  "armor_detail_3": [
+   "backward",
+   "vehicle_steel_armor:30"
+  ],
+  "armor_detail_4": [
+   "backward",
+   "vehicle_steel_armor:30"
+  ],
+  "armor_detail_1": [
+   "left",
+   "vehicle_steel_armor:30"
+  ]
+ },
+ "models/vehicles/towed_gun_light_turret_howitzer.model": {
+  "armor_box": [
+   "backward",
+   "vehicle_steel_armor:30"
+  ],
+  "armor_detail_3": [
+   "backward",
+   "vehicle_steel_armor:30"
+  ],
+  "armor_detail_2": [
+   "backward",
+   "vehicle_steel_armor:30"
+  ],
+  "armor_detail_1": [
+   "left",
+   "vehicle_steel_armor:30"
+  ]
+ },
+ "models/vehicles/towed_blinder_v1.model": {
+  "armor_detail_06": [
+   "left",
+   "main_gun:37"
+  ],
+  "armor_detail_11": [
+   "backward",
+   "main_gun:450"
+  ],
+  "armor_detail_09": [
+   "right",
+   "main_gun:37"
+  ],
+  "armor_detail_08": [
+   "left",
+   "main_gun:37"
+  ],
+  "armor_detail_01": [
+   "right",
+   "main_gun:37"
+  ],
+  "armor_detail_03": [
+   "forward",
+   "main_gun:450"
+  ],
+  "armor_detail_05": [
+   "forward",
+   "main_gun:450"
+  ],
+  "armor_detail_12": [
+   "backward",
+   "main_gun:450"
+  ],
+  "armor_detail_10": [
+   "backward",
+   "main_gun:450"
+  ],
+  "armor_detail_13": [
+   "backward",
+   "main_gun:450"
+  ],
+  "armor_detail_04": [
+   "forward",
+   "main_gun:450"
+  ]
+ },
+ "models/vehicles/towed_charger_v1.model": {
+  "armor_detail_10": [
+   "left",
+   "vehicle_steel_armor:25"
+  ],
+  "armor_detail_13": [
+   "right",
+   "vehicle_steel_armor:25"
+  ]
+ },
+ "models/vehicles/towed_truck_1.model": {},
+ "models/vehicles/ford_350_v1.model": {},
+ "models/vehicles/sherman_railcannon.model": {
+  "armor_detail_07": [
+   "backward",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_detail_08": [
+   "backward",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_detail_05": [
+   "backward",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_detail_06": [
+   "backward",
+   "vehicle_steel_armor:82"
+  ],
+  "armor_detail_01": [
+   "forward",
+   "vehicle_steel_armor:185"
+  ],
+  "armor_detail_02": [
+   "forward",
+   "vehicle_steel_armor:185"
+  ],
+  "armor_detail_04": [
+   "forward",
+   "vehicle_steel_armor:185"
+  ],
+  "armor_detail_03": [
+   "forward",
+   "vehicle_steel_armor:185"
+  ]
+ },
+ "models/buildings/rock_small_6_quest.model": {},
+ "models/props/fnd_gates_interactive_01.model": {},
+ "models/props/fnd_gates_interactive_02.model": {},
+ "models/props/fnd_gates_interactive_03.model": {},
+ "models/vehicles/ford_650_recharger.model": {},
+ "models/vehicles/ford_650_refueller.model": {},
+ "models/vehicles/ford_650_v1.model": {}
+}

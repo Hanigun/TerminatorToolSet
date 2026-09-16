@@ -1158,10 +1158,12 @@ class Uprising:
                     except OSError:
                         pass
 
-    def dds_webp(self, src, subdir=None, root=None):
+    def dds_webp(self, src, subdir=None, root=None, normal_fix=False):
         """DDS -> WebP в assets/CustomImages/<слой>/ (качество 85).
         Имя строго {stem}.webp от исходника (marder.dds -> marder.webp);
-        существующий файл просто перезаписывается. Свежий (не старше
+        при normal_fix (двухканальные BC5-нормали: Z восстанавливается,
+        иначе свет инвертирован) — {stem}.nrm.webp отдельным кэшем.
+        Существующий файл просто перезаписывается. Свежий (не старше
         исходника) — не переконвертируется. Путь к готовому файлу или ''."""
         try:
             if not src or not os.path.isfile(src):
@@ -1171,7 +1173,7 @@ class Uprising:
             stem = os.path.splitext(os.path.basename(src))[0]
             if not stem:
                 return ""
-            fn = stem + ".webp"
+            fn = stem + (".nrm.webp" if normal_fix else ".webp")
             mt = os.path.getmtime(src)
             for d in (self.custom_dir_ext,
                       self.webp_buckets.get("custom", "")):
@@ -1189,7 +1191,8 @@ class Uprising:
             if not dst_dir:
                 return ""
             from . import dds_converter as _dc
-            if _dc.convert_file(src, os.path.join(dst_dir, fn)):
+            if _dc.convert_file(src, os.path.join(dst_dir, fn),
+                                normal_fix=bool(normal_fix)):
                 self._drop_legacy_flat(stem)
                 # индекс webp перестроится по mtime папки сам
                 return os.path.join(dst_dir, fn)
