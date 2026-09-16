@@ -51,22 +51,6 @@ if "--disable-logging" not in _extra_wv_args:
         (_extra_wv_args + " --disable-logging --log-level=3").strip())
 del _extra_wv_args
 
-# Второй рубеж — фильтр ОС-stderr от той же гонки Chromium
-# (см. install_chromium_stderr_filter): --disable-logging давит часть
-# логов, но «Failed to unregister class Chrome_WidgetWin_0» прилетает
-# нативным write(2) мимо него. Ставится ДО любых импортов, способных
-# создать WebView2. Без консоли (frozen GUI) — безопасный no-op.
-try:
-    from terminator_toolset.infrastructure.logging import (
-        install_chromium_stderr_filter as _quiet_chromium)
-    _quiet_chromium()
-    del _quiet_chromium
-except Exception:
-    try:
-        del _quiet_chromium
-    except Exception:
-        pass
-
 import threading
 import time
 import webbrowser

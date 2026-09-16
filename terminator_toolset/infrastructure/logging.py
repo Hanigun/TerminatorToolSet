@@ -196,6 +196,24 @@ def install_chromium_stderr_filter():
                 os.close(wfd)
             except Exception:  # noqa: BLE001
                 pass
+            # Дочерние msedgewebview2.exe наследуют Win32 STD-хендлы, а не
+            # CRT-дескрипторы: один dup2 их не накрывает, и шум из дочернего
+            # процесса при teardown шёл мимо трубы прямо в консоль. Поэтому
+            # делаем write-конец наследуемым и подменяем STD_ERROR_HANDLE —
+            # дети тоже пишут в трубу и тоже фильтруются. Best-effort: если
+            # не вышло, фильтр уровня своего процесса всё равно работает.
+            try:
+                os.set_inheritable(fd, True)
+            except Exception:  # noqa: BLE001
+                pass
+            if os.name == "nt":
+                try:
+                    import ctypes as _ctypes
+                    import msvcrt as _msvcrt
+                    _pipe_handle = _msvcrt.get_osfhandle(fd)
+                    _ctypes.windll.kernel32.SetStdHandle(-12, _pipe_handle)
+                except Exception:  # noqa: BLE001
+                    pass
         except Exception:  # noqa: BLE001
             try:
                 os.close(saved)
@@ -231,6 +249,31 @@ def install_chromium_stderr_filter():
         th = threading.Thread(target=_pump, daemon=True,
                               name="chromium-stderr-filter")
         th.start()
+        # При штатном выходе вернуть fd 2 на консоль и дать нити отдать
+        # остаток трубы: иначе последние строки (включая настоящие
+        # трейсбеки) могут потеряться вместе с daemon-нитью. os._exit-пути
+        # (safety-net) atexit не вызывают — там умирает и сам шум.
+        try:
+            import atexit as _atexit
+
+            def _restore(_fd=fd, _saved=saved, _rfd=rfd, _th=th):
+                try:
+                    os.dup2(_saved, _fd)
+                except Exception:  # noqa: BLE001
+                    pass
+                try:
+                    _th.join(timeout=1.0)
+                except Exception:  # noqa: BLE001
+                    pass
+                for _h in (_saved, _rfd):
+                    try:
+                        os.close(_h)
+                    except Exception:  # noqa: BLE001
+                        pass
+
+            _atexit.register(_restore)
+        except Exception:  # noqa: BLE001
+            pass
     except Exception:  # noqa: BLE001
         pass
 
