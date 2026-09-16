@@ -105,7 +105,11 @@ def register_uprising(app, ctx):
                 icon_rel, kind = ent
                 p = upr.icon_file(root, icon_rel, kind)
                 if p and p.lower().endswith(".dds"):
-                    p = upr.dds_png(p) or ""
+                    # Мисс пишет в ОБЩИЙ persistent-кэш
+                    # CustomImages/<слой>/{stem}.webp, а не в temp-png:
+                    # иначе каждая холодная загрузка гонит сотни
+                    # одноразовых конвертаций и ничего не хранит.
+                    p = upr.dds_webp(p, root=root) or ""
         if not p and cat:
             ph = upr.category_placeholder(cat, name)
             if ph:

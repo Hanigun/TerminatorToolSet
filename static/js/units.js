@@ -1061,6 +1061,31 @@ async function untEnsureIcons() {
     if (!state.units) return;
     if (j && j.ok) {
       Object.assign(state.units.iconMap, j.icons || {});
+      // Недолёт батча — не temp-одиночки, а persistent-предзагрузка
+      // (образец uprPreloadMissing карты): мисс пишет webp в общий
+      // CustomImages/<слой>, затем батч добирается. Иначе каждая
+      // холодная загрузка гнала сотни dds->png во временную папку.
+      const missing = names.filter(n => !((j.icons || {})[n]));
+      const CH = 100;
+      for (let i = 0; i < missing.length; i += CH) {
+        if (my !== state.units.iconSeq || !state.units) return;
+        try {
+          await api("/api/uprising_icon_preload", { method: "POST",
+            body: JSON.stringify({ root,
+              names: missing.slice(i, i + CH) }), timeout: 180000 });
+        } catch (e) { /* чанк не дожался — остальные всё равно идут */ }
+      }
+      if (missing.length && my === state.units.iconSeq && state.units) {
+        try {
+          const r2 = await api("/api/uprising_icons_data", { method: "POST",
+            body: JSON.stringify({ root, names: missing }),
+            timeout: 60000 });
+          const j2 = await r2.json();
+          if (j2 && j2.ok)
+            Object.assign(state.units.iconMap, j2.icons || {});
+        } catch (e) { /* чипы добирают одиночными через uprChipIcon */ }
+      }
+      if (my !== state.units.iconSeq || !state.units) return;
       state.units.iconsReady = true;
       // ховер/selected-пары иконок — тем же батчем, что карты.
       if (typeof uprEnsureIconStates === "function") {

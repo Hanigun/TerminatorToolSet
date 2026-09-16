@@ -461,6 +461,18 @@ button.upr-map-btn.rnd {
   width: 124px; height: auto; }
 #campaign-tab .upr-cat-body .upr-chip.upr-card.inf.cmp-span .upr-chip-icon {
   width: 72px; height: auto; }
+/* резерв места иконки до загрузки: без него height:auto даёт 0/32px,
+   карточка короче 110px-фона и фоны соседних слотов наезжают друг
+   на друга до первой отрисовки иконок; после загрузки побеждает
+   intrinsic-пропорция картинки */
+.upr-chip.upr-card.veh .upr-chip-icon,
+#campaign-tab .upr-cat-body .upr-chip.upr-card.veh.cmp-span .upr-chip-icon,
+#units-tab .upr-cat-body .upr-chip.upr-card.veh.cmp-span .upr-chip-icon {
+  aspect-ratio: 136 / 72; }
+.upr-chip.upr-card.inf .upr-chip-icon,
+#campaign-tab .upr-cat-body .upr-chip.upr-card.inf.cmp-span .upr-chip-icon,
+#units-tab .upr-cat-body .upr-chip.upr-card.inf.cmp-span .upr-chip-icon {
+  aspect-ratio: 1 / 1; }
 /* ЭКСПЕРИМЕНТ «слот техники»: страховка — призрак всегда только иконка
    (фон/sysname/полоса/цена гасятся, даже если ghostStrip где-то не вызван) */
 .upr-drag-ghost.veh, .upr-drag-ghost .veh { background: transparent;
