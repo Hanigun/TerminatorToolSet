@@ -148,20 +148,6 @@
 /* подпись мода: цвет текста фиксирован и при наведении (id перебивает
    любые ховер-правила), курсор обычный — текст некликабелен */
 #mod-path-label, #mod-path-label:hover { color: var(--text); cursor: default; }
-.modpath-arrow {
-  width: 24px; height: 20px; flex: none;
-  display: inline-flex; align-items: center; justify-content: center;
-  cursor: pointer;
-}
-.modpath-arrow::before {
-  content: ""; width: 0; height: 0;
-  border-top: 8px solid transparent;
-  border-bottom: 8px solid transparent;
-  border-left: 12px solid var(--text-mute);
-  transform-origin: center; transition: transform .15s ease;
-}
-.modpath-arrow:hover::before { border-left-color: var(--text); }
-.modpath-group.open .modpath-arrow::before { transform: rotate(90deg); }
 /* Саб-меню — один тёмный блок; отдельные блоки у пунктов убраны.
    Дочерность — современное скруглённое дерево: вертикаль
    и отводы со скруглёнными углами. */
@@ -172,13 +158,13 @@
 }
 .modpath-menu[hidden] { display: none; }
 .modsp-items {
-  display: flex; flex-direction: column;
+  display: flex; flex-direction: column; gap: 8px;
 }
 .modsp-item { position: relative; padding-left: 26px; }
 /* вертикаль дерева: у первого пункта — на всю высоту (мост в зазор),
    у последнего — только до своей строки */
 .modsp-item.has-next::before {
-  content: ""; position: absolute; left: 9px; top: 0; bottom: -10px;
+  content: ""; position: absolute; left: 9px; top: 0; bottom: -8px;
   border-left: 2px solid var(--text-faint, #5a6068);
 }
 .modsp-item.has-next .setting-row::after {
@@ -194,36 +180,13 @@
   border-radius: 0 0 0 12px;
 }
 .modsp-items .setting-row { position: relative; }
-/* Статусы саб-путей внутри саб-меню */
-.modsp-panel {
-  background: none; border: none; border-radius: 0; padding: 2px 0 0;
-  display: flex; flex-direction: column; gap: 10px;
-  max-height: 220px; overflow-y: auto;
-}
-.modsp-group { display: flex; flex-direction: column; gap: 4px; }
-.modsp-head { display: flex; align-items: center; gap: 7px; }
-.modsp-title {
-  font-size: 11px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: .06em; color: var(--text-mute);
-}
-.modsp-gdot { font-size: 10px; color: var(--text-faint, #5a6068); }
-.modsp-gdot::before { content: "●"; }
-.modsp-gdot.ok { color: #7bc88a; }
-.modsp-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-.modsp-row.miss { opacity: .62; }
-.modsp-dot { font-size: 10px; width: 14px; text-align: center; color: #7bc88a; }
-.modsp-row.miss .modsp-dot { color: var(--text-faint, #5a6068); }
-.modsp-rel {
-  flex: 1; min-width: 0; font-family: Consolas, monospace;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
+/* чипы модалки отказа пути */
 .modsp-pill {
   font-size: 10px; border: 1px solid var(--border); border-radius: 10px;
   padding: 1px 8px; color: var(--text-mute); white-space: nowrap;
 }
 .modsp-pill.sub { color: #e8c15a; border-color: #6b5a2a; }
 .modsp-pill.miss { color: var(--text-faint, #5a6068); }
-.modsp-empty { font-size: 12px; color: var(--text-mute); }
 /* Модалка отказа пути: текст + две колонки чипов */
 .modwarn-text { font-size: 13px; color: var(--text); margin: 2px 0 10px; }
 .modwarn-cols { display: flex; gap: 12px; margin-bottom: 4px; }

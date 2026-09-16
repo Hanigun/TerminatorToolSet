@@ -292,7 +292,6 @@ async function init() {
       if (pp && normPath(pp) !== normPath(curRoot)) await loadProject(pp);
       else refreshSrcPaths();
       syncPathClear();
-      try { if (typeof refreshModSubpaths === "function") refreshModSubpaths(); } catch (e) {}
       toast(t("save_success"), "ok");
     }
   });
@@ -301,11 +300,6 @@ async function init() {
     if (p) {
       $("#set-mod-path").value = p;
       syncPathClear();
-      try {
-        const menu = document.getElementById("mod-path-menu");
-        if (menu && !menu.hidden && typeof refreshModSubpaths === "function")
-          refreshModSubpaths();
-      } catch (e) {}
     }
   });
   // иконка папки логов в ряду категорий настроек (справа): открыть Logs

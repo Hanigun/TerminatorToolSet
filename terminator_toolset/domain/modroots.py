@@ -95,7 +95,8 @@ def layer_bases_union(mod_root: str, overlay: object = "") -> "list[str]":
 
 def mod_subpaths(mod_root: str, assets: str = "",
                   models: str = "") -> dict:
-    """Саб-пути для саб-меню настроек: {textures:[...], models:[...]}.
+    """Саб-пути мода: {textures:[...], models:[...]} (бэкенд, currently
+    unused — статус-лист из настроек убран, оставить для будущего).
 
     Каждый элемент {rel, exists, where}: rel — путь вида
     basis/textures или dlc/<Имя>/basis/models; where — "mod"/"assets"/
@@ -146,7 +147,7 @@ def mod_subpaths(mod_root: str, assets: str = "",
         add(rel, _TEX_TAILS)
     for rel in MODEL_SUBPATHS:
         add(rel, _MODEL_TAILS)
-    # DLC-варианты: только реально существующие на диске (обоих корней).
+    # DLC-варианты: только реально существующие на диске (всех корней).
     for root, _tag in roots:
         try:
             dlcs = sorted(glob.glob(os.path.join(root, "dlc", "*")))

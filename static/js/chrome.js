@@ -1157,7 +1157,6 @@ function openSettings(tab) {
   $("#settings-modal").hidden = false;
   syncPathClear();
   try { syncModSubClear(); } catch (e) {}
-  try { if (typeof refreshModSubpaths === "function") refreshModSubpaths(); } catch (e2) {}
   if (tab) {
     const btn = document.querySelector('.settings-tabs .st-tab[data-st="' + tab + '"]');
     if (btn) btn.click();

@@ -1,6 +1,6 @@
-// Саб-пути мода: строка пути — ещё и кнопка, из неё выпадает саб-меню
-// с двумя пунктами (ассеты, модели) и статусами саб-путей.
-// Плюс модалка отказа при неверной структуре папки.
+// Саб-пути мода: блок пути — кнопка саб-меню с двумя пунктами
+// (ассеты, модели) деревом. Плюс модалка отказа при неверной
+// структуре папки.
 // Живёт поверх настроек (chrome.js/init.js), свои id — только здесь.
 "use strict";
 
@@ -14,94 +14,6 @@ function toggleModPathMenu(force) {
   if (group) {
     group.classList.toggle("open", open);
     group.setAttribute("aria-expanded", open ? "true" : "false");
-  }
-  if (open) refreshModSubpaths();
-}
-
-// Живые значения трёх путей (набранное, ещё не сохранённое — тоже).
-function modPathsLive() {
-  const val = id => {
-    const el = document.getElementById(id);
-    return el ? el.value.trim() : "";
-  };
-  return {
-    root: val("set-mod-path"),
-    assets: val("set-mod-assets"),
-    models: val("set-mod-models"),
-  };
-}
-
-// Статусы саб-путей в саб-меню: группы с бэкенда /api/mod_subpaths.
-async function refreshModSubpaths() {
-  const panel = document.getElementById("mod-subpaths");
-  if (!panel) return;
-  const live = modPathsLive();
-  if (!live.root) {
-    panel.innerHTML = "";
-    const d = document.createElement("div");
-    d.className = "modsp-empty";
-    d.textContent = t("modsp_empty") || "Укажи путь мода — саб-пути появятся здесь";
-    panel.appendChild(d);
-    return;
-  }
-  let j = null;
-  try {
-    const r = await api("/api/mod_subpaths?root=" + encodeURIComponent(live.root)
-      + "&assets=" + encodeURIComponent(live.assets)
-      + "&models=" + encodeURIComponent(live.models));
-    j = await r.json();
-  } catch (e) { j = null; }
-  panel.innerHTML = "";
-  if (!j || !j.ok) {
-    const d = document.createElement("div");
-    d.className = "modsp-empty";
-    d.textContent = t("modsp_empty") || "Укажи путь мода — саб-пути появятся здесь";
-    panel.appendChild(d);
-    return;
-  }
-  const groups = j.groups || {};
-  for (const g of ["textures", "models"]) {
-    const items = groups[g] || [];
-    const box = document.createElement("div");
-    box.className = "modsp-group";
-    const head = document.createElement("div");
-    head.className = "modsp-head";
-    const dot = document.createElement("span");
-    dot.className = "modsp-gdot" + (items.some(x => x.exists) ? " ok" : "");
-    head.appendChild(dot);
-    const ttl = document.createElement("span");
-    ttl.className = "modsp-title";
-    ttl.textContent = g === "textures"
-      ? (t("mod_subpaths_textures") || "Текстуры")
-      : (t("mod_subpaths_models") || "Модели");
-    head.appendChild(ttl);
-    box.appendChild(head);
-    for (const it of items) {
-      const row = document.createElement("div");
-      row.className = "modsp-row" + (it.exists ? " ok" : " miss");
-      const st = document.createElement("span");
-      st.className = "modsp-dot" + (it.exists ? " ok" : "");
-      st.textContent = it.exists ? "●" : "○";
-      row.appendChild(st);
-      const rel = document.createElement("span");
-      rel.className = "modsp-rel";
-      rel.textContent = it.rel;
-      rel.title = it.rel;
-      row.appendChild(rel);
-      const pill = document.createElement("span");
-      pill.className = "modsp-pill" + (!it.exists ? " miss"
-        : it.where === "mod" ? "" : " sub");
-      pill.textContent = !it.exists
-        ? (t("modsp_missing") || "нет")
-        : it.where === "assets"
-          ? (t("modsp_in_assets") || "ассеты")
-          : it.where === "models"
-            ? (t("modsp_in_models") || "модели")
-            : (t("modsp_in_mod") || "мод");
-      row.appendChild(pill);
-      box.appendChild(row);
-    }
-    panel.appendChild(box);
   }
 }
 
@@ -165,7 +77,6 @@ function revertModPathFields() {
   set("set-mod-models", (state.config && state.config.mod_models_path) || "");
   try { syncPathClear(); } catch (e) {}
   syncModSubClear();
-  refreshModSubpaths();
 }
 
 // Крестики саб-путей: видны только при указанном пути.
@@ -197,13 +108,10 @@ function syncModSubClear() {
   document.addEventListener("keydown", e => {
     if (e.key === "Escape" && menu && !menu.hidden) toggleModPathMenu(false);
   });
-  // живой пересчёт статусов при наборе любого из трёх путей
+  // крестики саб-путей при наборе: только видимость
   for (const id of ["set-mod-path", "set-mod-assets", "set-mod-models"]) {
     const el = document.getElementById(id);
-    if (el) el.addEventListener("input", () => {
-      syncModSubClear();
-      if (menu && !menu.hidden) refreshModSubpathsDebounced();
-    });
+    if (el) el.addEventListener("input", syncModSubClear);
   }
   // пункты саб-меню: выбор папки / крестик
   for (const [sfx, key] of [["assets", "mod_assets_path"],
@@ -219,7 +127,6 @@ function syncModSubClear() {
           if (p && inp) {
             inp.value = p;
             syncModSubClear();
-            refreshModSubpaths();
           }
         } catch (e2) {}
       });
@@ -235,7 +142,6 @@ function syncModSubClear() {
         state.config[key] = "";
         inp.value = "";
         syncModSubClear();
-        refreshModSubpaths();
         toast(t("save_success"), "ok");
       });
     }
@@ -255,7 +161,6 @@ function syncModSubClear() {
       if (a) a.value = "";
       if (m) m.value = "";
       syncModSubClear();
-      refreshModSubpaths();
     });
   }
   const ok = document.getElementById("modwarn-ok");
@@ -263,9 +168,3 @@ function syncModSubClear() {
     document.getElementById("modwarn-modal").hidden = true;
   };
 })();
-
-let _modspTimer = 0;
-function refreshModSubpathsDebounced() {
-  if (_modspTimer) clearTimeout(_modspTimer);
-  _modspTimer = setTimeout(refreshModSubpaths, 400);
-}

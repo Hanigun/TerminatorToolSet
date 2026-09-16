@@ -404,7 +404,7 @@
   "modsp_in_models": "Modelle",
   "modsp_missing": "fehlt",
   "modsp_empty": "Mod-Pfad angeben — Unterpfade erscheinen hier",
-  "set_mod_assets": "Assets-Pfad (_ASSETS)",
+  "set_mod_assets": "Assets-Pfad",
   "set_mod_assets_hint": "Ein <MOD>_ASSETS-Ordner mit reinen Texturen neben dem Mod-Stamm.",
   "set_mod_models": "Modelle-Pfad",
   "set_mod_models_hint": "Ein Modelle-Ordner neben dem Mod-Stamm. Die Suche läuft über den Mod-Stamm, dann die Unterpfade — alles wie eines.",

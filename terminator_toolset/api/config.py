@@ -1,4 +1,4 @@
-"""Config routes: read + validated write, mod sub-paths."""
+"""Config routes: read + validated write."""
 from __future__ import annotations
 
 from flask import jsonify, request
@@ -63,9 +63,9 @@ def register_config(app, ctx):
 
     @app.route("/api/mod_subpaths")
     def api_mod_subpaths():
-        """Саб-пути мода для саб-меню настроек: {textures, models} —
-        [{rel, exists, where}]. ?root/?assets/?models — живой предпросмотр
-        при наборе путей, иначе значения из конфига."""
+        """Саб-пути мода: {textures, models} — [{rel, exists, where}].
+        Currently unused (статус-лист из настроек убран) — оставить
+        для будущего. ?root/?assets/?models, иначе значения из конфига."""
         root = (request.args.get("root", "") or "").strip() \
             or (config.get("mod_path") or "")
         try:

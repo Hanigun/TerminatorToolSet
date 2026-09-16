@@ -404,7 +404,7 @@
   "modsp_in_models": "models",
   "modsp_missing": "missing",
   "modsp_empty": "Set the mod path — sub-paths will appear here",
-  "set_mod_assets": "Assets path (_ASSETS)",
+  "set_mod_assets": "Assets path",
   "set_mod_assets_hint": "A <MOD>_ASSETS folder with plain textures next to the mod root.",
   "set_mod_models": "Models path",
   "set_mod_models_hint": "A models folder next to the mod root. Lookup spans the mod root, then the sub-paths — all seen as one.",
