@@ -418,6 +418,14 @@ function pv3PaintDots(pv3) {
 // домашний вид ядра.
 function pv3ResetView(pv3) {
   if (!pv3 || !pv3.st) return;
+  // Даблклик оставляет фокус на ползунке, а pv3Update из уважения
+  // к драгу сфокусированный не двигает: камера уедет в сток, а ручка
+  // останется. Поэтому сначала сбрасываем фокус — тогда ручки встанут
+  // на точки.
+  try {
+    const ae = document.activeElement;
+    if (ae && ae.type === "range") ae.blur();
+  } catch (e) {}
   if (pv3.stock)
     pv3WritePose(pv3, JSON.parse(JSON.stringify(pv3.stock)));
   else if (pv3.cam) pv3ApplyPose(pv3, pv3.cam);
