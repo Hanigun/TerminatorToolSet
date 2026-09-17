@@ -82,10 +82,10 @@ def register_model3d(app, ctx):
                 # rebuild здесь — второй полный декод гигантских DDS,
                 # секунды на файл. 'normaal' — голландское normal
                 # (US_Abrams_normaal.dds): без него свет на броне врёт.
+                # Признаки — из dds_converter.normal_hints (общие
+                # с фоновым прогревом, чтобы не разъехаться).
                 from terminator_toolset.services import dds_converter as _dc
-                stem = os.path.basename(p).lower()
-                nr = _dc.dds_fourcc(p) == b"BC5U"
-                na = (not nr) and ("normal" in stem or "normaal" in stem)
+                nr, na = _dc.normal_hints(p)
                 p = upr.dds_webp(p, root=root, normal_fix=nr,
                                  normal_auto=na) or ""
             except Exception:  # noqa: BLE001

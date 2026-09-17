@@ -169,3 +169,16 @@ input, textarea, select, [contenteditable="true"] { user-select: text; -webkit-u
   position: relative;
 }
 
+/* Прогрев текстур: тонкий бар под шапкой + пульс кнопки */
+.warmup-bar { position: relative; height: 22px; background: var(--bg);
+  border-bottom: 1px solid var(--border); overflow: hidden; }
+.warmup-bar[hidden] { display: none; }
+.warmup-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0;
+  background: var(--accent-glow); }
+.warmup-label { position: relative; font-size: 12px; line-height: 22px;
+  padding: 0 10px; color: var(--text-mute); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+#btn-warmup.running { color: var(--accent); }
+#btn-warmup.running svg { animation: wu-pulse 1.2s ease-in-out infinite; }
+@keyframes wu-pulse { 50% { opacity: 0.35; } }
+

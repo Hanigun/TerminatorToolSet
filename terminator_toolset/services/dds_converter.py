@@ -30,6 +30,26 @@ def dds_fourcc(path):
         return b""
 
 
+def normal_hints(path):
+    """Подсказки нормали по дешёвым признакам (без декода пикселей):
+    (normal_fix, normal_auto). fix — BC5U по FourCC (первые 128 байт);
+    auto — имя похоже на нормаль (normal/normaal): контент-проверка
+    едет внутри convert_file на уже декодированном кадре. Общее для
+    /api/model_tex и фонового прогрева, чтобы не разъехаться."""
+    try:
+        if dds_fourcc(path) == b"BC5U":
+            return (True, False)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        stem = os.path.basename(path or "").lower()
+    except Exception:  # noqa: BLE001
+        stem = ""
+    if "normal" in stem or "normaal" in stem:
+        return (False, True)
+    return (False, False)
+
+
 def _bands_need_blue(rgb):
     """Контент-признак двухканальной normal-карты по готовым каналам:
     B плоский (~0), R/G разбросаны (XY нормалей). Без открытия файла —

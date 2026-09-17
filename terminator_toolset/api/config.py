@@ -59,6 +59,36 @@ def register_config(app, ctx):
         # тоже гаснет, иначе last_project воскресит удалённый путь при рестарте
         if "project_path" in data and not config.get("project_path"):
             config.set("last_project", "")
+        # галка фонового прогрева: только что подключённый проект/мод
+        # греем один раз (once-учёт в warmup_done); повторные сейвы тех
+        # же путей молчат, ручной прогон — кнопкой в шапке в любой момент
+        try:
+            if config.get("warmup_auto"):
+                try:
+                    done = list(config.get("warmup_done") or [])
+                except Exception:  # noqa: BLE001
+                    done = []
+                import os as _os
+                for _key in ("project_path", "mod_path"):
+                    if _key not in data:
+                        continue
+                    _v = (config.get(_key) or "").strip()
+                    if not _v or not _os.path.isdir(_v):
+                        continue
+                    try:
+                        _n = _os.path.normcase(_os.path.normpath(_v))
+                    except Exception:  # noqa: BLE001
+                        continue
+                    if _n in done:
+                        continue
+                    try:
+                        ctx.warmup.start(_v)
+                    except Exception:  # noqa: BLE001
+                        continue
+                    done.append(_n)
+                config.set("warmup_done", done)
+        except Exception:  # noqa: BLE001
+            pass
         return jsonify({"ok": True})
 
     @app.route("/api/mod_subpaths")

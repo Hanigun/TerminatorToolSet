@@ -1134,6 +1134,7 @@ function openSettings(tab) {
   $("#set-browser-to-tray").checked = !!state.config.browser_to_tray;
   $("#set-auto-hide-tree").checked = !!state.config.auto_hide_tree;
   $("#set-guard-unpacked").checked = state.config.guard_unpacked !== false;
+  $("#set-warmup-auto").checked = !!state.config.warmup_auto;
   $("#set-unpacked").value = state.config.unpacked_path || "";
   $("#set-mod-path").value = state.config.mod_path || "";
   $("#set-mod-assets").value = state.config.mod_assets_path || "";
@@ -1365,6 +1366,7 @@ async function saveSettings() {
     browser_to_tray: $("#set-browser-to-tray").checked,
     auto_hide_tree: $("#set-auto-hide-tree").checked,
     guard_unpacked: $("#set-guard-unpacked").checked,
+    warmup_auto: $("#set-warmup-auto").checked,
     mod_path: $("#set-mod-path").value.trim(),
     mod_assets_path: $("#set-mod-assets").value.trim(),
     mod_models_path: $("#set-mod-models").value.trim(),

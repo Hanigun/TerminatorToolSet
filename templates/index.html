@@ -48,6 +48,7 @@
     <button class="donate-btn" id="btn-discord" data-i18n-title="discord_btn" title="Terminator Discord"><img src="/assets/icons/social/discord.png" alt=""><span data-i18n="discord_btn">Terminator Discord</span></button>
     <button class="icon-btn upd-btn" id="btn-update" data-i18n-title="upd_check" title="Проверить обновления" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 21h16"/></svg><span class="upd-dot" id="btn-update-dot" hidden></span></button>
     <button class="icon-btn upd-btn" id="btn-gameassets" data-i18n-title="ga_title" title="Ассеты игры"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L9.6 4.6A2 2 0 0 0 8.2 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/><path d="M12 10v6"/><path d="M9 13h6"/></svg><span class="upd-dot ga-ok" id="btn-gameassets-dot" hidden></span></button>
+    <button class="icon-btn" id="btn-warmup" data-i18n-title="warmup_title" title="Прогрев текстур"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></button>
     <button class="icon-btn" id="btn-history" data-i18n-title="history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>
     <button class="icon-btn" id="btn-open-browser" data-i18n-title="open_in_browser" title="Открыть в браузере"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18"/></svg></button>
     <button class="icon-btn" id="btn-settings" data-i18n-title="settings" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.65 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08A1.7 1.7 0 0 0 10.12 3V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03z"/></svg></button>
@@ -60,6 +61,11 @@
     </div>
     </div>
   </header>
+
+  <div class="warmup-bar" id="warmup-bar" hidden>
+    <div class="warmup-fill" id="warmup-fill"></div>
+    <div class="warmup-label" id="warmup-label"></div>
+  </div>
 
   <div class="toolbar" id="sheet-toolbar" hidden>
     <button class="btn-fab" id="btn-save" data-i18n-title="save" title="Сохранить">
@@ -368,6 +374,9 @@
             </div>
           </div>
           </div>
+          <label class="setting-row"><span data-i18n="set_warmup_auto">Прогрев текстур при подключении</span>
+            <input type="checkbox" id="set-warmup-auto"></label>
+          <div class="settings-hint" data-i18n="set_warmup_auto_hint">Один раз при подключении проекта/мода фоном конвертирует текстуры в кэш: первое открытие моделей потом мгновенное. Повторно — кнопкой-пульсом в шапке.</div>
           <div class="settings-actions">
             <button class="btn accent" id="set-unpacked-save" data-i18n="save">Сохранить</button>
           </div>
@@ -689,6 +698,7 @@
       "/static/js/campaign.js?v={{ v }}",
       "/static/js/chrome.js?v={{ v }}",
       "/static/js/modpaths.js?v={{ v }}",
+      "/static/js/warmup.js?v={{ v }}",
       "/static/js/history.js?v={{ v }}",
       "/static/js/units.js?v={{ v }}",
        "/static/js/model3d.js?v={{ v }}",
