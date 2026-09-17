@@ -332,9 +332,11 @@ class WarmupManager:
             self._set(phase="convert", total=len(files), done=0)
             # фаза 3: прогрев (dds_webp сам пропускает свежий кэш).
             # Конвертация CPU-bound (декод+энкод), но Pillow держит
-            # тяжёлое в C — пул потоков даёт кратный выигрыш
-            # (8 воркеров на 2K-текстурах ~×6). dds_webp потокобезопасен:
-            # записи идут в разные файлы, состояние — под Lock.
+            # тяжёлое в C — пул потоков даёт кратный выигрыш (замер ×2.6
+            # на жирных файлах). dds_webp потокобезопасен: записи идут
+            # в разные файлы, состояние — под Lock.
+            # Ядро под UI/сервер оставляем свободным: иначе на время
+            # прогона виснет вся программа (потоки Flask голодают).
             try:
                 from . import dds_converter as _dc
             except Exception:  # noqa: BLE001
@@ -344,7 +346,7 @@ class WarmupManager:
             except Exception:  # noqa: BLE001
                 _Pool = None
             try:
-                _workers = min(8, (os.cpu_count() or 4))
+                _workers = max(2, min(6, (os.cpu_count() or 4) - 1))
             except Exception:  # noqa: BLE001
                 _workers = 4
 

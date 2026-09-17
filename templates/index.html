@@ -62,11 +62,6 @@
     </div>
   </header>
 
-  <div class="warmup-bar" id="warmup-bar" hidden>
-    <div class="warmup-fill" id="warmup-fill"></div>
-    <div class="warmup-label" id="warmup-label"></div>
-  </div>
-
   <div class="toolbar" id="sheet-toolbar" hidden>
     <button class="btn-fab" id="btn-save" data-i18n-title="save" title="Сохранить">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
@@ -205,6 +200,12 @@
         <button class="tab-bar-btn tab-bar-menu" id="tab-bar-menu" data-i18n-title="more_tabs" title="Все вкладки" hidden>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
         </button>
+        <!-- Прогрев текстур: тонкая полоса по нижней грани таб-бара
+          (как на YouTube) — оверлей, layout не двигает -->
+        <div class="warmup-bar" id="warmup-bar" hidden>
+          <div class="warmup-fill" id="warmup-fill"></div>
+          <div class="warmup-label" id="warmup-label" hidden></div>
+        </div>
       </div>
 
       <!-- Tab panels container -->

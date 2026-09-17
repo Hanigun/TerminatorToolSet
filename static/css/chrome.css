@@ -169,15 +169,17 @@ input, textarea, select, [contenteditable="true"] { user-select: text; -webkit-u
   position: relative;
 }
 
-/* Прогрев текстур: тонкий бар под шапкой + пульс кнопки */
-.warmup-bar { position: relative; height: 22px; background: var(--bg);
-  border-bottom: 1px solid var(--border); overflow: hidden; }
+/* Прогрев текстур: тонкая полоса по нижней грани таб-бара (как на
+   YouTube) — оверлей поверх границы, layout не двигает, пульс кнопки.
+   Заливка — transform scaleX (только композитор, без reflow: опрос
+   статуса раз в секунду страницу не дёргает). */
+.warmup-bar { position: absolute; left: 0; right: 0; bottom: -1px; height: 3px;
+  background: transparent; overflow: hidden; pointer-events: none; z-index: 6; }
 .warmup-bar[hidden] { display: none; }
-.warmup-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0;
-  background: var(--accent-glow); }
-.warmup-label { position: relative; font-size: 12px; line-height: 22px;
-  padding: 0 10px; color: var(--text-mute); white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; }
+.warmup-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%;
+  background: var(--accent-glow); transform-origin: left center;
+  transform: scaleX(0); will-change: transform; }
+.warmup-label { display: none; }
 #btn-warmup.running { color: var(--accent); }
 #btn-warmup.running svg { animation: wu-pulse 1.2s ease-in-out infinite; }
 @keyframes wu-pulse { 50% { opacity: 0.35; } }

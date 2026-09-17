@@ -1,8 +1,10 @@
 """Фоновый прогрев текстур: старт/статус/стоп.
 
 POST /api/warmup_start {root?}: прогон DDS->WebP по слоям корня
-(у мода — плюс саб-пути). Без root — корень текущего древа
-на фронте, сюда root обязателен явно: пустой запрос = 400.
+(у мода — плюс саб-пути). Пустой/битый root — не 400, а первый доступный
+корень из настроек (мод → проект → игра): кнопка в шапке обязана
+работать, даже если древо ещё не поднялось. Совсем нечего греть —
+{ok: False, error: bad root} как раньше.
 GET /api/warmup_status: {running, phase, root, total, done,
 current, failed, stopped} для прогресс-бара (опрос раз в секунду).
 POST /api/warmup_stop: мягкая остановка после текущего файла.
@@ -10,6 +12,23 @@ POST /api/warmup_stop: мягкая остановка после текущег
 from __future__ import annotations
 
 import os
+
+
+def _fallback_root(ctx, store):
+    """Первый живой корень (мод → проект → игра) для старта без root."""
+    try:
+        from .units import _known_roots as _roots
+        known = _roots(ctx) or {}
+    except Exception:  # noqa: BLE001
+        known = {}
+    for key in ("mod", "project", "game"):
+        try:
+            r = store.normal(known.get(key) or "")
+        except Exception:  # noqa: BLE001
+            r = known.get(key) or ""
+        if r and os.path.isdir(r):
+            return r
+    return ""
 
 
 def register_warmup(app, ctx):
@@ -24,7 +43,11 @@ def register_warmup(app, ctx):
             root = store.normal(str(data.get("root") or ""))
         except Exception:  # noqa: BLE001
             root = str(data.get("root") or "")
-        if not root or not os.path.isdir(root):
+        # normpath("") даёт "." — а isdir(".") правда всегда (cwd):
+        # точку считаем пустым запросом, иначе грелась бы папка программы
+        if root in ("", ".") or not os.path.isdir(root):
+            root = _fallback_root(ctx, store)
+        if root in ("", ".") or not os.path.isdir(root):
             return jsonify({"ok": False, "error": "bad root"})
         try:
             st = ctx.warmup.start(root)

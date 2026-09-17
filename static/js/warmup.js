@@ -21,21 +21,36 @@
     return s;
   }
 
+  // Повторы того же состояния DOM не трогают вообще (меньше reflow:
+  // опрос и так раз в секунду). Заливка — transform, не width.
+  var lastPaint = "", hideT = null;
   function paint(st) {
     var b = bar(); if (!b) return;
     var running = !!st.running;
-    b.hidden = !running && st.phase !== "done" && st.phase !== "stopped";
-    // готовый/остановленный прогон — короткая вспышка итога, затем прячем
-    if (!running && (st.phase === "done" || st.phase === "stopped")) {
-      var key = st.phase === "done" ? "warmup_done" : "warmup_stopped";
-      if (label()) label().textContent = t(key) + ": " +
-        (st.done || 0) + "/" + (st.total || 0);
-      if (fill()) fill().style.width = "100%";
-      setTimeout(function () { var x = bar(); if (x) x.hidden = true; }, 4000);
-    } else if (running) {
-      if (label()) label().textContent = t("warmup_title") + ": " + fmt(st);
-      if (fill()) fill().style.width = (st.total > 0
-        ? Math.round(st.done / st.total * 100) : 0) + "%";
+    var key = (running ? "1" : "0") + "|" + (st.phase || "") + "|" +
+      (st.done || 0) + "/" + (st.total || 0) + "|" + (st.current || "") +
+      "|" + (st.failed || 0);
+    if (key !== lastPaint) {
+      lastPaint = key;
+      if (hideT) { clearTimeout(hideT); hideT = null; }
+      b.hidden = !running && st.phase !== "done" && st.phase !== "stopped";
+      var txt = "";
+      // готовый/остановленный прогон — полная полоса на 4с, затем прячем
+      if (!running && (st.phase === "done" || st.phase === "stopped")) {
+        var k = st.phase === "done" ? "warmup_done" : "warmup_stopped";
+        txt = t(k) + ": " + (st.done || 0) + "/" + (st.total || 0);
+        if (fill()) fill().style.transform = "scaleX(1)";
+        hideT = setTimeout(function () {
+          var x = bar(); if (x) x.hidden = true;
+        }, 4000);
+      } else if (running) {
+        txt = t("warmup_title") + ": " + fmt(st);
+        if (fill()) fill().style.transform = "scaleX(" +
+          (st.total > 0 ? (st.done / st.total).toFixed(4) : 0) + ")";
+      }
+      // полоса тонкая без текста: состояние — в подсказке и на кнопке
+      b.title = txt;
+      if (label()) label().textContent = txt;
     }
     var bn = btn();
     if (bn) {
@@ -56,10 +71,35 @@
 
   function stopPoll() { if (timer) { clearInterval(timer); timer = null; } }
 
-  // корень текущего древа: проект | игра | мод (tree.js: treeRoot)
+  // Корень текущего источника ПУТЁМ (Проект | Игра | Мод): тот же
+  // srcRoot(state.treeView), что у карты/кампании/юнитов — один глобальный
+  // источник на все страницы. Раньше брался объект дерева {n,d,f}, а не
+  // путь — бэкенд его отбрасывал и кнопка всегда просила «выбрать мод
+  // или проект». Запасной путь — первый настроенный корень
+  // (мод → проект → игра), чтобы кнопка работала вообще без древа.
   function currentRoot() {
     try {
-      if (typeof treeRoot === "function") return treeRoot() || "";
+      var v = (typeof state !== "undefined" && state.treeView) || "";
+      if (typeof srcRoot === "function") {
+        var r = srcRoot(v) || "";
+        if (r) return r;
+      }
+    } catch (e) {}
+    try {
+      if (typeof treeViewRoot === "function") {
+        var t = treeViewRoot() || {};
+        if (t.root) return t.root;
+      }
+    } catch (e) {}
+    try {
+      var cfg = (typeof state !== "undefined" && state.config) || {};
+      var pr = (typeof state !== "undefined" && state.project &&
+        state.project.root) || "";
+      var cands = [cfg.mod_path, pr, cfg.project_path,
+        cfg.last_project, cfg.unpacked_path];
+      for (var i = 0; i < cands.length; i++) {
+        if (cands[i]) return cands[i];
+      }
     } catch (e) {}
     return "";
   }
