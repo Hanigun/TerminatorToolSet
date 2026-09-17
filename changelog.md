@@ -4,6 +4,20 @@
      по умолчанию). Старые версии остаются без open (свёрнуты). -->
 
 <details open>
+<summary><b>v0.9.4</b></summary>
+
+### Performance (page open and icons 5–10x faster)
+
+- Species tables are read in one pass per row (`Row.values_row`): per-cell reads rebuilt XML children on every call (4.7M calls, 1.1s per file). `units_list` 0.7–1.4s → 0.08–0.22s per category.
+- Prices 5.6s → 0.35s cold / 0.01s warm; icon states 0.8s → 0.05s on repeat opens (memoized).
+- One shared icon core (`static/js/icons.js`) for map, campaign and units: tiny URL batches instead of megabyte data-URL batches, background preload in chunks, session cache per root — reopening a tab paints instantly from memory.
+- Pages paint first, icons and prices fill in progressively (no more blocking spinner over the whole load).
+- Uncompressed DDS (90% of mod textures) decodes via a raw fast path: 7–12s → 0.01s; full 2K convert 9–13s → 0.3–0.5s; WebP method tuned; texture warmup runs in a thread pool (leaves one CPU core for the UI).
+- Warmup button heats the current Project|Game|Mod source (fell back to the configured roots); progress is a thin YouTube-style strip on the tab-bar edge.
+
+</details>
+
+<details>
 <summary><b>v0.9.1</b></summary>
 
 ### General
