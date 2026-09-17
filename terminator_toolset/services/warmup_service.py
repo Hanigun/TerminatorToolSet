@@ -7,6 +7,14 @@ WarmupManager в отдельном daemon-потоке проходит все 
 греет webp-кэш через upr.dds_webp: свежий кэш (не старше исходника)
 не трогается, повторный прогон — дешёвый проход по mtime.
 
+Раскладка кэша — CustomImages/<area>/<owner>/: иконки в icons/,
+текстуры в textures/<модель-владелец> (без модели — shared).
+Владельца текстур warmup вычисляет сам (фаза index): .material ->
+текстуры, .model -> материалы (лёгкий байтовый regex, без полного
+парсинга), инверсия texture -> первая модель (детерминированно).
+Ручной просмотр передаёт модель запросом (&model=) — индекс там
+не нужен.
+
 Один прогон за раз (повторный start при running — просто статус).
 Остановка — флагом, после текущего файла. Состояние потокобезопасно
 (Lock), фронт опрашивает GET /api/warmup_status раз в секунду.
@@ -15,7 +23,10 @@ from __future__ import annotations
 
 import glob
 import os
+import re
 import threading
+
+_MODEL_MTRL_RX = re.compile(rb"materials/[ -~]{1,120}?\.material")
 
 
 def _layer_dirs(root):
@@ -35,6 +46,178 @@ def _layer_dirs(root):
     except Exception:  # noqa: BLE001
         pass
     return out
+
+
+def _norm_rel(path, base):
+    """Basis-относительный rel нижним регистром, прямые слеши."""
+    try:
+        rel = os.path.relpath(path, base).replace("\\", "/")
+    except Exception:  # noqa: BLE001
+        return ""
+    if rel.startswith(".."):
+        return ""
+    return rel.lower()
+
+
+def build_tex_owner_index(bases, stop_fn=None, progress_fn=None):
+    """texture-rel -> стем модели-владельца (первая по сортировке).
+
+    bases — папки слоёв (basis/dlc). .material парсится целиком
+    (мелкие файлы), из .model материалы дёргаются байтовым regex
+    (полный парсинг тысяч моделей для индекса не нужен).
+    Возвращает {texrel: stem}; непокрытые текстуры зовутся shared."""
+    mat_files, mod_files = [], []
+    for b in bases or []:
+        try:
+            for dirpath, _dn, fns in os.walk(b):
+                for fn in fns:
+                    low = fn.lower()
+                    if low.endswith(".material"):
+                        mat_files.append(os.path.join(dirpath, fn))
+                    elif low.endswith(".model"):
+                        mod_files.append(os.path.join(dirpath, fn))
+                if stop_fn is not None and stop_fn():
+                    return {}
+        except Exception:  # noqa: BLE001
+            continue
+    mat_files.sort()
+    mod_files.sort()
+    total = len(mat_files) + len(mod_files)
+    if progress_fn is not None:
+        try:
+            progress_fn(0, total)
+        except Exception:  # noqa: BLE001
+            pass
+    mat_tex = {}
+    mat_stem = {}
+    try:
+        from terminator_toolset.model3d.material_format import (
+            read_material as _read_mat,
+        )
+    except Exception:  # noqa: BLE001
+        _read_mat = None
+    done = 0
+    for p in mat_files:
+        if stop_fn is not None and stop_fn():
+            return {}
+        try:
+            texs = set()
+            if _read_mat is not None:
+                m = _read_mat(p)
+                for v in (m.textures or {}).values():
+                    v = str(v or "").replace("\\", "/").strip().lower()
+                    if v:
+                        texs.add(v)
+            if texs:
+                # ключ — normcase: rel из .model может отличаться
+                # регистром от реального имени на диске
+                mat_tex[os.path.normcase(p)] = texs
+                try:
+                    _ms = os.path.splitext(os.path.basename(p))[0]
+                except Exception:  # noqa: BLE001
+                    _ms = ""
+                mat_stem[os.path.normcase(p)] = _ms
+        except Exception:  # noqa: BLE001
+            pass
+        done += 1
+        if progress_fn is not None and done % 25 == 0:
+            try:
+                progress_fn(done, total)
+            except Exception:  # noqa: BLE001
+                pass
+    # кандидаты: текстура -> [(модель, материал)] (одну текстуру
+    # делят десятки моделей: 33 ссылаются на fnd_abrams_new) —
+    # владелец выбирается ниже по схожести имён
+    cand = {}
+    for p in mod_files:
+        if stop_fn is not None and stop_fn():
+            return {}
+        try:
+            stem = os.path.splitext(os.path.basename(p))[0]
+            # таблица материалов — в шапке или хвосте файла (у Abramса
+            # все 6 ссылок в последних 2КБ 8.9МБ): читаем края вместо
+            # полного разбора тысяч моделей (геометрия не нужна)
+            with open(p, "rb") as f:
+                try:
+                    f.seek(0, 2)
+                    size = f.tell()
+                except OSError:
+                    size = 0
+                head = b""
+                try:
+                    f.seek(0)
+                    head = f.read(65536)
+                except OSError:
+                    pass
+                tail = b""
+                if size > 65536:
+                    try:
+                        f.seek(max(0, size - 262144))
+                        tail = f.read()
+                    except OSError:
+                        pass
+            mats = sorted(set(_MODEL_MTRL_RX.findall(head + tail)))
+            for mb in mats:
+                mrel = mb.decode("ascii", "ignore").replace(
+                    "\\", "/").lower()
+                for b in bases or []:
+                    mp = os.path.normpath(
+                        os.path.join(b, *mrel.split("/")))
+                    key = os.path.normcase(mp)
+                    for t in mat_tex.get(key, ()):
+                        cand.setdefault(t, []).append(
+                            (stem, mat_stem.get(key, "")))
+        except Exception:  # noqa: BLE001
+            pass
+        done += 1
+        if progress_fn is not None and done % 25 == 0:
+            try:
+                progress_fn(done, total)
+            except Exception:  # noqa: BLE001
+                pass
+    if progress_fn is not None:
+        try:
+            progress_fn(total, total)
+        except Exception:  # noqa: BLE001
+            pass
+    owners = {}
+    for t, pairs in cand.items():
+        owners[t] = _best_owner(pairs)
+    return owners
+
+
+def _lcs_len(a, b):
+    """Длина longest common substring (регистр уже нижний, стемы)."""
+    if not a or not b:
+        return 0
+    if len(a) > len(b):
+        a, b = b, a
+    prev = [0] * (len(a) + 1)
+    best = 0
+    for cb in b:
+        cur = [0]
+        for i, ca in enumerate(a, 1):
+            v = prev[i - 1] + 1 if ca == cb else 0
+            cur.append(v)
+            if v > best:
+                best = v
+        prev = cur
+    return best
+
+
+def _best_owner(pairs):
+    """Владелец текстуры: модель, чьё имя ближе всего к имени
+    материала (fnd_abrams_new -> fnd_abrams_chassis, а не случайный
+    454534545_ap из 33 ссылающихся). Ничья — короткий стем, затем
+    первый по сортировке: детерминированно."""
+    best, best_key = "", None
+    for stem, mstem in sorted(pairs):
+        s = stem.lower()
+        score = _lcs_len(s, (mstem or "").lower())
+        key = (-score, len(s), s)
+        if best_key is None or key < best_key:
+            best_key, best = key, stem
+    return best
 
 
 class WarmupManager:
@@ -114,22 +297,30 @@ class WarmupManager:
                     for dirpath, _dirnames, filenames in os.walk(b):
                         for fn in filenames:
                             if fn.lower().endswith(".dds"):
-                                files.append(os.path.join(dirpath, fn))
+                                files.append((b, os.path.join(dirpath, fn)))
                         if self._stop:
                             break
                     if self._stop:
                         break
                 except Exception:  # noqa: BLE001
                     continue
-            files.sort()
-            self._set(phase="convert", total=len(files))
-            # фаза 2: прогрев (dds_webp сам пропускает свежий кэш)
+            files.sort(key=lambda t: t[1])
+            self._set(phase="index", total=len(files))
+            # фаза 2: владельцы текстур (фронт показывает тот же scan)
+            owners = build_tex_owner_index(
+                bases, stop_fn=lambda: self._stop,
+                progress_fn=lambda d, t: self._set(done=d, total=t))
+            if self._stop:
+                self._set(phase="stopped", running=False, current="")
+                return
+            self._set(phase="convert", total=len(files), done=0)
+            # фаза 3: прогрев (dds_webp сам пропускает свежий кэш)
             try:
                 from . import dds_converter as _dc
             except Exception:  # noqa: BLE001
                 _dc = None
             done, failed = 0, 0
-            for p in files:
+            for b, p in files:
                 if self._stop:
                     break
                 try:
@@ -140,8 +331,11 @@ class WarmupManager:
                             nr, na = _dc.normal_hints(p)
                         except Exception:  # noqa: BLE001
                             nr, na = False, False
+                    rel = _norm_rel(p, b)
+                    model = owners.get(rel, "") if rel else ""
                     r = self._upr.dds_webp(p, root=root, normal_fix=nr,
-                                          normal_auto=na)
+                                          normal_auto=na, kind="texture",
+                                          model=model or "shared")
                     if not r:
                         failed += 1
                 except Exception:  # noqa: BLE001
@@ -153,5 +347,6 @@ class WarmupManager:
         finally:
             with self._lock:
                 stopped = self._stop
-            self._set(running=False,
-                      phase="stopped" if stopped else "done", current="")
+            if self._state.get("running"):
+                self._set(running=False,
+                          phase="stopped" if stopped else "done", current="")

@@ -57,10 +57,14 @@ def register_model3d(app, ctx):
 
     @app.route("/api/model_tex")
     def api_model_tex():
-        """WebP/PNG текстуры материала по basis-пути rel внутри root."""
+        """WebP/PNG текстуры материала по basis-пути rel внутри root.
+        &model= — стем модели-владельца (кладём в textures/<модель>);
+        без него — textures/shared. Чужие пути за пределы корня не
+        обслуживаются (проверка в model3d_service.find_file)."""
         from flask import request, send_file
         root = store.normal(request.args.get("root", ""))
         rel = m3.safe_rel(request.args.get("rel") or "")
+        model = str(request.args.get("model") or "")
         try:
             ovl = upr.unpacked_root() if upr is not None else ""
         except Exception:  # noqa: BLE001
@@ -87,7 +91,8 @@ def register_model3d(app, ctx):
                 from terminator_toolset.services import dds_converter as _dc
                 nr, na = _dc.normal_hints(p)
                 p = upr.dds_webp(p, root=root, normal_fix=nr,
-                                 normal_auto=na) or ""
+                                 normal_auto=na, kind="texture",
+                                 model=model) or ""
             except Exception:  # noqa: BLE001
                 p = ""
         if not p or not os.path.isfile(p):

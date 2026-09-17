@@ -265,7 +265,7 @@ def register_units(app, ctx):
         p = _units_pic_file(upr, root, value)
         if p and p.lower().endswith(".dds"):
             try:
-                p = upr.dds_webp(p, root=root) or ""
+                p = upr.dds_webp(p, root=root, kind="icon") or ""
             except Exception:  # noqa: BLE001
                 p = ""
         if p and os.path.isfile(p):

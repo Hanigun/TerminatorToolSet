@@ -387,14 +387,22 @@ function m3dWantTex(st, texLoader, maxAniso, texUrl, mat, slot, rel, srgb) {
 }
 
 // Добавление мешей в группу общим кодом: полная загрузка и смена
-// башни идут через него, состояние тумблеров применяется к новым мешам
-function m3dAddMeshes(st, meshes, materials) {
+// башни идут через него, состояние тумблеров применяется к новым мешам.
+// modelRel — rel модели-владельца (корпус или башня): бэкенд кладёт
+// текстуры в CustomImages/.../textures/<стем модели>.
+function m3dAddMeshes(st, meshes, materials, modelRel) {
   const root = st.root;
   const texLoader = new THREE.TextureLoader(st.texMgr);
   texLoader.setCrossOrigin("anonymous");
   const maxAniso = st.renderer.capabilities.getMaxAnisotropy();
+  let modelStem = "";
+  try {
+    const bn = String(modelRel || "").replace(/\\/g, "/").split("/").pop();
+    modelStem = bn.replace(/\.[^.]*$/, "");
+  } catch (e) { modelStem = ""; }
   const texUrl = rel => "/api/model_tex?root=" + encodeURIComponent(root || "") +
-    "&rel=" + encodeURIComponent(rel || "");
+    "&rel=" + encodeURIComponent(rel || "") +
+    "&model=" + encodeURIComponent(modelStem);
   const group = st.group;
   let armorCount = 0, turretCount = 0;
   const armorStat = {};
@@ -496,7 +504,7 @@ function m3dSwapTurret(st, res) {
   });
   const mats = res.materials || [];
   st.allMats = (st.baseMats || []).concat(mats);
-  m3dAddMeshes(st, res.meshes || [], st.allMats);
+  m3dAddMeshes(st, res.meshes || [], st.allMats, res.rel);
   if (st.turretSel && res.rel) st.turretSel.value = res.rel;
   m3dRefreshTurretSel(st, res);
   // Запоминаем выбор: переоткрытие вернёт этот же вариант, запись
@@ -645,7 +653,8 @@ function m3dShowData(st, data, first) {
     ? data.turret.mat_base : (data.materials || []).length;
   st.baseMats = (data.materials || []).slice(0, st.matBase);
   st.allMats = data.materials || [];
-  const added = m3dAddMeshes(st, data.meshes || [], st.allMats);
+  const added = m3dAddMeshes(st, data.meshes || [], st.allMats,
+    data.value || (st.params && st.params.value) || "");
   const armorCount = added.armor, turretCount = added.turret;
   // Камера: цель в центр модели; вид по умолчанию — сбоку
   // (профиль, как на скрине юзера), чуть сверху и немного спереди:

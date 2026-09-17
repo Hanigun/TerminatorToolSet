@@ -14,7 +14,7 @@
   function fmt(st) {
     var done = st.done || 0, total = st.total || 0;
     var cur = st.current || "";
-    if (st.phase === "scan") return t("warmup_scan") + "…";
+    if (st.phase === "scan" || st.phase === "index") return t("warmup_scan") + "…";
     var s = done + "/" + total;
     if (cur) s += " · " + cur;
     if (st.failed) s += " · ✕" + st.failed;

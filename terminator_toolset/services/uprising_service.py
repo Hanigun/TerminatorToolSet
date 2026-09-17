@@ -679,14 +679,28 @@ class Uprising:
         base = os.path.basename(rel)
         rp = rel.replace("/", os.sep)
         cands = []
-        # готовые webp из CustomImages (плоский legacy + подпапки слоёв)
+        # новая раскладка — первой: слот корня детерминирован
+        # (<area>/<owner>/icons), без обхода дерева
+        try:
+            _area, _own = self._cache_slot(root, root)
+            _ipref = "%s/%s/icons" % (
+                self._clean_part(_area) or "other",
+                self._clean_part(_own) or "shared")
+        except Exception:  # noqa: BLE001
+            _ipref = ""
+        # готовые webp из CustomImages (новая раскладка + плоский legacy
+        # + старые подпапки слоёв)
         if custom_first:
             for _cdir in (self.custom_dir_ext,
                           self.webp_buckets.get("custom", "")):
                 if not _cdir:
                     continue
-                cands.append(os.path.join(_cdir, base))
                 stem, _ = os.path.splitext(base)
+                if _ipref and stem:
+                    for _fn in (stem + ".webp", stem + ".nrm.webp"):
+                        cands.append(os.path.join(
+                            _cdir, *_ipref.split("/"), _fn))
+                cands.append(os.path.join(_cdir, base))
                 if stem:
                     cands.append(os.path.join(_cdir, stem + ".webp"))
                     try:
@@ -751,11 +765,12 @@ class Uprising:
         """Ready-made webp icon index: stem.lower() -> (bucket, file).
         Both the bundled dir and the external one (next to the EXE, which
         wins at serve time) are indexed; external files override bundled.
-        Rebuilt on folder mtimes (custom incl. layer subdirs: getmtime
-        самой папки не видит записи внутри подпапок); *_preselected/
-        *_selected are fallback only, when no base icon exists. Custom:
-        подпапка слоя бьёт плоский legacy, выбор между слоями — по
-        _custom_preference в icon_webp. No dds search or conversion."""
+        Custom индексируется рекурсивно (раскладка area/owner/icons…):
+        mtime — максимум по всем подпапкам (getmtime самой папки не видит
+        записи внутри подпапок); *_preselected/*_selected are fallback
+        only, when no base icon exists. Custom: новый префикс бьёт
+        плоский legacy, выбор между слоями — по _custom_preference
+        в icon_webp. No dds search or conversion."""
         try:
             mt = 0.0
             for bucket in list(self.webp_buckets.keys()):
@@ -766,11 +781,9 @@ class Uprising:
                         if not _d:
                             continue
                         try:
-                            for _sub in os.listdir(_d):
-                                _p = os.path.join(_d, _sub)
+                            for _dp, _dn, _fn in os.walk(_d):
                                 try:
-                                    if os.path.isdir(_p):
-                                        dirs.append(_p)
+                                    mt = max(mt, os.path.getmtime(_dp))
                                 except OSError:
                                     pass
                         except OSError:
@@ -796,20 +809,7 @@ class Uprising:
                     if not _d:
                         continue
                     if bucket == "custom":
-                        self._index_custom_dir(_d, "", idx, custom, _pass)
-                        try:
-                            subs = sorted(os.listdir(_d))
-                        except OSError:
-                            continue
-                        for sub in subs:
-                            _p = os.path.join(_d, sub)
-                            try:
-                                isdir = os.path.isdir(_p)
-                            except OSError:
-                                continue
-                            if isdir:
-                                self._index_custom_dir(_p, sub, idx, custom,
-                                                       _pass)
+                        self._index_custom_tree(_d, idx, custom, _pass)
                         continue
                     try:
                         files = os.listdir(_d)
@@ -836,40 +836,49 @@ class Uprising:
         return idx
 
     @staticmethod
-    def _index_custom_dir(_d, sub, idx, custom, _pass):
-        """Одна папка custom-слоя (sub='' — плоский legacy): relfn всегда
-        с прямыми слешами (для URL), base legacy — со strip _hash8."""
+    def _index_custom_tree(_d, idx, custom, _pass):
+        """Всё дерево custom-корзины: relfn — относительный путь
+        с прямыми слешами (mods/X/icons/f.webp, BaseGame/f.webp,
+        плоский f.webp). Новый формат строгий ({stem}.webp);
+        legacy плоский конвертер писал {stem}_{hash8}.webp —
+        хеш strip'ается только у плоских. Приоритет в idx:
+        external wins; вложенный (с '/') бьёт плоский legacy."""
         try:
-            files = os.listdir(_d)
+            for _dp, _dn, _fns in os.walk(_d):
+                try:
+                    _rel = os.path.relpath(_dp, _d).replace("\\", "/")
+                except Exception:  # noqa: BLE001
+                    continue
+                _dn.sort()
+                for fn in sorted(_fns):
+                    if not fn.lower().endswith(".webp"):
+                        continue
+                    stem = fn[:-5].lower()
+                    if _rel in (".", ""):
+                        base = stem
+                        # legacy плоский конвертер писал {stem}_{hash8}.webp
+                        m = re.match(r"^(.*)_[0-9a-f]{8}$", base)
+                        if m:
+                            base = m.group(1)
+                        relfn = fn
+                    else:
+                        base = stem  # новый формат: строго {stem}.webp
+                        relfn = _rel + "/" + fn
+                    ent = custom.setdefault(base, [])
+                    if relfn not in ent:
+                        ent.append(relfn)
+                    if (base != stem) == (_pass == 0):
+                        continue
+                    if _pass == 0:
+                        prev = idx.get(base)
+                        if (prev is None or prev[0] != "custom"
+                                or ("/" in prev[1]) <= ("/" in relfn)):
+                            # external wins; вложенный бьёт плоский legacy
+                            idx[base] = ("custom", relfn)
+                    else:
+                        idx.setdefault(base, ("custom", relfn))
         except OSError:
             return
-        for fn in files:
-            if not fn.lower().endswith(".webp"):
-                continue
-            stem = fn[:-5].lower()
-            if sub:
-                base = stem  # новый формат: строго {stem}.webp
-                relfn = sub + "/" + fn
-            else:
-                base = stem
-                # legacy плоский конвертер писал {stem}_{hash8}.webp
-                m = re.match(r"^(.*)_[0-9a-f]{8}$", base)
-                if m:
-                    base = m.group(1)
-                relfn = fn
-            ent = custom.setdefault(base, [])
-            if relfn not in ent:
-                ent.append(relfn)
-            if (base != stem) == (_pass == 0):
-                continue
-            if _pass == 0:
-                prev = idx.get(base)
-                if (prev is None or prev[0] != "custom"
-                        or ("/" in prev[1]) <= ("/" in relfn)):
-                    # external wins; подпапка бьёт плоский legacy
-                    idx[base] = ("custom", relfn)
-            else:
-                idx.setdefault(base, ("custom", relfn))
 
     @staticmethod
     def webp_asset_url(bucket, fn):
@@ -1104,14 +1113,10 @@ class Uprising:
             return None
 
     def _custom_subdir_for(self, src, root):
-        """Имя подпапки CustomImages по слою, где лежит исходный .dds:
-        распакованная игра -> BaseGame, проект/мод -> имя папки их корня,
-        саб-пути мода (ассеты, модели) -> имя их папки, свой root карты
-        -> имя его папки. Только один уровень, без полного пути
-        (CustomImages/<имя>/stem.webp). '' = не определился.
-
-        Без ветки саб-путей их webp ложился плоско в корень кэша
-        (коллизии стемов ассеты/модели + плоская свалка)."""
+        """LEGACY (только чтение старого кэша): подпапка CustomImages
+        до раскладки projects|game|mods (BaseGame/имя корня/плоско).
+        Новые записи — через _cache_subdir; старые файлы отдаются
+        как есть (без реконвертации), пока лежат свежими."""
         try:
             ap = os.path.normcase(os.path.abspath(src or ""))
         except Exception:  # noqa: BLE001
@@ -1169,10 +1174,136 @@ class Uprising:
             return os.path.basename(os.path.normpath(own)) or ""
         return ""
 
+    @staticmethod
+    def _clean_part(value):
+        """Безопасный кусок пути кэша: без сепараторов, точек и пустот."""
+        v = str(value or "").replace("\\", "/").strip().strip(".")
+        v = v.split("/")[-1].strip()
+        if v in ("", ".", ".."):
+            return ""
+        return v[:64]
+
+    def _mod_overlay_roots(self):
+        """Саб-пути мода из конфига (тот же мод, не отдельные корни)."""
+        out = []
+        try:
+            for _k in ("mod_assets_path", "mod_overlay_path",
+                       "mod_models_path"):
+                try:
+                    _v = self._store.normal(
+                        self._config.get(_k) or "") or ""
+                except Exception:  # noqa: BLE001
+                    _v = ""
+                if _v:
+                    out.append(os.path.normcase(os.path.abspath(_v)))
+        except Exception:  # noqa: BLE001
+            pass
+        return out
+
+    def _cache_slot(self, src, root):
+        """Слот кэша (area, owner) для исходного .dds.
+
+        Раскладка CustomImages/<area>/<owner>/: projects (корень
+        проекта), game (распакованная игра), mods (корень мода —
+        саб-пути ассеты/модели кладутся в папку ОСНОВНОГО мода,
+        это один мод, а не три), other (всё остальное). Owner —
+        имя папки корня в исходном регистре (должен совпадать
+        с префиксами _custom_preference, иначе startswith промахнётся).
+        Возвращает ('other', '') при неудаче."""
+        try:
+            ap = os.path.abspath(src or "")
+        except Exception:  # noqa: BLE001
+            return ("other", "")
+        if not ap:
+            return ("other", "")
+        ncap = os.path.normcase(ap)
+
+        def _abs(v):
+            try:
+                return os.path.normcase(os.path.abspath(v or ""))
+            except Exception:  # noqa: BLE001
+                return ""
+
+        try:
+            mod = _abs(self._store.normal(
+                self._config.get("mod_path") or "") or "")
+        except Exception:  # noqa: BLE001
+            mod = ""
+        ovs = self._mod_overlay_roots()
+        try:
+            game = _abs(self.unpacked_root() or "")
+        except Exception:  # noqa: BLE001
+            game = ""
+        try:
+            proj = _abs((self._entities.project.root
+                         if self._entities.project is not None else "")
+                        or "")
+        except Exception:  # noqa: BLE001
+            proj = ""
+
+        def inside(base):
+            return bool(base) and (ncap == base
+                                   or ncap.startswith(base + os.sep))
+
+        def owner(real_base, fallback=""):
+            try:
+                nm = os.path.basename(os.path.normpath(real_base)) or ""
+            except Exception:  # noqa: BLE001
+                nm = ""
+            return self._clean_part(nm) or fallback
+        # сравнения — normcase, имена — исходный регистр: нужны оба
+        try:
+            mod_real = os.path.abspath(self._store.normal(
+                self._config.get("mod_path") or "") or "")
+        except Exception:  # noqa: BLE001
+            mod_real = ""
+        try:
+            game_real = os.path.abspath(self.unpacked_root() or "")
+        except Exception:  # noqa: BLE001
+            game_real = ""
+        try:
+            proj_real = os.path.abspath(
+                (self._entities.project.root
+                 if self._entities.project is not None else "") or "")
+        except Exception:  # noqa: BLE001
+            proj_real = ""
+        try:
+            own_real = os.path.abspath(root or "")
+        except Exception:  # noqa: BLE001
+            own_real = ""
+        if mod and (inside(mod) or any(inside(o) for o in ovs)):
+            return ("mods", owner(mod_real, "mod"))
+        if game and inside(game):
+            return ("game", owner(game_real, "BaseGame"))
+        if proj and inside(proj):
+            return ("projects", owner(proj_real, "project"))
+        own = os.path.normcase(own_real)
+        if own and inside(own):
+            return ("other", owner(own_real, "root"))
+        return ("other", "")
+
+    def _cache_subdir(self, src, root, kind="texture", model=""):
+        """Подпапка CustomImages для записи/чтения:
+        <area>/<owner>/icons (иконки — все в одну папку) или
+        <area>/<owner>/textures/<модель> (текстуры — по папкам моделей,
+        чьих; без модели — textures/shared). Только прямые слеши."""
+        try:
+            area, own = self._cache_slot(src, root)
+        except Exception:  # noqa: BLE001
+            area, own = ("other", "")
+        area = self._clean_part(area) or "other"
+        own = self._clean_part(own) or "shared"
+        if (kind or "") == "icon":
+            return "%s/%s/icons" % (area, own)
+        m = self._clean_part(model) or "shared"
+        return "%s/%s/textures/%s" % (area, own, m)
+
     def _custom_preference(self, root):
-        """Имена подпапок CustomImages в порядке слоёв _layer_roots:
-        свой root -> игра (BaseGame) -> проект -> мод. Без дублей и пустот.
-        Выбор converted-иконки зеркалит icon_file: побеждает тот же слой."""
+        """Префиксы CustomImages в порядке слоёв _layer_roots: сначала
+        новая раскладка (<area>/<owner>/icons — иконки все в одну папку),
+        затем старые имена подпапок (BaseGame/имя корня — для legacy-файлов).
+        _custom_pick матчит relfn через startswith(префикс + '/'), так что
+        порядок здесь = порядок победы слоёв. Без дублей и пустот."""
         try:
             layers = self._layer_roots(root)
         except Exception:  # noqa: BLE001
@@ -1192,19 +1323,28 @@ class Uprising:
                 self._store.normal(self._config.get("mod_path") or "") or "")
         except Exception:  # noqa: BLE001
             mod = ""
+
+        def slot(layer):
+            key = os.path.normcase(layer)
+            if mod and key == os.path.normcase(mod):
+                quan = self._clean_part(os.path.basename(mod)) or "mod"
+                return ("mods/" + quan + "/icons", quan)
+            if game and key == os.path.normcase(game):
+                quan = self._clean_part(os.path.basename(game)) or "BaseGame"
+                return ("game/" + quan + "/icons", "BaseGame")
+            if proj and key == os.path.normcase(proj):
+                quan = self._clean_part(os.path.basename(proj)) or "project"
+                return ("projects/" + quan + "/icons", quan)
+            quan = self._clean_part(os.path.basename(layer)) or ""
+            if quan:
+                return ("other/" + quan + "/icons", quan)
+            return ("", "")
         names = []
         for layer in layers:
-            key = os.path.normcase(layer)
-            if game and key == os.path.normcase(game):
-                nm = "BaseGame"
-            elif proj and key == os.path.normcase(proj):
-                nm = os.path.basename(proj)
-            elif mod and key == os.path.normcase(mod):
-                nm = os.path.basename(mod)
-            else:
-                nm = os.path.basename(layer)
-            if nm and nm not in names:
-                names.append(nm)
+            new_pref, old_nm = slot(layer)
+            for nm in (new_pref, old_nm):
+                if nm and nm not in names:
+                    names.append(nm)
         return names
 
     def _custom_target(self, subdir=""):
@@ -1251,39 +1391,88 @@ class Uprising:
                         pass
 
     def dds_webp(self, src, subdir=None, root=None, normal_fix=False,
-                 normal_auto=False):
-        """DDS -> WebP в assets/CustomImages/<слой>/ (качество 85).
-        Имя строго {stem}.webp от исходника (marder.dds -> marder.webp);
-        при normal_fix (двухканальные BC5-нормали точно: Z
-        восстанавливается, иначе свет инвертирован) или normal_auto
-        (имя похоже на нормаль — normal/normaal: признак проверяется
-        внутри конвертации на уже декодированном кадре, без второго
-        открытия гигантского DDS) — {stem}.nrm.webp отдельным кэшем.
-        Существующий файл просто перезаписывается. Свежий (не старше
-        исходника) — не переконвертируется. Путь к готовому файлу или ''."""
+                 normal_auto=False, kind="texture", model=""):
+        """DDS -> WebP в assets/CustomImages/<area>/<owner>/ (качество 85).
+
+        Раскладка: projects|game|mods/<имя>/icons (иконки — все в одну)
+        или .../textures/<модель> (текстуры — по папкам моделей-владельцев;
+        без модели — textures/shared). Мод и его саб-пути — один owner
+        по имени ОСНОВНОГО мода. kind: 'icon' | 'texture' (иначе texture).
+        Имя строго {stem}.webp (marder.dds -> marder.webp); при normal_fix
+        (BC5 точно) или normal_auto (имя похоже на нормаль — проверка
+        внутри конвертации на декодированном кадре) — {stem}.nrm.webp.
+        Старый кэш (плоско + подпапки BaseGame/имя корня) сначала
+        читается как есть — без массовой реконвертации; новые записи
+        только в новую раскладку. Свежий (не старше исходника) файл
+        не переконвертируется. Путь к готовому файлу или ''.
+        subdir — явная подпапка (совместимость): задана — пишется туда."""
         try:
             if not src or not os.path.isfile(src):
                 return ""
-            if subdir is None and root:
-                subdir = self._custom_subdir_for(src, root) or ""
+            if subdir is None:
+                try:
+                    subdir = self._cache_subdir(src, root, kind, model)
+                except Exception:  # noqa: BLE001
+                    subdir = ""
             stem = os.path.splitext(os.path.basename(src))[0]
             if not stem:
                 return ""
             nrm = bool(normal_fix or normal_auto)
             fn = stem + (".nrm.webp" if nrm else ".webp")
             mt = os.path.getmtime(src)
-            for d in (self.custom_dir_ext,
-                      self.webp_buckets.get("custom", "")):
-                if not d:
-                    continue
-                dst = os.path.join(d, subdir, fn) if subdir else os.path.join(
-                    d, fn)
+            dirs = [d for d in (self.custom_dir_ext,
+                                self.webp_buckets.get("custom", "")) if d]
+            # новая раскладка — первой (туда же пишем)
+            for d in dirs:
+                dst = os.path.join(d, *subdir.split("/"), fn) \
+                    if subdir else os.path.join(d, fn)
                 if os.path.isfile(dst):
                     try:
                         if os.path.getmtime(dst) >= mt:
                             return dst
                     except OSError:
                         pass
+            # legacy: плоский корень + старая подпапка слоя
+            try:
+                legacy_sub = self._custom_subdir_for(src, root) or ""
+            except Exception:  # noqa: BLE001
+                legacy_sub = ""
+            for d in dirs:
+                cand = os.path.join(d, fn)
+                if os.path.isfile(cand):
+                    try:
+                        if os.path.getmtime(cand) >= mt:
+                            return cand
+                    except OSError:
+                        pass
+                if legacy_sub:
+                    cand = os.path.join(d, legacy_sub, fn)
+                    if os.path.isfile(cand):
+                        try:
+                            if os.path.getmtime(cand) >= mt:
+                                return cand
+                        except OSError:
+                            pass
+            # shared: общая папка текстур того же owner (игровые текстуры,
+            # гретые без модели) — serving без дублирования под каждую
+            # модель; новые записи всё равно идут в папку модели
+            if subdir and (kind or "") != "icon":
+                try:
+                    parts = subdir.split("/")
+                    if len(parts) == 4 and parts[2] == "textures" and \
+                            parts[3] != "shared":
+                        for d in dirs:
+                            shared = os.path.join(
+                                d, parts[0], parts[1], "textures",
+                                "shared", fn)
+                            if os.path.isfile(shared):
+                                try:
+                                    if os.path.getmtime(shared) >= mt:
+                                        return shared
+                                except OSError:
+                                    pass
+                except Exception:  # noqa: BLE001
+                    pass
             dst_dir = self._custom_target(subdir or "")
             if not dst_dir:
                 return ""
@@ -1478,7 +1667,7 @@ class Uprising:
         if jobs:
             def _one(p):
                 try:
-                    self.dds_webp(p, root=root)
+                    self.dds_webp(p, root=root, kind="icon")
                 except Exception:  # noqa: BLE001
                     pass
             try:
@@ -1792,14 +1981,14 @@ class Uprising:
                 return name
             if p.lower().endswith(".dds"):
                 try:
-                    self.dds_webp(p, root=root)  # persistent webp,
+                    self.dds_webp(p, root=root, kind="icon")  # persistent webp,
                     # best-effort: подпапка слоя, имя {stem}.webp
                 except Exception:  # noqa: BLE001
                     pass
                 try:
                     for _pp in self.icon_state_sources(root, name).values():
                         if _pp.lower().endswith(".dds"):
-                            self.dds_webp(_pp, root=root)
+                            self.dds_webp(_pp, root=root, kind="icon")
                 except Exception:  # noqa: BLE001
                     pass
                 try:
