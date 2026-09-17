@@ -355,10 +355,12 @@ function pv3WritePose(pv3, pose) {
 }
 
 // Тонкий слайдер одной оси: буква + ползунок (значение уже видно
-// в readout выше) + точка стокового положения под ним (как в DaVinci:
-// всегда стоит там, куда вернёт даблклик). Даблклик — по всей строке
-// (мелкую ручку дважды попасть трудно). Возвращает input; точку кладёт
-// в реестр для перерисовки; позицию и точки подтягивает pv3Update.
+// в readout выше) + числовое поле справа (ручной ввод/вставка/замена:
+// копируется и правится как обычный текст) + точка стокового положения
+// под ползунком (как в DaVinci: всегда стоит там, куда вернёт даблклик).
+// Даблклик — по всей строке (мелкую ручку дважды попасть трудно).
+// Возвращает ползунок; поле и точку кладёт в реестр для перерисовки;
+// позицию, поле и точки подтягивает pv3Update.
 function pv3Slider(pv3, parent, axis, min, max, step, onInput, onReset,
     getStock) {
   const row = document.createElement("div");
@@ -380,13 +382,36 @@ function pv3Slider(pv3, parent, axis, min, max, step, onInput, onReset,
   track.appendChild(dot);
   row.appendChild(lab);
   row.appendChild(track);
+  // Ручное поле: тот же onInput, что у ползунка. Мусор игнорируем,
+  // Enter — применить сразу (blur дёргает change), фокус — выделить
+  // всё для быстрой замены.
+  const num = document.createElement("input");
+  num.type = "number";
+  num.step = step;
+  num.min = min;
+  num.max = max;
+  num.title = axis;
+  num.className = "pv3-num";
+  num.spellcheck = false;
+  num.addEventListener("change", () => {
+    const v = parseFloat(num.value);
+    if (!(v >= 0 || v < 0)) return;
+    onInput(v);
+  });
+  num.addEventListener("keydown", e => {
+    if (e.key === "Enter") num.blur();
+  });
+  num.addEventListener("focus", () => {
+    try { num.select(); } catch (e) {}
+  });
+  row.appendChild(num);
   parent.appendChild(row);
   if (typeof onReset === "function")
     row.addEventListener("dblclick", onReset);
   try {
     pv3.sliderRegs = pv3.sliderRegs || [];
     if (typeof getStock === "function")
-      pv3.sliderRegs.push({s: s, dot: dot, get: getStock});
+      pv3.sliderRegs.push({s: s, num: num, dot: dot, get: getStock});
   } catch (e) {}
   return s;
 }
@@ -414,13 +439,14 @@ function pv3PaintDots(pv3) {
   });
 }
 
-// Сброс фокуса с ползунка: pv3Update из уважения к драгу сфокусированный
-// не двигает, поэтому после даблклика ручка осталась бы на месте
-// при уехавшей камере.
+// Сброс фокуса со слайдера и ручного поля: pv3Update из уважения
+// к драгу и набору сфокусированное не двигает, поэтому после даблклика
+// ручка и цифры остались бы на месте при уехавшей камере.
 function pv3DropRangeFocus() {
   try {
     const ae = document.activeElement;
-    if (ae && ae.type === "range") ae.blur();
+    if (ae && (ae.type === "range" ||
+        (ae.type === "number" && ae.className === "pv3-num"))) ae.blur();
   } catch (e) {}
 }
 
@@ -504,7 +530,6 @@ function pv3Update(pv3) {
     f4(pose.origin.y) + "  " + f4(pose.origin.z);
   ui.fov.textContent = f4(pose.fov);
   ui.zoom.textContent = f4(pose.zoom);
-  if (document.activeElement !== ui.fovIn) ui.fovIn.value = f4(pose.fov);
   // Слайдеры следуют за камерой (орбита мышью, Reset, загрузка конфига);
   // пока ползунок тащат — не мешаем (фокус на нём). Диапазон только
   // расширяется под значение, назад не сужается.
@@ -521,6 +546,20 @@ function pv3Update(pv3) {
   ["x", "y", "z"].forEach(ax => {
     setS(ui.posS && ui.posS[ax], pose.position[ax]);
     setS(ui.orgS && ui.orgS[ax], pose.origin[ax]);
+  });
+  // Ручные поля — за камерой следом (кроме того, что сейчас набирают:
+  // недопечатанное не затираем). Границы — за расширившимся ползунком.
+  (pv3.sliderRegs || []).forEach(r => {
+    try {
+      if (!r.num || typeof r.get !== "function") return;
+      if (r.s) {
+        r.num.min = r.s.min;
+        r.num.max = r.s.max;
+      }
+      if (document.activeElement === r.num) return;
+      const v = +r.get(pose);
+      if (v >= 0 || v < 0) r.num.value = +v.toFixed(4);
+    } catch (e) {}
   });
   pv3PaintDots(pv3);
 }
@@ -677,21 +716,7 @@ function pv3BuildSide(pv3, st) {
   });
   mkLab("pv3_fov");
   const fov = mkVal();
-  const fovIn = document.createElement("input");
-  fovIn.className = "pv3-in";
-  fovIn.type = "number";
-  fovIn.step = "0.01";
-  fovIn.min = "0.05";
-  fovIn.title = L("pv3_fov");
-  fovIn.onchange = () => {
-    const v = parseFloat(fovIn.value);
-    if (!(v > 0)) return;
-    st.camera.fov = v * PV3_RAD2DEG;
-    st.camera.updateProjectionMatrix();
-    pv3Update(pv3);
-  };
-  side.appendChild(fovIn);
-  // Слайдер угла обзора — дубль числового поля выше.
+  // Слайдер угла обзора — с ручным полем справа от ползунка.
   const fovS = pv3Slider(pv3, side, "F", 0.05, 1.5, 0.005, v => {
     if (!(v > 0)) return;
     const pose = pv3ReadPose(pv3);
@@ -755,7 +780,7 @@ function pv3BuildSide(pv3, st) {
   row.appendChild(reset);
   side.appendChild(row);
   pv3.ui = {sel: sel, pos: pos, rot: rot, org: org, fov: fov,
-    fovIn: fovIn, zoom: zoom, name: name, frame: frame,
+    zoom: zoom, name: name, frame: frame,
     posS: posS, orgS: orgS, fovS: fovS, zoomS: zoomS};
   pv3Update(pv3);
 }

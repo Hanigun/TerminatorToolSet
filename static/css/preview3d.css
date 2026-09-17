@@ -226,6 +226,25 @@ box-shadow накрывает всё за пределами рамки одни
   min-width: 0;
   padding-bottom: 7px;
 }
+/* Ручное числовое поле справа от ползунка: ввод/вставка/замена
+вручную, копируется как обычный текст */
+.pv3-srow input[type="number"].pv3-num {
+  flex: none;
+  width: 64px;
+  box-sizing: border-box;
+  background: #222326;
+  border: 1px solid #3a3d43;
+  border-radius: 4px;
+  color: #e8ebf0;
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  padding: 2px 4px;
+  margin: 0;
+  outline: none;
+}
+.pv3-srow input[type="number"].pv3-num:focus {
+  border-color: #ffcf40;
+}
 .pv3-dot {
   position: absolute;
   bottom: 0;
