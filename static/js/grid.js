@@ -391,8 +391,12 @@ async function activateTab(tabId) {
     state.dirty = false;
     updateDirty();
     paintSyncBoxes();
-    // SWT живёт на локальном стеке undo (не серверном): кнопки — по нему
+    // SWT: локальный стек правок + серверный журнал сейвов за его дном
     if (tab.type === "swt") swtSyncUndoButtons();
+    // редактор режимов — серверный журнал своего файла: кнопки — по нему
+    if (tab.type === "uprising-rnd" && typeof uprCfgEdSync === "function") {
+      uprCfgEdSync().catch(() => {});
+    }
     // юниты — серверная история своих species-файлов: кнопки — по ней
     if (tab.type === "units" && typeof untSyncUndoButtons === "function") {
       untSyncUndoButtons().catch(() => {});

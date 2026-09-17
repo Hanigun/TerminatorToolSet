@@ -144,6 +144,7 @@ function openPreviewEditor(opts) {
   pop.appendChild(body);
   document.body.appendChild(pop);
   m3dPopEl = pop;
+  pop._pv3 = pv3;
   // Esc закрывает диалог
   pop._esc = e => { if (e.key === "Escape") m3dClose(); };
   document.addEventListener("keydown", pop._esc);
@@ -343,6 +344,8 @@ function pv3Save(pv3) {
     pv3.config = res.name;
     pv3.base = data;
     pv3.cam = JSON.parse(JSON.stringify(data.camera));
+    // путь файла для журнала/undo попапа (история видит его без страницы)
+    if (res.path) pv3.cfgPath = res.path;
     if (pv3.names.indexOf(res.name) === -1) {
       pv3.names.push(res.name);
       pv3.names.sort();

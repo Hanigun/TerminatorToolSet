@@ -554,7 +554,23 @@ function swtSyncUndoButtons() {
   const st = state.swt;
   if (!Array.isArray(st._undo)) st._undo = [];
   if (!Array.isArray(st._redo)) st._redo = [];
-  setUndoRedoButtons(st._undo.length > 1, st._redo.length > 0);
+  // локальный стек ИЛИ серверный журнал сейвов (фолбэк за дном стека)
+  setUndoRedoButtons(st._undo.length > 1 || !!st.srvUndo,
+    st._redo.length > 0 || !!st.srvRedo);
+}
+
+// серверные флаги журнала для кнопок (читаются точечно: открытие, сейв,
+// серверный undo/redo — не на каждое нажатие клавиши)
+async function swtSyncServerFlags() {
+  const st = state.swt;
+  st.srvUndo = false; st.srvRedo = false;
+  try {
+    if (!st.path) return;
+    const r = await api("/api/history?path=" + encodeURIComponent(st.path));
+    const j = await r.json();
+    if (j && j.ok) { st.srvUndo = !!j.can_undo; st.srvRedo = !!j.can_redo; }
+  } catch (e) { /* кнопки останутся по локальному стеку */ }
+  swtSyncUndoButtons();
 }
 
 function swtRestoreDoc(json) {
@@ -575,19 +591,57 @@ function swtUndo() {
   const st = state.swt;
   if (!Array.isArray(st._undo)) st._undo = [];
   if (!Array.isArray(st._redo)) st._redo = [];
-  if (!st.doc || st._undo.length < 2) { toast(t("undo_none") || "Нечего отменять", ""); return; }
+  // дно локального стека — дальше ведёт серверный журнал сейвов
+  if (!st.doc || st._undo.length < 2) return false;
   st._redo.push(st._undo.pop());
   swtRestoreDoc(st._undo[st._undo.length - 1]);
   toast(t("undo") || "Отменено", "ok");
+  return true;
 }
 
 function swtRedo() {
   const st = state.swt;
-  if (!st.doc || !st._redo.length) { toast(t("redo_none") || "Нечего повторять", ""); return; }
+  if (!st.doc || !st._redo.length) return false;
   const json = st._redo.pop();
   st._undo.push(json);
   swtRestoreDoc(json);
   toast(t("redo") || "Повторено", "ok");
+  return true;
+}
+
+// серверный undo/redo сейвов (.swt пишется целыми файлами: один сейв —
+// один шаг журнала). После отката файл переоткрывается: локальный стек
+// стартует заново от восстановленного состояния
+async function swtServerUndoRedo(endpoint, okMsg, noneMsg) {
+  const st = state.swt;
+  if (!st.path) { toast(t("no_file")); return; }
+  if (state.histBusy) return;
+  state.histBusy = true;
+  try {
+    const r = await api(endpoint, { method: "POST",
+      body: JSON.stringify({ path: st.path }) });
+    const j = await r.json();
+    if (!j.ok) {
+      if (j.error === "nothing_to_undo" || j.error === "nothing_to_redo") {
+        toast(noneMsg);
+      } else {
+        toast(j.error || "error", "err");
+      }
+      await swtSyncServerFlags();
+      return;
+    }
+    if (j.patch && j.patch.kind === "file") {
+      // сброс пути: openSwt с тем же путём вышел бы по early-return
+      const p = st.path;
+      st.dirty = false;
+      st.path = "";
+      await openSwt(p);
+    }
+    await swtSyncServerFlags();
+    toast(okMsg, "ok");
+  } finally {
+    state.histBusy = false;
+  }
 }
 
 function swtMarkClean() {
@@ -666,6 +720,8 @@ async function openSwt(path) {
   // словари для подсказок (юниты/улучшения/стороны...): качаем в фоне и
   // запоминаем промис - «Анализ» его дождётся; перерисовки здесь нет
   state.swt._srcPromise = loadSwtSources(path);
+  // журнал сейвов пережил перезапуск — кнопки сразу честные
+  try { swtSyncServerFlags(); } catch (e) {}
 }
 
 async function swtSaveGuarded(popup) {
@@ -720,6 +776,8 @@ async function swtSave(force) {
   if (j.written === false) { toast(t("swt_no_changes") || "Изменений нет", ""); return true; }
   if (j.mtime) state.swt.mtime = j.mtime;
   swtMarkClean();
+  // сейв попал в серверный журнал — кнопки учитывают и его
+  try { swtSyncServerFlags(); } catch (e) {}
   toast(t("saved") || "Сохранено", "ok");
   return true;
 }

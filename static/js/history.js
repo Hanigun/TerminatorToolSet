@@ -53,9 +53,11 @@ function histPageProvider() {
 }
 
 // Fast in-place application of an undo/redo patch: only cell patches skip
-// the full re-render; structural ones (row/column) reload the grid.
+// the full re-render; structural ones (row/column) reload the grid;
+// whole-file patches (swt saves, configs) reload the open file.
 async function applyUndoPatch(patch) {
   if (!patch) { await reloadActiveFile(); return; }
+  if (patch.kind === "file") { await reloadActiveFile(); return; }
   if (patch.kind === "cell") {
     const f = state.currentFile;
     const row = f && f.rows[patch.row];
@@ -145,6 +147,51 @@ async function mapUndoRedo(endpoint, st, pathsFn, repaintFn, okMsg, noneMsg) {
     } catch (e) {}
     st.redoHint = isUndo ? target : "";
     await repaintFn();
+    // чужой файл страницы (конфиг/режим рандомайзера): открытый редактор
+    // этого файла перечитывает диск, остальные редакторы не трогаем
+    try {
+      if (typeof uprCfgEdRefreshIf === "function") uprCfgEdRefreshIf(target);
+    } catch (e) {}
+    toast(okMsg, "ok");
+  } finally {
+    state.histBusy = false;
+  }
+}
+
+// открытый попап превью-конфига поверх страницы: его файл — тоже цель
+// undo/redo и журнала (тулбар иначе бил бы по файлу под попапом)
+function pv3PopupTarget() {
+  try {
+    const pop = (typeof m3dPopEl !== "undefined" && m3dPopEl) || null;
+    const pv3 = pop && pop.isConnected && pop._pv3;
+    if (pv3 && pv3.cfgPath) return { pop, pv3, path: pv3.cfgPath };
+  } catch (e) { /* попапа нет — штатные ветки ниже */ }
+  return null;
+}
+
+async function pv3PopupUndoRedo(endpoint, okMsg, noneMsg) {
+  const tgt = pv3PopupTarget();
+  if (!tgt) { toast(t("no_file")); return; }
+  if (state.histBusy) return;
+  state.histBusy = true;
+  try {
+    const r = await api(endpoint, { method: "POST",
+      body: JSON.stringify({ path: tgt.path }) });
+    const j = await r.json();
+    if (!j.ok) {
+      setUndoRedoButtons(!!j.can_undo, !!j.can_redo);
+      if (j.error === "nothing_to_undo" || j.error === "nothing_to_redo") {
+        toast(noneMsg);
+      } else {
+        toast(j.error || "error", "err");
+      }
+      return;
+    }
+    // диск под попапом сменился — перечитать конфиг
+    try {
+      if (typeof pv3LoadConfig === "function") pv3LoadConfig(tgt.pv3, tgt.pv3.config);
+    } catch (e) {}
+    setUndoRedoButtons(!!j.can_undo, !!j.can_redo);
     toast(okMsg, "ok");
   } finally {
     state.histBusy = false;
@@ -152,9 +199,11 @@ async function mapUndoRedo(endpoint, st, pathsFn, repaintFn, okMsg, noneMsg) {
 }
 
 async function runUndoRedo(endpoint, okMsg, noneMsg) {
-  // works everywhere changes happen: file tabs edit their own file, the
-  // compare page undoes/redoes the side the user last interacted with,
-  // map pages route to mapUndoRedo (map file + species edits, newest first)
+  // работает везде, где происходят правки: попап превью-конфига — свой
+  // файл поверх страницы, файловые вкладки — свой файл, сравнение —
+  // сторона последнего касания, карты — мультиистория через роутер
+  const pv3t = pv3PopupTarget();
+  if (pv3t) { await pv3PopupUndoRedo(endpoint, okMsg, noneMsg); return; }
   const tab = state.tabs.find(tb => tb.id === state.activeTabId);
   let path = null, isCompare = false, cmpSide = null, isUprising = false, isCampaign = false;
   if (tab && tab.type === "file") path = tab.path;
@@ -226,14 +275,22 @@ async function runUndoRedo(endpoint, okMsg, noneMsg) {
 }
 
 async function undoCurrent() {
-  // SWT-редактор: локальный пошаговый undo (стек правок doc); файловые
-  // вкладки и сравнение — серверный undo через историю, как раньше
-  if (state.activeTabId === "swt") { swtUndo(); return; }
+  // SWT-редактор: сначала локальный пошаговый undo (стек правок doc),
+  // за дном стека — серверный журнал сейвов (файл целиком за сейв)
+  if (state.activeTabId === "swt") {
+    if (swtUndo()) return;
+    await swtServerUndoRedo("/api/undo", t("undo"), t("undo_none"));
+    return;
+  }
   await runUndoRedo("/api/undo", t("undo"), t("undo_none"));
 }
 
 async function redoCurrent() {
-  if (state.activeTabId === "swt") { swtRedo(); return; }
+  if (state.activeTabId === "swt") {
+    if (swtRedo()) return;
+    await swtServerUndoRedo("/api/redo", t("redo"), t("redo_none"));
+    return;
+  }
   await runUndoRedo("/api/redo", t("redo"), t("redo_none"));
 }
 
@@ -251,6 +308,9 @@ function histTargets() {
       return (prov.paths() || []).map(p => ({ side: null, path: p }));
     } catch (e) { return []; }
   }
+  // попап превью-конфига поверх любой страницы
+  const pv3t = pv3PopupTarget();
+  if (pv3t) return [{ side: null, path: pv3t.path }];
   if (state.activeTabId === "uprising" && state.uprising.path) {
     return [{ side: null, path: state.uprising.path }].concat(
       Object.keys(state.uprising.statPaths || {})
@@ -294,10 +354,22 @@ async function histRepaintContext(path, side) {
     try { if (typeof prov.clean === "function") prov.clean(); } catch (e) {}
     return;
   }
+  // восстановление записи попапа превью-конфига — перечитать конфиг
+  const pv3t = pv3PopupTarget();
+  if (pv3t && path && normPath(pv3t.path) === normPath(path)) {
+    try {
+      if (typeof pv3LoadConfig === "function") pv3LoadConfig(pv3t.pv3, pv3t.pv3.config);
+    } catch (e) {}
+    return;
+  }
   if (state.activeTabId === "uprising" && path) {
     // restore из журнала пишет файл на диск: память перечитана = чисто
     await uprRepaintUndo();
     uprMarkClean();
+    // откатили конфиг/пресет/режим, а не карту — открытый редактор тоже
+    try {
+      if (typeof uprCfgEdRefreshIf === "function") uprCfgEdRefreshIf(path);
+    } catch (e) {}
     return;
   }
   if (state.activeTabId === "campaign" && path) {

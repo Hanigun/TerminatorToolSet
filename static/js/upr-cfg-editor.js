@@ -95,6 +95,7 @@ async function edLoad(nm) {
   }
   _ed.isCustom = !!j.is_custom;
   _ed.mtime = j.mtime || 0;
+  _ed.path = j.path || "";
   _ed.openSec = { 0: true };
   _ed.clip = [];
   _ed.data = { mode: { name: nm }, rules: j.rules || {},
@@ -1176,6 +1177,12 @@ function afterSave(name, j) {
   _ed.name = String(name).replace(/\.cfg$/i, "");
   _ed.isCustom = true;
   _ed.mtime = j.mtime || 0;
+  if (j.path) {
+    _ed.path = j.path;
+    try {
+      if (typeof uprNoteExtraHist === "function") uprNoteExtraHist(j.path);
+    } catch (e) {}
+  }
   _ed.status = { ok: true, text: "✓ " + (t("saved") || "Сохранено") };
   // карточки режимов на странице — на месте (пересборка страницы снесла бы редактор)
   try { if (typeof uprRndRefreshModes === "function") uprRndRefreshModes(); } catch (e) {}
@@ -1222,6 +1229,10 @@ async function edDelete() {
     body: JSON.stringify({ name: _ed.name + ".cfg" }) });
   const j = await r.json();
   if (!j.ok) { toast(j.error || "error", "err"); return; }
+  // удалённый файл остаётся в журнале (восстановим через историю)
+  try {
+    if (j.path && typeof uprNoteExtraHist === "function") uprNoteExtraHist(j.path);
+  } catch (e) {}
   // пресет удалён: редактор не на что показывать — сброс кэша режимов,
   // состояние сбросить, уйти на вкладку Простой (пересборка подтянет список)
   const dead = _ed.name;
@@ -1238,7 +1249,53 @@ async function edDelete() {
   toast(t("upr_cfg_ed_deleted") || "Удалено", "ok");
 }
 
+// --- undo/redo + журнал вкладки редактора (страница рандомайзера) ---
+// Один открытый режим — один файл: серверный журнал сейвов через общий
+// роутер history.js (кнопки — по его флагам). После undo/redo диск под
+// редактором меняется — перечитываем режим с диска.
+function edHistPaths() {
+  try { return (_ed && _ed.path) ? [_ed.path] : []; }
+  catch (e) { return []; }
+}
+async function edSyncUndoButtons() {
+  try {
+    const ps = edHistPaths();
+    if (!ps.length) { setUndoRedoButtons(false, false); return; }
+    const rs = await Promise.all(ps.map(p =>
+      api("/api/history?path=" + encodeURIComponent(p))
+        .then(r => r.json()).catch(() => null)));
+    setUndoRedoButtons(rs.some(j => j && j.ok && j.can_undo),
+      rs.some(j => j && j.ok && j.can_redo));
+  } catch (e) {}
+}
+async function edRepaintUndo() {
+  // откат — тоже несохранённое изменение: черновик с диска, кнопки по флагам
+  if (_ed && _ed.name) {
+    try { await edEnsure(_ed.name, true); } catch (e) {}
+  }
+  await edSyncUndoButtons();
+}
+// точечный рефреш после undo чужого файла страницы: свой — перечитать
+function uprCfgEdRefreshIf(path) {
+  try {
+    if (!_ed || !_ed.path || !path) return false;
+    if (normPath(_ed.path) !== normPath(path)) return false;
+    edEnsure(_ed.name, true);
+    return true;
+  } catch (e) { return false; }
+}
+
 window.uprCfgEditOpen = uprCfgEditOpen;
 window.uprCfgEdEnsure = edEnsure;
+window.uprCfgEdRefreshIf = uprCfgEdRefreshIf;
+window.uprCfgEdSync = edSyncUndoButtons;
+try {
+  if (typeof registerHistPage === "function") registerHistPage("uprising-rnd", {
+    paths: edHistPaths,
+    repaint: edRepaintUndo,
+    hint: () => ({}),
+    sync: edSyncUndoButtons,
+  });
+} catch (e) {}
 
 })();

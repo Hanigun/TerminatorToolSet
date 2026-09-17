@@ -11,7 +11,7 @@ function uprFreshState() {
   // ЕДИНСТВЕННЫЙ дефолт состояния карты (старт + закрытие вкладки): все поля,
   // включая поколение загрузки loadSeq — без него переоткрытие давало NaN,
   // guard вечно дропал ответы и карта оставалась бледной (.empty, no sectors)
-  return { path: null, rows: null, columns: [], sheetIndex: 0, sysnames: [], syscats: {}, prices: {}, stats: {}, statPaths: {}, redoHint: "", sysLoading: false, sel: -1, variant: 0, dirty: false, found: false, panel: true, pick: new Set(), clip: [], sectorClip: null, editing: "", loading: false, loadSeq: 0, preloading: false };
+  return { path: null, rows: null, columns: [], sheetIndex: 0, sysnames: [], syscats: {}, prices: {}, stats: {}, statPaths: {}, extraHist: [], redoHint: "", sysLoading: false, sel: -1, variant: 0, dirty: false, found: false, panel: true, pick: new Set(), clip: [], sectorClip: null, editing: "", loading: false, loadSeq: 0, preloading: false };
 }
 
 function uprTab() { return state.tabs.find(tb => tb.id === "uprising"); }
@@ -127,6 +127,7 @@ async function uprCfgExport(silent) {
       body: JSON.stringify({ path: p, ...uprCfgPayload() }) });
     const j = await r.json();
     if (!j.ok) { toast(j.error || "error", "err"); return; }
+    uprNoteExtraHist(j.path || p);
     if (p !== (state.config && state.config.uprising_cfg_path || "")) {
       state.config.uprising_cfg_path = p;
       api("/api/config", { method: "POST",
@@ -908,14 +909,28 @@ function renderUprising() {
   } catch (e) {}
 }
 
-// история страницы — два файла: карта + species-правки попапа (unit_set,
-// cost...). undo/redo берут файл с самой свежей записью, кнопки — ИЛИ.
+// история страницы — карта + species-правки попапа (unit_set,
+// cost...) + целые файлы (баланс-конфиг, пресеты, режимы рандомайзера):
+// undo/redo берут файл с самой свежей записью, кнопки — ИЛИ.
 function uprHistPaths() {
   try {
     const ps = [state.uprising.path]
-      .concat(Object.keys(state.uprising.statPaths || {}));
+      .concat(Object.keys(state.uprising.statPaths || {}))
+      .concat(state.uprising.extraHist || []);
     return ps.filter((p, i) => p && ps.indexOf(p) === i);
   } catch (e) { return state.uprising.path ? [state.uprising.path] : []; }
+}
+
+// целый файл страницы записан (конфиг/пресет/режим): журнал и кнопки
+// видят его без переоткрытия истории
+function uprNoteExtraHist(path) {
+  try {
+    if (!path) return;
+    const st = state.uprising;
+    st.extraHist = st.extraHist || [];
+    if (st.extraHist.indexOf(path) < 0) st.extraHist.push(path);
+    uprSyncUndoButtons();
+  } catch (e) {}
 }
 async function uprSyncUndoButtons() {
   try {
@@ -1536,8 +1551,10 @@ async function uprPresetCreate() {
           body: JSON.stringify({ name: nm, overwrite: true, ...uprCfgPayload() }) });
         const j2 = await r2.json();
         if (!j2.ok) { toast(j2.error || "error", "err"); return; }
+        uprNoteExtraHist(j2.path);
       } else { toast(j.error || "error", "err"); return; }
     }
+    else uprNoteExtraHist(j.path);
     toast(t("upr_preset_saved") || "Пресет сохранён", "ok");
     const sel = $("#upr-preset-sel");
     if (sel) uprPresetFill(sel);
