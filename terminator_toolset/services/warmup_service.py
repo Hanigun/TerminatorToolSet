@@ -249,6 +249,18 @@ class WarmupManager:
                        "total": 0, "done": 0, "current": "",
                        "failed": 0, "stopped": False}
         self._stop = False
+        self._pool = None  # живой ThreadPoolExecutor фазы convert (если есть)
+        # Выход из программы НЕ просит warmup остановиться — а пул
+        # воркеров не-демон: _python_exit из concurrent.futures join'ит
+        # их, и консоль висит, пока не доконвертятся все ~10к файлов
+        # (минуты). Лечится флагом + отменой pending (см. shutdown_now),
+        # но хук обязан жить в ТОМ ЖЕ списке, что _python_exit
+        # (threading._register_atexit — он отрабатывает ДО хуков модуля
+        # atexit), и быть зарегистрирован ПОЗЖЕ него (вызовы LIFO):
+        # поэтому регистрация не здесь, а в _run сразу после создания
+        # пула (futures вешает свой хук при первом импорте —
+        # заведомо раньше).
+        self._exit_hooked = False
 
     def status(self):
         """Копия состояния для фронта."""
@@ -284,6 +296,24 @@ class WarmupManager:
                 self._stop = True
         except Exception:  # noqa: BLE001
             pass
+        return self.status()
+
+    def shutdown_now(self):
+        """Остановка для пути выхода из программы (atexit): флаг стопа
+        + отмена pending-задач пула. НЕ блокирует и НЕ трогает статус:
+        in-flight конвертации докатываются сами, join воркеров потом
+        ждёт только их (секунды, а не весь остаток очереди)."""
+        try:
+            with self._lock:
+                self._stop = True
+                pool = self._pool
+        except Exception:  # noqa: BLE001
+            pool = None
+        if pool is not None:
+            try:
+                pool.shutdown(wait=False, cancel_futures=True)
+            except Exception:  # noqa: BLE001
+                pass
         return self.status()
 
     def _set(self, **kw):
@@ -373,17 +403,56 @@ class WarmupManager:
 
             done, failed = 0, 0
             if _Pool is not None and len(files) > 1:
-                with _Pool(max_workers=_workers,
-                           thread_name_prefix="warmup") as _pool:
-                    for r in _pool.map(_one, files):
-                        if r is False:
-                            failed += 1
-                        done += 1
+                _pool = _Pool(max_workers=_workers,
+                              thread_name_prefix="warmup")
+                try:
+                    with self._lock:
+                        self._pool = _pool
+                        if not self._exit_hooked:
+                            # тот же список, что _python_exit (LIFO → мы
+                            # первые): на выходе сначала отмена очереди,
+                            # и только потом чужой join воркеров
+                            self._exit_hooked = True
+                            try:
+                                threading._register_atexit(
+                                    self.shutdown_now)
+                            except Exception:  # noqa: BLE001
+                                try:
+                                    import atexit as _atexit
+                                    _atexit.register(self.shutdown_now)
+                                except Exception:  # noqa: BLE001
+                                    pass
+                except Exception:  # noqa: BLE001
+                    pass
+                try:
+                    with _pool:
                         try:
-                            cur = os.path.basename(files[done - 1][1])
+                            _map = _pool.map(_one, files)
                         except Exception:  # noqa: BLE001
-                            cur = ""
-                        self._set(done=done, failed=failed, current=cur)
+                            _map = iter(())
+                        for r in _map:
+                            if r is False:
+                                failed += 1
+                            done += 1
+                            try:
+                                cur = os.path.basename(files[done - 1][1])
+                            except Exception:  # noqa: BLE001
+                                cur = ""
+                            self._set(done=done, failed=failed, current=cur)
+                except Exception:  # noqa: BLE001
+                    # выход из программы отменил pending-фьючи: итератор
+                    # map бросает CancelledError — это штатно, а не ошибка.
+                    # Ручной стоп сюда не попадает (там только флаг,
+                    # очередь стекает через быстрые None).
+                    if not self._stop:
+                        raise
+                finally:
+                    try:
+                        with self._lock:
+                            if self._pool is _pool:
+                                self._pool = None
+                    except Exception:  # noqa: BLE001
+                        pass
             else:
                 for b, p in files:
                     if self._stop:
