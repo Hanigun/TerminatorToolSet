@@ -30,6 +30,22 @@ def dds_fourcc(path):
         return b""
 
 
+def _bands_need_blue(rgb):
+    """Контент-признак двухканальной normal-карты по готовым каналам:
+    B плоский (~0), R/G разбросаны (XY нормалей). Без открытия файла —
+    вызывается на уже декодированном изображении, чтобы не платить
+    второй полный декод гигантских DDS (2K несжатый — секунды)."""
+    try:
+        r, g, b = rgb.split()[:3]
+        if b.getextrema()[1] >= 8:
+            return False
+        rlo, rhi = r.getextrema()
+        glo, ghi = g.getextrema()
+        return (rhi - rlo) > 32 and (ghi - glo) > 32
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def dds_needs_blue_rebuild(path):
     """Контент-признак двухканальной normal-карты в любом контейнере.
 
@@ -38,19 +54,15 @@ def dds_needs_blue_rebuild(path):
     не ловит, и three.js нормализует (x, y, 0) — свет гаснет,
     модель «тёмная» при живых текстурах. Порог B<8 тот же, что
     и сторож внутри _rebuilt_bc5_blue; разброс R/G отсекает
-    просто тёмные картинки.
-    """
+    просто тёмные картинки. Отдельный проход — только для малых
+    файлов; большие проверять через normal_auto в convert_file
+    (там проверка едет на уже декодированном кадре)."""
     try:
         from PIL import Image
         with Image.open(path) as im:
             rgb = (im if im.mode in ("RGB", "RGBA")
                    else im.convert("RGB"))
-            r, g, b = rgb.split()[:3]
-            if b.getextrema()[1] >= 8:
-                return False
-            rlo, rhi = r.getextrema()
-            glo, ghi = g.getextrema()
-            return (rhi - rlo) > 32 and (ghi - glo) > 32
+            return _bands_need_blue(rgb)
     except Exception:  # noqa: BLE001
         return False
 
@@ -103,8 +115,13 @@ def _rebuilt_bc5_blue(im):
 
 
 def convert_file(src: str, dst: str, quality: int = QUALITY,
-                 normal_fix: bool = False) -> bool:
-    """Сконвертировать один .dds в .webp. True при успехе."""
+                 normal_fix: bool = False, normal_auto: bool = False) -> bool:
+    """Сконвертировать один .dds в .webp. True при успехе.
+
+    normal_fix — двухканальная нормаль точно (BC5 по FourCC):
+    B пересобрать безусловно. normal_auto — «похоже на нормаль»
+    по имени (normal/normaal): признак проверить на уже
+    декодированном кадре, без второго открытия файла."""
     try:
         if not src or not dst:
             return False
@@ -129,6 +146,16 @@ def convert_file(src: str, dst: str, quality: int = QUALITY,
             fixed = _rebuilt_bc5_blue(im)
             if fixed is not None:
                 im = fixed
+        elif normal_auto:
+            try:
+                rgb = (im if im.mode in ("RGB", "RGBA")
+                       else im.convert("RGB"))
+                if _bands_need_blue(rgb):
+                    fixed = _rebuilt_bc5_blue(im)
+                    if fixed is not None:
+                        im = fixed
+            except Exception:  # noqa: BLE001
+                pass
         im.save(dst, "WEBP", quality=q)
         return os.path.isfile(dst)
     except Exception:  # noqa: BLE001 - битый dds = False, не падение
@@ -136,13 +163,17 @@ def convert_file(src: str, dst: str, quality: int = QUALITY,
 
 
 def convert_task(job) -> tuple:
-    """Одна задача для executor.map: (src, dst, quality) -> (dst, ok).
+    """Одна задача для executor.map: (src, dst, quality[, ...]) -> (dst, ok).
 
     Модульная функция (picklable): отдельный процесс маппит её напрямую.
-    """
+    Хвост кортежа (normal_fix, normal_auto) — опционален."""
     try:
-        src, dst, quality = job
-    except (TypeError, ValueError):
+        src, dst, quality = job[0], job[1], job[2]
+        rest = tuple(job[3:])
+    except (TypeError, ValueError, IndexError):
         return ("", False)
-    ok = convert_file(src, dst, quality)
+    nfix = bool(rest[0]) if len(rest) > 0 else False
+    nauto = bool(rest[1]) if len(rest) > 1 else False
+    ok = convert_file(src, dst, quality,
+                      normal_fix=nfix, normal_auto=nauto)
     return (dst, ok)

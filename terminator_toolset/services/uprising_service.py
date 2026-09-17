@@ -1250,11 +1250,15 @@ class Uprising:
                     except OSError:
                         pass
 
-    def dds_webp(self, src, subdir=None, root=None, normal_fix=False):
+    def dds_webp(self, src, subdir=None, root=None, normal_fix=False,
+                 normal_auto=False):
         """DDS -> WebP в assets/CustomImages/<слой>/ (качество 85).
         Имя строго {stem}.webp от исходника (marder.dds -> marder.webp);
-        при normal_fix (двухканальные BC5-нормали: Z восстанавливается,
-        иначе свет инвертирован) — {stem}.nrm.webp отдельным кэшем.
+        при normal_fix (двухканальные BC5-нормали точно: Z
+        восстанавливается, иначе свет инвертирован) или normal_auto
+        (имя похоже на нормаль — normal/normaal: признак проверяется
+        внутри конвертации на уже декодированном кадре, без второго
+        открытия гигантского DDS) — {stem}.nrm.webp отдельным кэшем.
         Существующий файл просто перезаписывается. Свежий (не старше
         исходника) — не переконвертируется. Путь к готовому файлу или ''."""
         try:
@@ -1265,7 +1269,8 @@ class Uprising:
             stem = os.path.splitext(os.path.basename(src))[0]
             if not stem:
                 return ""
-            fn = stem + (".nrm.webp" if normal_fix else ".webp")
+            nrm = bool(normal_fix or normal_auto)
+            fn = stem + (".nrm.webp" if nrm else ".webp")
             mt = os.path.getmtime(src)
             for d in (self.custom_dir_ext,
                       self.webp_buckets.get("custom", "")):
@@ -1284,7 +1289,8 @@ class Uprising:
                 return ""
             from . import dds_converter as _dc
             if _dc.convert_file(src, os.path.join(dst_dir, fn),
-                                normal_fix=bool(normal_fix)):
+                                normal_fix=bool(normal_fix),
+                                normal_auto=bool(normal_auto)):
                 self._drop_legacy_flat(stem)
                 # индекс webp перестроится по mtime папки сам
                 return os.path.join(dst_dir, fn)

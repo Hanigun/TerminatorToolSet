@@ -75,14 +75,19 @@ def register_model3d(app, ctx):
                 # Двухканальные нормали: Z чинить по содержимому, не по
                 # контейнеру — FourCC ловит BC5U, а DXT1-пустышки с
                 # нулевым B (int_small_tug_normal.dds — «тёмный» трактор)
-                # детектит dds_needs_blue_rebuild. Маска 'normal' в имени:
+                # чинятся контент-проверкой. Маска 'normal' в имени:
                 # albedo с плоским B под пересчёт не подставлять.
+                # Проверка едет ВНУТРИ конвертации на уже декодированном
+                # кадре (normal_auto): отдельный проход dds_needs_blue_
+                # rebuild здесь — второй полный декод гигантских DDS,
+                # секунды на файл. 'normaal' — голландское normal
+                # (US_Abrams_normaal.dds): без него свет на броне врёт.
                 from terminator_toolset.services import dds_converter as _dc
                 stem = os.path.basename(p).lower()
-                nr = (_dc.dds_fourcc(p) == b"BC5U" or
-                      ("normal" in stem and
-                       _dc.dds_needs_blue_rebuild(p)))
-                p = upr.dds_webp(p, root=root, normal_fix=nr) or ""
+                nr = _dc.dds_fourcc(p) == b"BC5U"
+                na = (not nr) and ("normal" in stem or "normaal" in stem)
+                p = upr.dds_webp(p, root=root, normal_fix=nr,
+                                 normal_auto=na) or ""
             except Exception:  # noqa: BLE001
                 p = ""
         if not p or not os.path.isfile(p):
