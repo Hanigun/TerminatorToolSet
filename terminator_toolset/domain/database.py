@@ -101,6 +101,14 @@ class Database:
                               (1 if undone else 0, record_id))
             self.conn.commit()
 
+    def set_payload(self, record_id: int, payload: dict):
+        """Replace a record's payload (whole-file undo stores the displaced
+        redo image back into the record it just applied)."""
+        with self._lock:
+            self.conn.execute("UPDATE history SET payload=? WHERE id=?",
+                              (json.dumps(payload, ensure_ascii=False), record_id))
+            self.conn.commit()
+
     def _trim(self, cur, file_path: str):
         cur.execute(
             "DELETE FROM history WHERE file_path=? AND undone=0 AND id NOT IN "

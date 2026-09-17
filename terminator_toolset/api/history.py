@@ -10,7 +10,19 @@ from ..domain.spreadsheet_ml import SpreadsheetError
 
 def register_history(app, ctx):
     """Undo/redo, history payload, clear."""
-    store, hist, db = ctx.store, ctx.hist, ctx.db
+    store, hist, db, files = ctx.store, ctx.hist, ctx.db, ctx.files
+
+    def _file_top(path, undone):
+        """Top file_write record for this direction (whole-file writers:
+        swt, configs, presets, randomizer modes, preview configs)."""
+        _entries, applied, undone_recs = hist.state(path)
+        pool = undone_recs if undone else applied
+        if not pool:
+            return None
+        rec = pool[-1] if undone else pool[0]
+        if rec is not None and rec.get("action") == "file_write":
+            return rec
+        return None
 
     # -- API: history / undo / redo ----------------------------------------------
     @app.route("/api/undo", methods=["POST"])
@@ -21,6 +33,13 @@ def register_history(app, ctx):
         if not path or not os.path.isfile(path):
             return jsonify({"ok": False, "error": "not a file"})
         try:
+            rec = _file_top(path, False)
+            if rec is not None:
+                patch = files.apply_file_record(path, rec, False)
+                db.set_undone(rec["id"], True)
+                return jsonify({"ok": True, "patch": patch,
+                                "summary": rec.get("summary"),
+                                **hist.flags(path)})
             s = store.get(path)
             patch, target = hist.undo_once(s)
         except SpreadsheetError as e:
@@ -39,6 +58,11 @@ def register_history(app, ctx):
         if not path or not os.path.isfile(path):
             return jsonify({"ok": False, "error": "not a file"})
         try:
+            rec = _file_top(path, True)
+            if rec is not None:
+                patch = files.apply_file_record(path, rec, True)
+                db.set_undone(rec["id"], False)
+                return jsonify({"ok": True, "patch": patch, **hist.flags(path)})
             s = store.get(path)
             patch, _rec = hist.redo_once(s)
         except SpreadsheetError as e:

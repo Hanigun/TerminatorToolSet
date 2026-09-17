@@ -145,6 +145,91 @@ class Files:
         self._log.info("origin_restore %s (%d bytes)", path, len(blob))
         return {"ok": True}
 
+    # -- whole-file journal (non-grid writers) ------------------------------------
+    def commit_file_write(self, path: str, summary: str, snap) -> None:
+        """Journal one whole-file overwrite (swt saves, balance configs,
+        presets, randomizer modes, preview configs).
+
+        Two-phase use at the route: snap = saves.stash_file(path) BEFORE the
+        write; on success commit_file_write() appends one file_write record.
+        snap=None means the file is new (undo deletes it); the bytes live in
+        the vault, the DB only references them."""
+        path = self._store.normal(path or "")
+        if not path:
+            return
+        try:
+            self._db.log_change(path, "file_write", {"snap": snap},
+                                summary or "file written")
+        except Exception:  # noqa: BLE001
+            pass
+
+    def apply_file_record(self, path: str, rec: dict, forward: bool) -> dict:
+        """Apply one file_write record: swap the file bytes with the vault
+        image, stashing the displaced bytes for the opposite direction.
+
+        Undo stores the current bytes as the redo image (payload 'after');
+        redo writes that image back. Session safety: a live grid session
+        with unsaved edits blocks the swap (it would silently eat memory
+        edits); a clean live session is dropped so the next open re-reads."""
+        path = self._store.normal(path or "")
+        payload = dict(rec.get("payload") or {})
+        created = (not forward) and (payload.get("snap") is None)
+        if created:
+            blob = None  # undo of a create = delete the file
+        else:
+            want = payload.get("after") if forward else payload.get("snap")
+            if not want:
+                raise SpreadsheetError("no %s image" % ("redo" if forward else "undo"))
+            blob = self._saves.stash_bytes(want)
+            if blob is None:
+                raise SpreadsheetError("snapshot missing")
+        try:
+            live = self._store.sessions.get(path)
+        except Exception:  # noqa: BLE001
+            live = None
+        if live is not None and getattr(live, "dirty", False):
+            raise SpreadsheetError("unsaved grid edits")
+        if os.path.isfile(path):
+            back = self._saves.stash_file(path)
+            if back is None:
+                raise SpreadsheetError("cannot stash current file")
+        elif not created:
+            raise SpreadsheetError("file missing")
+        else:
+            back = None
+            parent = os.path.dirname(path)
+            if parent:
+                try:
+                    os.makedirs(parent, exist_ok=True)
+                except OSError:  # noqa: BLE001
+                    pass
+        try:
+            if created:
+                os.remove(path)
+            else:
+                tmp = path + ".fileundo-tmp"
+                with open(tmp, "wb") as fh:
+                    fh.write(blob)
+                os.replace(tmp, path)
+        except OSError as e:
+            raise SpreadsheetError(str(e))
+        if forward:
+            payload.pop("after", None)
+        elif back:
+            payload["after"] = back
+        try:
+            cur = self._store.sessions.get(path)
+            if cur is not None:
+                self._store.drop(path)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            self._db.set_payload(rec["id"], payload)
+        except Exception:  # noqa: BLE001
+            pass
+        self._saves.remove_edited_mark(path)
+        return {"kind": "file"}
+
     # -- journal jump ---------------------------------------------------------------
     def restore_record(self, path: str, rec_id: int) -> dict:
         """Move the file to the state recorded by one journal entry.
@@ -161,19 +246,36 @@ class Files:
         if idx < 0:
             return {"ok": False, "error": "record not found"}
         try:
-            s = self._store.get(path)
+            try:
+                s = self._store.get(path)
+            except SpreadsheetError:
+                # non-grid file (swt, configs): only file_write records apply
+                s = None
             # records newer than the target that are still applied -> undo
             for e in entries[:idx]:
-                if not e["undone"]:
+                if e["undone"]:
+                    continue
+                if e["action"] == "file_write":
+                    self.apply_file_record(path, e, False)
+                elif s is None:
+                    raise SpreadsheetError("cannot open file")
+                else:
                     self._hist.undo_once(s, save=False)
             # records at/older than the target still undone -> redo (oldest first)
             for e in reversed(entries[idx:]):
-                if e["undone"]:
+                if not e["undone"]:
+                    continue
+                if e["action"] == "file_write":
+                    self.apply_file_record(path, e, True)
+                elif s is None:
+                    raise SpreadsheetError("cannot open file")
+                else:
                     self._hist.redo_once(s, save=False)
-            s.dirty = True
+            if s is not None:
+                s.dirty = True
         except SpreadsheetError as e:
             return {"ok": False, "error": str(e)}
-        self._store.dirty.add(s.path)
+        self._store.dirty.add(s.path if s is not None else path)
         return {"ok": True, "reload": True, **self._hist.flags(path)}
 
     # -- reset to beginning -------------------------------------------------------
@@ -187,14 +289,24 @@ class Files:
             return {"ok": False, "error": "not a file"}
         try:
             entries, _applied, _undone = self._hist.state(path)
-            s = self._store.get(path)
+            try:
+                s = self._store.get(path)
+            except SpreadsheetError:
+                s = None
             n = 0
             for e in entries:  # newest-first: undo in reverse application order
-                if not e["undone"]:
+                if e["undone"]:
+                    continue
+                if e["action"] == "file_write":
+                    self.apply_file_record(path, e, False)
+                elif s is None:
+                    raise SpreadsheetError("cannot open file")
+                else:
                     self._hist.undo_once(s, save=False)
-                    n += 1
-            s.dirty = True
+                n += 1
+            if s is not None:
+                s.dirty = True
         except SpreadsheetError as e:
             return {"ok": False, "error": str(e)}
-        self._store.dirty.add(s.path)
+        self._store.dirty.add(s.path if s is not None else path)
         return {"ok": True, "undone": n, **self._hist.flags(path)}

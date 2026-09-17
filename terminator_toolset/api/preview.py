@@ -50,7 +50,7 @@ def _quat(x) -> dict:
 
 def register_preview(app, ctx):
     """Бэкенд редактора поз камеры для превью юнитов."""
-    store = ctx.store
+    store, files, saves = ctx.store, ctx.files, ctx.saves
 
     @app.route("/api/preview_configs")
     def api_preview_configs():
@@ -114,10 +114,14 @@ def register_preview(app, ctx):
             if isinstance(body.get(key), dict):
                 clean[key] = body[key]
         d = _cfg_dir(root)
+        p = os.path.join(d, name)
+        snap = saves.stash_file(p)
         try:
             os.makedirs(d, exist_ok=True)
-            with open(os.path.join(d, name), "w", encoding="utf-8") as f:
+            with open(p, "w", encoding="utf-8") as f:
                 json.dump(clean, f, indent=4)
         except OSError:
             return jsonify({"ok": False, "error": "write_failed"})
-        return jsonify({"ok": True, "name": name})
+        saves.snapshot_origin(p)
+        files.commit_file_write(p, "preview config saved: %s" % name, snap)
+        return jsonify({"ok": True, "name": name, "path": p})

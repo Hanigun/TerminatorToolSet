@@ -112,11 +112,13 @@ class Uprising:
     """
 
     def __init__(self, store, config, entities, log, base_dir, app_dir,
-                 program_dir=""):
+                 program_dir="", files=None, saves=None):
         self._store = store
         self._config = config
         self._entities = entities
         self._log = log
+        self._files = files  # Files: whole-file journal (may be None in tests)
+        self._saves = saves  # SavePipeline: vault stash + origin snapshots
         self._base = base_dir   # assets root (frozen: _MEIPASS, else repo)
         self._app_dir = app_dir  # folder with app.py (dev fallback)
         # program dir для GameAssets (frozen — рядом с exe, dev — корень
@@ -189,6 +191,27 @@ class Uprising:
                 self.icon_disk_dir = self.png_cache
             except Exception:  # noqa: BLE001
                 self.icon_disk_dir = ""
+
+    # -- whole-file journal -------------------------------------------------
+    def _pre_write(self, path):
+        """Stash pre-write bytes (call BEFORE overwriting). None without
+        injected saves, or when there is nothing on disk (new file)."""
+        try:
+            if self._saves is not None:
+                return self._saves.stash_file(path or "")
+        except Exception:  # noqa: BLE001
+            pass
+        return None
+
+    def _post_write(self, path, summary, stash):
+        """Commit one file_write record + first-save origin snapshot."""
+        try:
+            if self._saves is not None:
+                self._saves.snapshot_origin(path or "")
+            if self._files is not None:
+                self._files.commit_file_write(path or "", summary, stash)
+        except Exception:  # noqa: BLE001
+            pass
 
     def ensure_custom_images(self):
         """Создать корни CustomImages (внешний рядом с EXE + встроенный),
@@ -2538,9 +2561,11 @@ class Uprising:
         p = self._store.normal(os.path.join(custom, base))
         if os.path.isfile(p) and not data.get("overwrite"):
             return {"ok": False, "error": "exists"}
+        stash = self._pre_write(p)
         ok, res = self.cfg_write_file(p, data)
         if not ok:
             return {"ok": False, "error": res}
+        self._post_write(p, "preset saved: %s" % base, stash)
         self._log.info("uprising preset saved: %s", p)
         return {"ok": True, "path": p, "units": res}
 
@@ -3071,6 +3096,7 @@ class Uprising:
         r = self.rnd_parse_v2(p)
         if not r.get("ok"):
             return r
+        r["path"] = p
         _, custom = self.rnd_dirs()
         r["is_custom"] = os.path.isfile(
             os.path.join(custom, os.path.basename(p)))
@@ -3105,6 +3131,7 @@ class Uprising:
             if want and abs(cur_mt - want) > 1.5:
                 return {"ok": False, "error": "conflict", "mtime": cur_mt}
         text = self.rnd_serialize_v2(payload.get("data") or payload)
+        stash = self._pre_write(p)
         try:
             with open(p, "w", encoding="utf-8") as fh:
                 fh.write(text)
@@ -3115,6 +3142,7 @@ class Uprising:
         if not chk.get("ok"):
             return {"ok": False, "error": "saved_invalid",
                     "details": chk.get("errors")}
+        self._post_write(p, "mode saved: %s" % name, stash)
         self._log.info("uprising rnd mode saved: %s", p)
         try:
             mtime = os.path.getmtime(p)
@@ -3132,11 +3160,13 @@ class Uprising:
         p = os.path.join(custom, base)
         if not os.path.isfile(p):
             return {"ok": False, "error": "not_found"}
+        stash = self._pre_write(p)
         try:
             os.remove(p)
         except OSError as e:
             return {"ok": False, "error": str(e)}
-        return {"ok": True}
+        self._post_write(p, "mode deleted: %s" % base, stash)
+        return {"ok": True, "path": p}
 
     def rnd_mode_duplicate(self, src, name):
         """Дублировать режим в Custom под новым именем."""

@@ -183,19 +183,20 @@ def create_app(config: Config, db: Database, base_dir: Optional[str] = None,
     import sys as _sys
     _program_dir = (os.path.dirname(os.path.abspath(_sys.executable))
                     if getattr(_sys, "frozen", False) else _base)
-    # -- uprising map (species parsing, icons, balance configs) ---------------
-    upr = Uprising(store, config, entities, log, _base, BASE_DIR,
-                   _program_dir)
+    # -- save pipeline (disk writes, autosave, edited marks) ------------------
     markers = Markers(config.cfg_dir if hasattr(config, "cfg_dir") else config.dir)
     if callable(on_stage):
         try:
             on_stage("boot_services")
         except Exception:  # noqa: BLE001
             pass
-    # -- save pipeline (disk writes, autosave, edited marks) ------------------
     saves = SavePipeline(store, markers, config, guarded=guard.guarded)
     # -- file lifecycle (save-as, stock rollback, journal jump) --------------
     files = Files(store, config, saves, hist, db, entities, log)
+    # -- uprising map (species parsing, icons, balance configs; files/saves —
+    # целый файловый журнал для cfg/пресетов/режимов) -------------------------
+    upr = Uprising(store, config, entities, log, _base, BASE_DIR,
+                   _program_dir, files=files, saves=saves)
     # -- compare / merge / transfer between two spreadsheet files -----------
     cmp = Compare(store, config, saves, hist, db, log)
     # -- swt mission scripts (parse + guarded save) --------------------------

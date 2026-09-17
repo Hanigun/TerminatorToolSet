@@ -4,7 +4,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import random
 import shutil
+import time
 
 
 # -- save pipeline ----------------------------------------------------------
@@ -143,6 +145,59 @@ class SavePipeline:
         try:
             if blob and os.path.isfile(blob):
                 with open(blob, "rb") as fh:
+                    return fh.read()
+        except Exception:  # noqa: BLE001
+            pass
+        return None
+
+    # -- per-write stash for non-grid files -------------------------------------
+    # Grid sessions journal diffs; dedicated writers (swt, balance configs,
+    # presets, randomizer modes, preview configs) overwrite whole files, so
+    # their undo unit is "one write": the pre-write bytes go to the vault,
+    # the journal only references them (DB stays tiny, per the history gate).
+    _STASH_TTL = 30 * 24 * 3600  # orphan stash (failed write) older -> pruned
+
+    def stash_file(self, path: str):
+        """Copy current disk bytes to the vault under a unique name.
+        Returns the stash file name, or None (nothing to stash)."""
+        path = os.path.normpath(path or "")
+        if not path or not os.path.isfile(path):
+            return None
+        d = self._snap_dir()
+        if not d:
+            return None
+        try:
+            os.makedirs(d, exist_ok=True)
+            try:
+                now = time.time()
+                for fn in os.listdir(d):
+                    if not fn.startswith("w_"):
+                        continue
+                    try:
+                        if now - os.path.getmtime(os.path.join(d, fn)) > self._STASH_TTL:
+                            os.remove(os.path.join(d, fn))
+                    except OSError:  # noqa: BLE001
+                        pass
+            except OSError:  # noqa: BLE001
+                pass
+            name = "w_%d_%s.bin" % (int(time.time() * 1000),
+                                    "%04x" % random.randrange(65536))
+            tmp = os.path.join(d, name + ".tmp")
+            shutil.copy2(path, tmp)
+            os.replace(tmp, os.path.join(d, name))
+        except Exception:  # noqa: BLE001
+            return None
+        return name
+
+    def stash_bytes(self, name: str):
+        """Raw bytes of a stash entry, or None."""
+        if not name or os.path.basename(name) != name:
+            return None
+        d = self._snap_dir()
+        try:
+            p = os.path.join(d, name) if d else ""
+            if p and os.path.isfile(p):
+                with open(p, "rb") as fh:
                     return fh.read()
         except Exception:  # noqa: BLE001
             pass

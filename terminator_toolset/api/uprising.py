@@ -8,7 +8,21 @@ from flask import jsonify, request
 
 def register_uprising(app, ctx):
     """Uprising map backend (all logic in the Uprising service)."""
-    store, upr = ctx.store, ctx.upr
+    store, upr, files, saves = ctx.store, ctx.upr, ctx.files, ctx.saves
+
+    def _journaled(path, summary, call):
+        """Whole-file write with a file_write journal record: stash the
+        pre-write bytes first, commit the record on success (plus the
+        first-save origin snapshot). Returns the service result (dict or
+        (ok, value) tuple — both shapes are used here)."""
+        snap = saves.stash_file(path or "")
+        res = call()
+        ok = (res.get("ok") if isinstance(res, dict)
+              else bool(res and res[0]))
+        if ok:
+            saves.snapshot_origin(path or "")
+            files.commit_file_write(path or "", summary, snap)
+        return res
 
     # ---------- Карта Uprising (награды секторов в shop_presets.xml) ----------
 
@@ -226,10 +240,12 @@ def register_uprising(app, ctx):
         path = store.normal(data.get("path", ""))
         if not path:
             return jsonify({"ok": False, "error": "no path"})
-        ok, res = upr.cfg_write_file(path, data)
+        res = _journaled(path, "balance config written",
+                         lambda: upr.cfg_write_file(path, data))
+        ok, val = res
         if not ok:
-            return jsonify({"ok": False, "error": res})
-        return jsonify({"ok": True, "path": path, "units": res})
+            return jsonify({"ok": False, "error": val})
+        return jsonify({"ok": True, "path": path, "units": val})
 
     # -- пресеты карты Uprising -------------------------------------------
     # (owned by Uprising: preset_dirs / preset_find / preset_list / preset_save)
