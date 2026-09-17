@@ -65,6 +65,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* строки троек — те же readout, но поля: на всю ширину панели,
+   фокус — жёлтой рамкой в акцент панели */
+input.pv3-val {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  outline: none;
+}
+input.pv3-val:focus {
+  border-color: #ffcf40;
+}
 .pv3-in {
   width: 100%;
   box-sizing: border-box;

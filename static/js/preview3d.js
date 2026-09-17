@@ -521,13 +521,13 @@ function pv3Update(pv3) {
   if (!ui || !pv3.st) return;
   const pose = pv3ReadPose(pv3);
   const f4 = v => (Math.round(v * 10000) / 10000).toFixed(4);
-  ui.pos.textContent = f4(pose.position.x) + "  " +
-    f4(pose.position.y) + "  " + f4(pose.position.z);
+  const t3 = o => f4(o.x) + "  " + f4(o.y) + "  " + f4(o.z);
+  // Строки троек — поля: недопечатанное не затираем.
+  if (document.activeElement !== ui.pos) ui.pos.value = t3(pose.position);
+  if (document.activeElement !== ui.org) ui.org.value = t3(pose.origin);
   ui.rot.textContent = f4(pose.rotation.w) + "  " +
     f4(pose.rotation.x) + "  " + f4(pose.rotation.y) + "  " +
     f4(pose.rotation.z);
-  ui.org.textContent = f4(pose.origin.x) + "  " +
-    f4(pose.origin.y) + "  " + f4(pose.origin.z);
   ui.fov.textContent = f4(pose.fov);
   ui.zoom.textContent = f4(pose.zoom);
   // Слайдеры следуют за камерой (орбита мышью, Reset, загрузка конфига);
@@ -678,13 +678,47 @@ function pv3BuildSide(pv3, st) {
     side.appendChild(d);
     return d;
   };
+  // Редактируемая строка тройки (позиция камеры, точка прицеливания):
+  // выглядит как readout, но это поле — вставка "x y z" (разделители:
+  // пробелы, запятые, точки с запятой) едет в камеру целиком.
+  // Мусор — откат к текущей позе, Enter — применить, фокус —
+  // выделить всё для быстрой замены. Недопечатанное pv3Update
+  // не затирает (тот же guard, что у слайдеров и ручных полей).
+  const mkTriple = onApply => {
+    const inp = document.createElement("input");
+    inp.className = "pv3-val pv3-triple";
+    inp.type = "text";
+    inp.spellcheck = false;
+    inp.autocomplete = "off";
+    inp.addEventListener("change", () => {
+      const v = inp.value.split(/[\s,;]+/).filter(s => s.length).map(Number);
+      if (v.length !== 3 || !v.every(n => n >= 0 || n < 0)) {
+        pv3Update(pv3);
+        return;
+      }
+      onApply(v);
+    });
+    inp.addEventListener("keydown", e => {
+      if (e.key === "Enter") inp.blur();
+    });
+    inp.addEventListener("focus", () => {
+      try { inp.select(); } catch (e) {}
+    });
+    side.appendChild(inp);
+    return inp;
+  };
   mkLab("pv3_config");
   const sel = document.createElement("select");
   sel.className = "pv3-in";
   sel.onchange = () => pv3LoadConfig(pv3, sel.value || "");
   side.appendChild(sel);
   mkLab("pv3_pos");
-  const pos = mkVal();
+  // Позиция камеры — правится и строкой целиком, и ползунками ниже.
+  const pos = mkTriple(v => {
+    const pose = pv3ReadPose(pv3);
+    pose.position = {x: v[0], y: v[1], z: v[2]};
+    pv3WritePose(pv3, pose);
+  });
   // Слайдеры осей позиции камеры (игровые координаты, метры):
   // двигают камеру, цель и угол не трогают.
   const posS = {};
@@ -702,7 +736,12 @@ function pv3BuildSide(pv3, st) {
   // Поворот — кватернион: слайдеры по компонентам бессмысленны,
   // только readout; крутится мышью (позиция подхватится выше).
   mkLab("pv3_origin");
-  const org = mkVal();
+  // Точка прицеливания — правится и строкой целиком, и ползунками ниже.
+  const org = mkTriple(v => {
+    const pose = pv3ReadPose(pv3);
+    pose.origin = {x: v[0], y: v[1], z: v[2]};
+    pv3WritePose(pv3, pose);
+  });
   // Слайдеры осей точки прицеливания: едет цель, камера стоит.
   const orgS = {};
   ["x", "y", "z"].forEach(ax => {
