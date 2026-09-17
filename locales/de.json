@@ -1102,6 +1102,7 @@
   "pv3_fov": "Sichtfeld (rad)",
   "pv3_zoom": "Distanz (Zoom)",
   "pv3_name": "Dateiname",
+  "pv3_frame": "Spielrahmen anzeigen",
   "pv3_save": "Speichern",
   "pv3_reset": "Zuruecksetzen",
   "pv3_saved": "Konfig gespeichert",

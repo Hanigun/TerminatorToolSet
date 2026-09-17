@@ -1102,6 +1102,7 @@
   "pv3_fov": "视场角（弧度）",
   "pv3_zoom": "距离（zoom）",
   "pv3_name": "文件名",
+  "pv3_frame": "游戏画面框",
   "pv3_save": "保存",
   "pv3_reset": "重置",
   "pv3_saved": "配置已保存",

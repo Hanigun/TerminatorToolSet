@@ -1102,6 +1102,7 @@
   "pv3_fov": "Field of view (rad)",
   "pv3_zoom": "Distance (zoom)",
   "pv3_name": "File name",
+  "pv3_frame": "Game frame overlay",
   "pv3_save": "Save",
   "pv3_reset": "Reset",
   "pv3_saved": "Config saved",

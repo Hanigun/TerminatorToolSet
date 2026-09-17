@@ -208,10 +208,13 @@ function pv3FetchModel(pv3, st, fail) {
   ).then(done);
 }
 
-// Модель встала: строим боковую панель, грузим список конфигов
-// и применяем позу текущего конфига юнита.
+// Модель встала: строим боковую панель, включаем текстуры (редактор —
+// WYSIWYG: в обычном превью они по умолчанию выключены), вешаем рамку
+// кадра игры, грузим список конфигов и применяем позу текущего конфига.
 function pv3AfterLoad(pv3, st) {
   pv3BuildSide(pv3, st);
+  pv3TexOn(pv3, st);
+  pv3BuildFrame(pv3, st);
   try {
     st.ctl.addEventListener("change", () => pv3Update(pv3));
   } catch (e) { /* без живого readout — только по кнопкам */ }
@@ -223,6 +226,80 @@ function pv3AfterLoad(pv3, st) {
     pv3FillSelect(pv3);
     pv3LoadConfig(pv3, pv3.config || "");
   });
+}
+
+// Редактор — WYSIWYG: текстуры включены сразу, а не по вкладке
+// (в обычном превью модели они по умолчанию выключены). Ядро уважаем:
+// только флаг st.texOn + та же раздача уже готовых карт, что в кнопке
+// Textures; догрузка в фоне подхватится сама через m3dTexReady.
+// model3d.js не тронут.
+function pv3TexOn(pv3, st) {
+  if (!st || st.texOn) return;
+  st.texOn = true;
+  try {
+    const want = t("m3d_textures") || "m3d_textures";
+    st.bar.querySelectorAll("button").forEach(b => {
+      if (b.textContent === want) b.classList.add("on");
+    });
+  } catch (e) { /* подсветка необязательна */ }
+  try {
+    st.group.children.forEach(mesh => {
+      const mt = mesh.material, slots = mt && mt.userData.slots;
+      if (!mt || !slots) return;
+      let touched = false;
+      ["map", "normalMap", "roughnessMap"].forEach(k => {
+        const tx = slots[k];
+        if (tx && tx.image && tx.image.complete !== false &&
+            tx.image.width) {
+          mt[k] = tx;
+          touched = true;
+        }
+      });
+      if (touched) mt.needsUpdate = true;
+      mt.userData.mapsOn = touched;
+    });
+  } catch (e) { /* карты доедут по готовности */ }
+}
+
+// Рамка кадра игры: квадрат как слот карточки юнита в игре (~1:1).
+// Внутри рамки — то, что увидит игрок, снаружи — вуаль. Геометрия
+// пересчитывается под текущий размер сцены.
+function pv3BuildFrame(pv3, st) {
+  const view = st && st.view;
+  if (!view || pv3.frame) return;
+  const el = document.createElement("div");
+  el.className = "pv3-frame";
+  view.appendChild(el);
+  pv3.frame = el;
+  pv3.frameOn = true;
+  pv3LayoutFrame(pv3, st);
+  try {
+    const ro = new ResizeObserver(() => pv3LayoutFrame(pv3, st));
+    ro.observe(view);
+    // Отписка — через общий список m3dClose (dispose, без правок ядра)
+    st.disposables.push({dispose: () => {
+      try { ro.disconnect(); } catch (e) {}
+    }});
+  } catch (e) { /* старый движок — рамка по первому замеру */ }
+}
+
+function pv3LayoutFrame(pv3, st) {
+  const el = pv3.frame, view = st && st.view;
+  if (!el || !view) return;
+  const w = view.clientWidth || 0, h = view.clientHeight || 0;
+  if (w < 10 || h < 10) return;
+  const s = Math.floor(Math.min(w, h));
+  el.style.display = pv3.frameOn ? "" : "none";
+  el.style.width = s + "px";
+  el.style.height = s + "px";
+  el.style.left = Math.floor((w - s) / 2) + "px";
+  el.style.top = Math.floor((h - s) / 2) + "px";
+}
+
+function pv3SetFrame(pv3, on) {
+  pv3.frameOn = !!on;
+  if (pv3.ui && pv3.ui.frame) pv3.ui.frame.checked = pv3.frameOn;
+  pv3LayoutFrame(pv3, pv3.st);
 }
 
 // Применить позу из конфига: точка прицеливания, угол обзора, затем
@@ -431,6 +508,15 @@ function pv3BuildSide(pv3, st) {
   name.autocomplete = "off";
   name.placeholder = "abrams";
   side.appendChild(name);
+  const frameLab = document.createElement("label");
+  frameLab.className = "pv3-check";
+  const frame = document.createElement("input");
+  frame.type = "checkbox";
+  frame.checked = true;
+  frame.onchange = () => pv3SetFrame(pv3, frame.checked);
+  frameLab.appendChild(frame);
+  frameLab.appendChild(document.createTextNode(L("pv3_frame")));
+  side.appendChild(frameLab);
   const row = document.createElement("div");
   row.className = "pv3-row";
   const save = document.createElement("button");
@@ -450,6 +536,6 @@ function pv3BuildSide(pv3, st) {
   row.appendChild(reset);
   side.appendChild(row);
   pv3.ui = {sel: sel, pos: pos, rot: rot, org: org, fov: fov,
-    fovIn: fovIn, zoom: zoom, name: name};
+    fovIn: fovIn, zoom: zoom, name: name, frame: frame};
   pv3Update(pv3);
 }

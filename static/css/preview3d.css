@@ -100,3 +100,32 @@
 .pv3-btn.pv3-ghost:hover {
   background: #33363c;
 }
+/* Рамка кадра игры: квадрат как слот карточки юнита; всё, что внутри
+рамки, попадёт в игру, снаружи — затемнено. Геометрию (left/top/size)
+каждый раз выставляет JS под текущий размер сцены; тень-вуаль
+box-shadow накрывает всё за пределами рамки одним элементом. */
+.pv3-frame {
+  position: absolute;
+  pointer-events: none;
+  border: 1px solid rgba(94, 234, 212, 0.85);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  z-index: 5;
+}
+/* Чекбокс рамки в боковой панели */
+.pv3-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: #cfd3da;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.pv3-check input {
+  accent-color: #5eead4;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+}
