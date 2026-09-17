@@ -214,6 +214,7 @@ function pv3FetchModel(pv3, st, fail) {
 function pv3AfterLoad(pv3, st) {
   pv3BuildSide(pv3, st);
   pv3TexOn(pv3, st);
+  pv3TexWatch(pv3, st);
   pv3BuildFrame(pv3, st);
   try {
     st.ctl.addEventListener("change", () => pv3Update(pv3));
@@ -231,7 +232,7 @@ function pv3AfterLoad(pv3, st) {
 // Редактор — WYSIWYG: текстуры включены сразу, а не по вкладке
 // (в обычном превью модели они по умолчанию выключены). Ядро уважаем:
 // только флаг st.texOn + та же раздача уже готовых карт, что в кнопке
-// Textures; догрузка в фоне подхватится сама через m3dTexReady.
+// Textures; остальное доводит наблюдатель менеджера (pv3TexWatch).
 // model3d.js не тронут.
 function pv3TexOn(pv3, st) {
   if (!st || st.texOn) return;
@@ -242,6 +243,12 @@ function pv3TexOn(pv3, st) {
       if (b.textContent === want) b.classList.add("on");
     });
   } catch (e) { /* подсветка необязательна */ }
+  pv3TexAssign(st);
+}
+
+// Раздача готовых карт по материалам — ровно та же, что в кнопке
+// Textures ядра (map/normalMap/roughnessMap из слотов).
+function pv3TexAssign(st) {
   try {
     st.group.children.forEach(mesh => {
       const mt = mesh.material, slots = mt && mt.userData.slots;
@@ -259,6 +266,49 @@ function pv3TexOn(pv3, st) {
       mt.userData.mapsOn = touched;
     });
   } catch (e) { /* карты доедут по готовности */ }
+}
+
+// Наблюдатель загрузок: дожимает назначение на каждом затишье менеджера
+// (покрывает поздние догрузки и своп башни — её текстуры идут через тот
+// же менеджер) и показывает живой статус в панели: сколько карт приехало,
+// сколько упало. Оригиналы колбэков ядра вызываются как были.
+function pv3TexWatch(pv3, st) {
+  const mgr = st && st.texMgr;
+  if (!mgr || mgr._pv3) return;
+  mgr._pv3 = true;
+  const stat = {total: 0, done: 0, err: 0};
+  const paint = () => {
+    if (pv3.ui && pv3.ui.tex)
+      pv3.ui.tex.textContent = "tex " + stat.done + "/" + stat.total +
+        (stat.err ? " · err " + stat.err : "");
+  };
+  const prevStart = mgr.onStart, prevProg = mgr.onProgress,
+    prevLoad = mgr.onLoad, prevErr = mgr.onError;
+  mgr.onStart = (url, a, b) => {
+    try { if (typeof prevStart === "function") prevStart(url, a, b); }
+    catch (e) {}
+    stat.total = b || 0;
+    paint();
+  };
+  mgr.onProgress = (url, a, b) => {
+    try { if (typeof prevProg === "function") prevProg(url, a, b); }
+    catch (e) {}
+    stat.done = a || 0;
+    stat.total = b || stat.total;
+    paint();
+  };
+  mgr.onLoad = () => {
+    try { if (typeof prevLoad === "function") prevLoad(); } catch (e) {}
+    pv3TexAssign(st);
+    paint();
+  };
+  mgr.onError = url => {
+    try { if (typeof prevErr === "function") prevErr(url); } catch (e) {}
+    stat.err++;
+    try { console.warn("[pv3] texture failed: " + url); } catch (e2) {}
+    paint();
+  };
+  paint();
 }
 
 // Рамка кадра игры: квадрат как слот карточки юнита в игре (~1:1).
@@ -518,6 +568,13 @@ function pv3BuildSide(pv3, st) {
   frameLab.appendChild(frame);
   frameLab.appendChild(document.createTextNode(L("pv3_frame")));
   side.appendChild(frameLab);
+  // Живой статус текстур (заполняет наблюдатель pv3TexWatch):
+  // сколько карт приехало, сколько упало — видно, грузится ли вообще.
+  const tex = document.createElement("div");
+  tex.className = "pv3-val";
+  tex.style.marginTop = "8px";
+  tex.textContent = "tex 0/0";
+  side.appendChild(tex);
   const row = document.createElement("div");
   row.className = "pv3-row";
   const save = document.createElement("button");
@@ -537,6 +594,6 @@ function pv3BuildSide(pv3, st) {
   row.appendChild(reset);
   side.appendChild(row);
   pv3.ui = {sel: sel, pos: pos, rot: rot, org: org, fov: fov,
-    fovIn: fovIn, zoom: zoom, name: name, frame: frame};
+    fovIn: fovIn, zoom: zoom, name: name, frame: frame, tex: tex};
   pv3Update(pv3);
 }
