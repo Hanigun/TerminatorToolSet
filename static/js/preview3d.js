@@ -269,6 +269,7 @@ function pv3BuildFrame(pv3, st) {
   if (!view || pv3.frame) return;
   const el = document.createElement("div");
   el.className = "pv3-frame";
+  for (let c = 0; c < 4; c++) el.appendChild(document.createElement("i"));
   view.appendChild(el);
   pv3.frame = el;
   pv3.frameOn = true;

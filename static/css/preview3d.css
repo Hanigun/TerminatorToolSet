@@ -5,6 +5,9 @@
 }
 .pv3-pop .m3d-view {
   width: auto;
+  /* Вуаль рамки живёт только над сценой: без клипа огромная тень
+  накрывает соседнюю панель параметров */
+  overflow: hidden;
 }
 .pv3-body {
   display: flex;
@@ -103,13 +106,48 @@
 /* Рамка кадра игры: квадрат как слот карточки юнита; всё, что внутри
 рамки, попадёт в игру, снаружи — затемнено. Геометрию (left/top/size)
 каждый раз выставляет JS под текущий размер сцены; тень-вуаль
-box-shadow накрывает всё за пределами рамки одним элементом. */
+box-shadow накрывает всё за пределами рамки одним элементом.
+Стиль — игровой HUD: тонкая бирюза, внешнее свечение акцента,
+уголки-скобы как у прицела. */
 .pv3-frame {
   position: absolute;
   pointer-events: none;
-  border: 1px solid rgba(94, 234, 212, 0.85);
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(94, 234, 212, 0.55);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55),
+    0 0 16px rgba(94, 234, 212, 0.35),
+    inset 0 0 28px rgba(94, 234, 212, 0.07);
   z-index: 5;
+}
+.pv3-frame i {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 0 solid #5eead4;
+  filter: drop-shadow(0 0 4px rgba(94, 234, 212, 0.9));
+}
+.pv3-frame i:nth-child(1) {
+  left: -2px;
+  top: -2px;
+  border-left-width: 2px;
+  border-top-width: 2px;
+}
+.pv3-frame i:nth-child(2) {
+  right: -2px;
+  top: -2px;
+  border-right-width: 2px;
+  border-top-width: 2px;
+}
+.pv3-frame i:nth-child(3) {
+  left: -2px;
+  bottom: -2px;
+  border-left-width: 2px;
+  border-bottom-width: 2px;
+}
+.pv3-frame i:nth-child(4) {
+  right: -2px;
+  bottom: -2px;
+  border-right-width: 2px;
+  border-bottom-width: 2px;
 }
 /* Чекбокс рамки в боковой панели */
 .pv3-check {
