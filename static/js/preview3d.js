@@ -353,6 +353,40 @@ function pv3SetFrame(pv3, on) {
   pv3LayoutFrame(pv3, pv3.st);
 }
 
+// Прямая запись позы из игровых координат (для слайдеров): точка,
+// позиция и угол — как есть, без пересчёта по дистанции (в отличие от
+// pv3ApplyPose, которая кладёт камеру по направлению на zoom).
+function pv3WritePose(pv3, pose) {
+  const st = pv3.st;
+  if (!st || !pose) return;
+  const o = pv3G2T(pose.origin || {}), p = pv3G2T(pose.position || {});
+  st.ctl.target.set(o.x, o.y, o.z);
+  st.camera.position.set(p.x, p.y, p.z);
+  st.camera.fov = (+pose.fov > 0 ? +pose.fov : 0.49) * PV3_RAD2DEG;
+  st.camera.updateProjectionMatrix();
+  st.ctl.update();
+  pv3Update(pv3);
+}
+
+// Тонкий слайдер одной оси: буква + ползунок (значение уже видно
+// в readout выше). Возвращает input; позицию подтягивает pv3Update.
+function pv3Slider(parent, axis, min, max, step, onInput) {
+  const row = document.createElement("div");
+  row.className = "pv3-srow";
+  const lab = document.createElement("span");
+  lab.textContent = axis;
+  const s = document.createElement("input");
+  s.type = "range";
+  s.min = min;
+  s.max = max;
+  s.step = step;
+  s.addEventListener("input", () => onInput(parseFloat(s.value)));
+  row.appendChild(lab);
+  row.appendChild(s);
+  parent.appendChild(row);
+  return s;
+}
+
 // Применить позу из конфига: точка прицеливания, угол обзора, затем
 // камера на сохранённой дистанции (zoom) по направлению позы.
 // Координаты игры (Z вверх) — через переход кадра в three.
@@ -409,6 +443,23 @@ function pv3Update(pv3) {
   ui.fov.textContent = f4(pose.fov);
   ui.zoom.textContent = f4(pose.zoom);
   if (document.activeElement !== ui.fovIn) ui.fovIn.value = f4(pose.fov);
+  // Слайдеры следуют за камерой (орбита мышью, Reset, загрузка конфига);
+  // пока ползунок тащат — не мешаем (фокус на нём). Диапазон только
+  // расширяется под значение, назад не сужается.
+  const setS = (s, v) => {
+    if (!s) return;
+    v = +v;
+    if (!(v >= 0 || v < 0)) return;
+    if (v < +s.min) s.min = (v * 1.2).toFixed(2);
+    if (v > +s.max) s.max = (v * 1.2).toFixed(2);
+    if (document.activeElement !== s) s.value = v;
+  };
+  setS(ui.fovS, pose.fov);
+  setS(ui.zoomS, pose.zoom);
+  ["x", "y", "z"].forEach(ax => {
+    setS(ui.posS && ui.posS[ax], pose.position[ax]);
+    setS(ui.orgS && ui.orgS[ax], pose.origin[ax]);
+  });
 }
 
 // Загрузить конфиг по имени и встать в его позу; пустое имя —
@@ -529,10 +580,31 @@ function pv3BuildSide(pv3, st) {
   side.appendChild(sel);
   mkLab("pv3_pos");
   const pos = mkVal();
+  // Слайдеры осей позиции камеры (игровые координаты, метры):
+  // двигают камеру, цель и угол не трогают.
+  const posS = {};
+  ["x", "y", "z"].forEach(ax => {
+    posS[ax] = pv3Slider(side, ax.toUpperCase(), -60, 60, 0.01, v => {
+      const pose = pv3ReadPose(pv3);
+      pose.position[ax] = v;
+      pv3WritePose(pv3, pose);
+    });
+  });
   mkLab("pv3_rot");
   const rot = mkVal();
+  // Поворот — кватернион: слайдеры по компонентам бессмысленны,
+  // только readout; крутится мышью (позиция подхватится выше).
   mkLab("pv3_origin");
   const org = mkVal();
+  // Слайдеры осей точки прицеливания: едет цель, камера стоит.
+  const orgS = {};
+  ["x", "y", "z"].forEach(ax => {
+    orgS[ax] = pv3Slider(side, ax.toUpperCase(), -60, 60, 0.01, v => {
+      const pose = pv3ReadPose(pv3);
+      pose.origin[ax] = v;
+      pv3WritePose(pv3, pose);
+    });
+  });
   mkLab("pv3_fov");
   const fov = mkVal();
   const fovIn = document.createElement("input");
@@ -549,8 +621,27 @@ function pv3BuildSide(pv3, st) {
     pv3Update(pv3);
   };
   side.appendChild(fovIn);
+  // Слайдер угла обзора — дубль числового поля выше.
+  const fovS = pv3Slider(side, "F", 0.05, 1.5, 0.005, v => {
+    if (!(v > 0)) return;
+    const pose = pv3ReadPose(pv3);
+    pose.fov = v;
+    pv3WritePose(pv3, pose);
+  });
   mkLab("pv3_zoom");
   const zoom = mkVal();
+  // Слайдер дистанции: едет камера вдоль текущего луча, цель стоит.
+  const zoomS = pv3Slider(side, "D", 0.5, 120, 0.05, v => {
+    if (!(v > 0)) return;
+    const pose = pv3ReadPose(pv3);
+    const o = pose.origin, p = pose.position;
+    const dx = p.x - o.x, dy = p.y - o.y, dz = p.z - o.z;
+    const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (!(len > 1e-8)) return;
+    pose.position = {x: o.x + dx / len * v,
+      y: o.y + dy / len * v, z: o.z + dz / len * v};
+    pv3WritePose(pv3, pose);
+  });
   mkLab("pv3_name");
   const name = document.createElement("input");
   name.className = "pv3-in";
@@ -594,6 +685,7 @@ function pv3BuildSide(pv3, st) {
   row.appendChild(reset);
   side.appendChild(row);
   pv3.ui = {sel: sel, pos: pos, rot: rot, org: org, fov: fov,
-    fovIn: fovIn, zoom: zoom, name: name, frame: frame, tex: tex};
+    fovIn: fovIn, zoom: zoom, name: name, frame: frame, tex: tex,
+    posS: posS, orgS: orgS, fovS: fovS, zoomS: zoomS};
   pv3Update(pv3);
 }
