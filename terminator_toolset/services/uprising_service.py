@@ -1391,7 +1391,7 @@ class Uprising:
                         pass
 
     def dds_webp(self, src, subdir=None, root=None, normal_fix=False,
-                 normal_auto=False, kind="texture", model=""):
+                 normal_auto=False, kind="texture", model="", quality=None):
         """DDS -> WebP в assets/CustomImages/<area>/<owner>/ (качество 85).
 
         Раскладка: projects|game|mods/<имя>/icons (иконки — все в одну)
@@ -1405,7 +1405,12 @@ class Uprising:
         читается как есть — без массовой реконвертации; новые записи
         только в новую раскладку. Свежий (не старше исходника) файл
         не переконвертируется. Путь к готовому файлу или ''.
-        subdir — явная подпапка (совместимость): задана — пишется туда."""
+        subdir — явная подпапка (совместимость): задана — пишется туда.
+        quality — WebP-качество (None = 85): у текстур моделей — по слоту
+        (albedo 80 / normal 75 / rough 75, замер), у иконок — всегда 85.
+        Качество в имени файла не сидит: готовый свежий файл не
+        переконвертируется, смешанный кэш сходится сам (новые и
+        изменившиеся — уже ужатые)."""
         try:
             if not src or not os.path.isfile(src):
                 return ""
@@ -1477,7 +1482,12 @@ class Uprising:
             if not dst_dir:
                 return ""
             from . import dds_converter as _dc
+            try:
+                q = int(quality) if quality is not None else _dc.QUALITY
+            except (TypeError, ValueError):
+                q = _dc.QUALITY
             if _dc.convert_file(src, os.path.join(dst_dir, fn),
+                                quality=q,
                                 normal_fix=bool(normal_fix),
                                 normal_auto=bool(normal_auto)):
                 self._drop_legacy_flat(stem)

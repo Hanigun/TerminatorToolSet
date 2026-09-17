@@ -11,6 +11,22 @@ import os
 
 QUALITY = 85
 
+# Качество WebP по слоту материала (замер на 2K-текстурах Абрамса):
+# albedo q80 −21% файла при −1.7 дБ (глазом неотличимо на модели),
+# normal q75 −47% при −0.5 дБ (шейдинг идентичен), rough q75 −36%.
+# method всегда 4: method 6 даёт +13с энкода ради −4% (ловушка).
+# Неизвестный слот и иконки — 85.
+QUALITY_BY_SLOT = {"albedo": 80, "normal": 75, "rough": 75}
+
+
+def quality_for_slot(slot):
+    """WebP-качество для слота материала (albedo|normal|rough)."""
+    try:
+        return int(QUALITY_BY_SLOT.get((slot or "").strip().lower(),
+                                       QUALITY))
+    except (TypeError, ValueError):
+        return QUALITY
+
 
 def dds_fourcc(path):
     """FourCC DDS-файла (b'DXT1'/b'BC5U'/...) по заголовку, иначе b''.

@@ -60,12 +60,14 @@ def _norm_rel(path, base):
 
 
 def build_tex_owner_index(bases, stop_fn=None, progress_fn=None):
-    """texture-rel -> стем модели-владельца (первая по сортировке).
+    """(owners, qualities): texture-rel -> стем модели-владельца
+    и texture-rel -> WebP-качество (максимум по слотам, где текстура
+    светится: albedo 80 держит верх над rough 75).
 
     bases — папки слоёв (basis/dlc). .material парсится целиком
     (мелкие файлы), из .model материалы дёргаются байтовым regex
     (полный парсинг тысяч моделей для индекса не нужен).
-    Возвращает {texrel: stem}; непокрытые текстуры зовутся shared."""
+    Непокрытые текстуры зовутся shared с качеством по умолчанию."""
     mat_files, mod_files = [], []
     for b in bases or []:
         try:
@@ -77,7 +79,7 @@ def build_tex_owner_index(bases, stop_fn=None, progress_fn=None):
                     elif low.endswith(".model"):
                         mod_files.append(os.path.join(dirpath, fn))
                 if stop_fn is not None and stop_fn():
-                    return {}
+                    return {}, {}
         except Exception:  # noqa: BLE001
             continue
     mat_files.sort()
@@ -90,24 +92,30 @@ def build_tex_owner_index(bases, stop_fn=None, progress_fn=None):
             pass
     mat_tex = {}
     mat_stem = {}
+    tex_slots = {}
     try:
         from terminator_toolset.model3d.material_format import (
             read_material as _read_mat,
         )
+        from terminator_toolset.services.dds_converter import (
+            quality_for_slot as _q4s,
+        )
     except Exception:  # noqa: BLE001
         _read_mat = None
+        _q4s = None
     done = 0
     for p in mat_files:
         if stop_fn is not None and stop_fn():
-            return {}
+            return {}, {}
         try:
             texs = set()
             if _read_mat is not None:
                 m = _read_mat(p)
-                for v in (m.textures or {}).values():
+                for slot, v in (m.textures or {}).items():
                     v = str(v or "").replace("\\", "/").strip().lower()
                     if v:
                         texs.add(v)
+                        tex_slots.setdefault(v, set()).add(slot)
             if texs:
                 # ключ — normcase: rel из .model может отличаться
                 # регистром от реального имени на диске
@@ -131,7 +139,7 @@ def build_tex_owner_index(bases, stop_fn=None, progress_fn=None):
     cand = {}
     for p in mod_files:
         if stop_fn is not None and stop_fn():
-            return {}
+            return {}, {}
         try:
             stem = os.path.splitext(os.path.basename(p))[0]
             # таблица материалов — в шапке или хвосте файла (у Abramса
@@ -181,9 +189,16 @@ def build_tex_owner_index(bases, stop_fn=None, progress_fn=None):
         except Exception:  # noqa: BLE001
             pass
     owners = {}
+    qualities = {}
     for t, pairs in cand.items():
         owners[t] = _best_owner(pairs)
-    return owners
+    if _q4s is not None:
+        for t, slots in tex_slots.items():
+            try:
+                qualities[t] = max(_q4s(s) for s in slots)
+            except Exception:  # noqa: BLE001
+                pass
+    return owners, qualities
 
 
 def _lcs_len(a, b):
@@ -306,8 +321,9 @@ class WarmupManager:
                     continue
             files.sort(key=lambda t: t[1])
             self._set(phase="index", total=len(files))
-            # фаза 2: владельцы текстур (фронт показывает тот же scan)
-            owners = build_tex_owner_index(
+            # фаза 2: владельцы текстур + качество по слотам
+            # (фронт показывает тот же scan)
+            owners, qualities = build_tex_owner_index(
                 bases, stop_fn=lambda: self._stop,
                 progress_fn=lambda d, t: self._set(done=d, total=t))
             if self._stop:
@@ -333,9 +349,11 @@ class WarmupManager:
                             nr, na = False, False
                     rel = _norm_rel(p, b)
                     model = owners.get(rel, "") if rel else ""
+                    q = qualities.get(rel) if rel else None
                     r = self._upr.dds_webp(p, root=root, normal_fix=nr,
                                           normal_auto=na, kind="texture",
-                                          model=model or "shared")
+                                          model=model or "shared",
+                                          quality=q)
                     if not r:
                         failed += 1
                 except Exception:  # noqa: BLE001

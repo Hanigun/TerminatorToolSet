@@ -374,7 +374,7 @@ function m3dWantTex(st, texLoader, maxAniso, texUrl, mat, slot, rel, srgb) {
   let tx = st.texCache[key];
   if (!tx) {
     try {
-      tx = texLoader.load(texUrl(rel), () => m3dTexReady(st, mat, slot));
+      tx = texLoader.load(texUrl(rel, slot), () => m3dTexReady(st, mat, slot));
       if (srgb) tx.encoding = THREE.sRGBEncoding;
       tx.anisotropy = maxAniso;
       // UV игры тайлятся (гусеницы: v до −13) — без повтора Clamp
@@ -411,9 +411,11 @@ function m3dAddMeshes(st, meshes, materials, modelRel) {
     const bn = String(modelRel || "").replace(/\\/g, "/").split("/").pop();
     modelStem = bn.replace(/\.[^.]*$/, "");
   } catch (e) { modelStem = ""; }
-  const texUrl = rel => "/api/model_tex?root=" + encodeURIComponent(root || "") +
+  const texUrl = (rel, slot) => "/api/model_tex?root=" + encodeURIComponent(root || "") +
     "&rel=" + encodeURIComponent(rel || "") +
-    "&model=" + encodeURIComponent(modelStem);
+    "&model=" + encodeURIComponent(modelStem) +
+    "&slot=" + encodeURIComponent({map: "albedo", normalMap: "normal",
+      roughnessMap: "rough"}[slot] || "");
   const group = st.group;
   let armorCount = 0, turretCount = 0;
   const armorStat = {};

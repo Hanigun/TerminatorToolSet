@@ -65,6 +65,7 @@ def register_model3d(app, ctx):
         root = store.normal(request.args.get("root", ""))
         rel = m3.safe_rel(request.args.get("rel") or "")
         model = str(request.args.get("model") or "")
+        slot = str(request.args.get("slot") or "")
         try:
             ovl = upr.unpacked_root() if upr is not None else ""
         except Exception:  # noqa: BLE001
@@ -92,7 +93,8 @@ def register_model3d(app, ctx):
                 nr, na = _dc.normal_hints(p)
                 p = upr.dds_webp(p, root=root, normal_fix=nr,
                                  normal_auto=na, kind="texture",
-                                 model=model) or ""
+                                 model=model,
+                                 quality=_dc.quality_for_slot(slot)) or ""
             except Exception:  # noqa: BLE001
                 p = ""
         if not p or not os.path.isfile(p):
