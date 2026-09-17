@@ -290,6 +290,17 @@ function m3dStage(pop, view, bar, root) {
   // Общий менеджер текстур на диалог: догрузка идёт в фоне, справа
   // сверху висит её прогресс, просмотр модели ничего не ждёт
   st.texMgr = new THREE.LoadingManager();
+  // Старт тоже показываем (tex 0/N): иначе до первой готовой текстуры
+  // (геометрия + её 10МБ JSON + сборка 269 мешей + башня) бар молчит
+  // ~10 сек и кажется, что ничего не происходит
+  st.texMgr.onStart = (url, loaded, total) => {
+    try {
+      st.tprog.style.display = "";
+      st.tprog.querySelector("span").textContent =
+        "tex " + loaded + "/" + total;
+      st.tprog.querySelector("b").style.width = "0%";
+    } catch (e) {}
+  };
   st.texMgr.onProgress = (url, loaded, total) => {
     try {
       st.tprog.style.display = "";
