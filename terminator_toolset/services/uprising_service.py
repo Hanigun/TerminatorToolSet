@@ -1660,13 +1660,33 @@ class Uprising:
         names = sorted({str(n).strip() for n in (names or [])
                         if str(n).strip()})[:800]
         want = {}
-        for n in names:
+        # поиск исходников — пулом (icon_source_file на имя: десятки stat
+        # по слоям/DLC; последовательно 400+ имён давали секунды,
+        # I/Ostat'ы GIL не держат). Кэши внутри потокобезопасны
+        # (icon_map — под icon_lock + дисковый, остальные — чтение).
+        def _src(n):
             try:
                 srcs = self.icon_state_sources(root, n)
             except Exception:  # noqa: BLE001
-                continue
-            if srcs:
-                want[n] = srcs
+                return (n, None)
+            return (n, srcs or None)
+
+        if len(names) > 8:
+            try:
+                with ThreadPoolExecutor(max_workers=8) as ex:
+                    for n, srcs in ex.map(_src, names):
+                        if srcs:
+                            want[n] = srcs
+            except Exception:  # noqa: BLE001
+                for n in names:
+                    _, srcs = _src(n)
+                    if srcs:
+                        want[n] = srcs
+        else:
+            for n in names:
+                _, srcs = _src(n)
+                if srcs:
+                    want[n] = srcs
         # конверт вариантов — пулом (последовательно сотни dds давали
         # 10+с на запрос состояний и тормозили первый ховер)
         jobs = []
