@@ -263,14 +263,19 @@ class Uprising:
         try:
             names = s.worksheet.column_names() or []
             rows = [{i: str(h or "") for i, h in enumerate(names)}]
+            # один проход на строку (Row.values_row): поштучный cell_value
+            # пересобирал cells на каждую ячейку из сотен колонок
             for r in s.worksheet.rows:
+                try:
+                    vals = r.values_row(len(names))
+                except Exception:  # noqa: BLE001
+                    vals = []
                 cells = {}
-                for i in range(len(names)):
+                for i, v in enumerate(vals):
                     try:
-                        v = r.cell_value(i)
+                        cells[i] = str(v or "")
                     except Exception:  # noqa: BLE001
-                        v = ""
-                    cells[i] = str(v or "")
+                        cells[i] = ""
                 rows.append(cells)
             return rows
         except Exception:  # noqa: BLE001

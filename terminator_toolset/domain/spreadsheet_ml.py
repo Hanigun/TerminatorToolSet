@@ -217,6 +217,42 @@ class Row:
         c = self.cell_by_logical(col_0based + 1)
         return c.value if c is not None else ""
 
+    def values_row(self, count: int) -> "list[str]":
+        """Значения первых count логических колонок ОДНИМ проходом.
+
+        Эквивалент [cell_value(c) for c in range(count)], но без
+        пересборки cells на каждую ячейку: grid() дёргал cell_value
+        rows×cols раз, и каждый вызов заново обходил детей <Row>
+        (helicopters: 75×276 = 4.7 млн вызовов, 1.1с на файл).
+        Пустые логические колонки — "", ss:Index чтится как в cell_value.
+        Только чтение: живые правки идут через set_cell_value."""
+        n = max(int(count), 0)
+        out = [""] * n
+        if not n:
+            return out
+        # дубли логической колонки (битые данные мода: два ss:Index=16
+        # подряд) — побеждает ПЕРВАЯ, как cell_by_logical (с ней же
+        # работают правки set_cell_value).
+        seen = set()
+        seq = 1
+        for ch in self.elem:
+            if ch.tag != _SS + "Cell":
+                continue
+            iv = ch.get(_SS + "Index")
+            if iv:
+                try:
+                    seq = int(iv)
+                except ValueError:
+                    pass
+            if 1 <= seq <= n and seq not in seen:
+                seen.add(seq)
+                for sub in ch:
+                    if sub.tag == _SS + "Data":
+                        out[seq - 1] = "".join(sub.itertext())
+                        break
+            seq += 1
+        return out
+
     def cell(self, col_0based: int) -> Optional[Cell]:
         return self.cell_by_logical(col_0based + 1)
 

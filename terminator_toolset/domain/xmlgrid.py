@@ -62,14 +62,13 @@ class Session:
         """Full worksheet grid for the frontend."""
         ws = self.worksheet
         cols = ws.column_names()
+        ncols = len(cols)
         data = []
         for r in ws.rows:
-            row = {"values": [], "key": ""}
-            for c in range(len(cols)):
-                # cell_value addresses the 0-based LOGICAL column (honours ss:Index)
-                v = r.cell_value(c)
-                row["values"].append(v)
-            row["key"] = row["values"][0] if row["values"] else ""
+            # один проход на строку (см. Row.values_row): поштучный
+            # cell_value пересобирал cells на каждую ячейку из 276
+            vals = r.values_row(ncols)
+            row = {"values": vals, "key": vals[0] if vals else ""}
             data.append(row)
         return {
             "sheet_index": self.sheet_index,
