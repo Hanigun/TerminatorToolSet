@@ -169,27 +169,3 @@ input, textarea, select, [contenteditable="true"] { user-select: text; -webkit-u
   position: relative;
 }
 
-/* Прогрев текстур: полоса 5px на нижней грани таб-бара — верхней
-   половиной лежит на теле шапки, нижней заезжает под шов: сам шов
-   (border-bottom таб-бара) дорисован поверх полосы псевдоэлементом
-   ровно на уровне границы, layout не двигает, пульс кнопки.
-   Заливка — сплошной акцент без полупрозрачности + свечение, движение —
-   transform scaleX (только композитор, без reflow: опрос статуса
-   раз в секунду страницу не дёргает). */
-.warmup-bar { position: absolute; left: 0; right: 0; bottom: -3px; height: 5px;
-  background: transparent; overflow: visible; pointer-events: none; z-index: 6; }
-.warmup-bar[hidden] { display: none; }
-/* шов поверх полосы: 1px ровно на уровне border-bottom таб-бара
-   (верх полосы на 2px выше низа шапки, граница — 2..3px сверху) */
-.warmup-bar::after { content: ""; position: absolute; left: 0; right: 0;
-  top: 2px; height: 1px; background: var(--border); }
-.warmup-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%;
-  background: var(--accent); border-radius: 0 2px 2px 0;
-  box-shadow: 0 0 6px var(--accent-glow);
-  transform-origin: left center;
-  transform: scaleX(0); will-change: transform; }
-.warmup-label { display: none; }
-#btn-warmup.running { color: var(--accent); }
-#btn-warmup.running svg { animation: wu-pulse 1.2s ease-in-out infinite; }
-@keyframes wu-pulse { 50% { opacity: 0.35; } }
-

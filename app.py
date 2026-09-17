@@ -37,7 +37,6 @@ from terminator_toolset.api.swt import register_swt
 from terminator_toolset.api.units import register_units
 from terminator_toolset.api.uprising import register_uprising
 from terminator_toolset.api.updates import register_updates
-from terminator_toolset.api.warmup import register_warmup
 from terminator_toolset.domain import swt_editor as swt_mod
 from terminator_toolset.domain.config import Config, Markers
 from terminator_toolset.domain.database import Database
@@ -58,7 +57,6 @@ from terminator_toolset.services.session_store import SessionStore
 from terminator_toolset.services.swt_service import Swt
 from terminator_toolset.services.uprising_service import Uprising
 from terminator_toolset.services.update_service import Updates
-from terminator_toolset.services.warmup_service import WarmupManager
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -212,14 +210,12 @@ def create_app(config: Config, db: Database, base_dir: Optional[str] = None,
     watch = TreeWatch(config, entities, log)
     watch.start()
     # -- route context (services + deploy values shared by api groups) -------
-    # прогрев текстур: менеджер один на процесс, фронт опрашивает статус
-    warmup = WarmupManager(upr)
     ctx = SimpleNamespace(config=config, db=db, i18n=i18n, store=store,
                           entities=entities, hist=hist, guard=guard,
                           saves=saves, mods=mods, arch=arch, upr=upr, cmp=cmp,
-                          files=files, swt=swt, markers=markers, log=log,
-                          upd=upd, ga=ga, watch=watch, warmup=warmup,
-                          base=_base, version=VERSION)
+                           files=files, swt=swt, markers=markers, log=log,
+                           upd=upd, ga=ga, watch=watch,
+                           base=_base, version=VERSION)
     register_shell(app, ctx, boot_progress=boot_progress)
     register_config(app, ctx)
     register_project(app, ctx)
@@ -237,7 +233,6 @@ def create_app(config: Config, db: Database, base_dir: Optional[str] = None,
     register_model3d(app, ctx)
     register_preview(app, ctx)
     register_archive(app, ctx)
-    register_warmup(app, ctx)
     if callable(on_stage):
         try:
             on_stage("boot_routes")
