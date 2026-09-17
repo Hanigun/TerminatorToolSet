@@ -179,9 +179,10 @@
 .cmp-tile-base .cmp-tile-name { text-transform: uppercase; font-weight: 700; }
 .cmp-tile-base .cmp-tile-head { min-height: calc(var(--cmp-head-icon, 28px) + 6px); }
 .cmp-panel-head.cmp-head-base { text-transform: uppercase; }
-/* выбранный юнит набора (Ctrl+клик): акцентная рамка, как у плитки .sel */
-#campaign-tab .upr-cat-body .upr-chip.sel { outline: 2px solid var(--accent);
-  outline-offset: -2px; }
+/* выбранный юнит набора (Ctrl+клик): без жёлтого аутлайна, только
+   тоновая подложка (иконка подменяется на selected-состояние) */
+#campaign-tab .upr-cat-body .upr-chip.sel { outline: none;
+  background: rgba(232, 184, 75, .12); }
 /* заголовки секций крупнее базовых .upr-cat-title (11px) на 30%;
     только кампания, Uprising не трогаем */
 .cmp-sec .upr-cat-title { font-size: 14px; line-height: 18px; }

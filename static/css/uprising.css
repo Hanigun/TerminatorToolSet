@@ -29,7 +29,11 @@
   display: inline-flex; align-items: center; max-width: fit-content;
   flex-grow: 0; flex-shrink: 0; }
 .upr-chip-add-icon { display: block; pointer-events: none; }
-.upr-chip-add:hover .upr-chip-add-icon { outline: 1px dashed var(--accent); }
+/* у кнопки-add нет никаких аутлайнов: ни пунктира при наведении,
+   ни фокусного после клика (кнопка — <button>, фокус на ней остаётся);
+   ховер виден только яркостью иконки */
+.upr-chip-add:focus, .upr-chip-add:focus-visible { outline: none; }
+.upr-chip-add:hover .upr-chip-add-icon { filter: brightness(1.25); }
 /* кнопка-add — своим рядом у левого края блока секции: во флекс-рядах
    карты flex-basis:100% переносит её на новую строку, в сетке кампании
    grid-column:1/-1 — ряд во всю ширину с прижатием влево; cfg-редактор
@@ -399,7 +403,9 @@ button.upr-map-btn.rnd {
   pointer-events: none; z-index: 2; line-height: 1.4; }
 /* чипы предметов: зеркало базового смещения (было top/left до переезда) */
 .upr-chip-badge-items { right: 3%; bottom: 7%; }
-.upr-chip.picked { outline: 2px solid var(--accent); background: rgba(232, 184, 75, .12); }
+/* выбранное — без жёлтого аутлайна: только тоновая подложка
+   (иконка и так подменяется на selected-состояние через uprChipStatePaint) */
+.upr-chip.picked { outline: none; background: rgba(232, 184, 75, .12); }
 .upr-chip.upr-chip-dragging { opacity: .35; }
 .upr-chip-name-text {
   font-size: 12px; max-width: 150px; overflow: hidden;
@@ -416,7 +422,7 @@ button.upr-map-btn.rnd {
 #uprising-tab .upr-cat-body .upr-chip.upr-card,
 .upr-cat-body.upr-cfg-ed-drop .upr-chip.upr-card {
   padding: 0; border: none; }
-.upr-card.picked { outline: 2px solid var(--accent); }
+.upr-card.picked { outline: none; background: rgba(232, 184, 75, .12); }
 .upr-chip-icon {
   display: block; user-select: none; pointer-events: none;
   background-repeat: no-repeat;
