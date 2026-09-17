@@ -227,11 +227,12 @@ function untHistPaths() {
 }
 async function untSyncUndoButtons() {
   try {
-    const rs = await Promise.all(untHistPaths().map(p =>
-      api("/api/history?path=" + encodeURIComponent(p))
-        .then(r => r.json()).catch(() => null)));
-    setUndoRedoButtons(rs.some(j => j && j.ok && j.can_undo),
-      rs.some(j => j && j.ok && j.can_redo));
+    const flags = (typeof histFlagsBatch === "function")
+      ? await histFlagsBatch(untHistPaths()) : {};
+    const list = Object.values(flags);
+    if (!list.length) return;
+    setUndoRedoButtons(list.some(j => j && j.can_undo),
+      list.some(j => j && j.can_redo));
   } catch (e) {}
 }
 // Перечитать витрину после undo/redo (dirty не трогаем: откат — тоже

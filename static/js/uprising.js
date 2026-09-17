@@ -934,11 +934,12 @@ function uprNoteExtraHist(path) {
 }
 async function uprSyncUndoButtons() {
   try {
-    const rs = await Promise.all(uprHistPaths().map(p =>
-      api("/api/history?path=" + encodeURIComponent(p))
-        .then(r => r.json()).catch(() => null)));
-    setUndoRedoButtons(rs.some(j => j && j.ok && j.can_undo),
-      rs.some(j => j && j.ok && j.can_redo));
+    const flags = (typeof histFlagsBatch === "function")
+      ? await histFlagsBatch(uprHistPaths()) : {};
+    const list = Object.values(flags);
+    if (!list.length) return;
+    setUndoRedoButtons(list.some(j => j && j.can_undo),
+      list.some(j => j && j.can_redo));
   } catch (e) {}
 }
 // перечитать строки карты с сервера после undo/redo (без сброса dirty:

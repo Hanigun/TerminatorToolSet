@@ -1201,11 +1201,12 @@ function cmpHistPaths() {
 }
 async function cmpSyncUndoButtons() {
   try {
-    const rs = await Promise.all(cmpHistPaths().map(p =>
-      api("/api/history?path=" + encodeURIComponent(p))
-        .then(r => r.json()).catch(() => null)));
-    setUndoRedoButtons(rs.some(j => j && j.ok && j.can_undo),
-      rs.some(j => j && j.ok && j.can_redo));
+    const flags = (typeof histFlagsBatch === "function")
+      ? await histFlagsBatch(cmpHistPaths()) : {};
+    const list = Object.values(flags);
+    if (!list.length) return;
+    setUndoRedoButtons(list.some(j => j && j.can_undo),
+      list.some(j => j && j.can_redo));
   } catch (e) {}
 }
 // перечитать строки с сервера после undo/redo (dirty не трогаем: откат —

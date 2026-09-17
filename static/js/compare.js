@@ -98,6 +98,30 @@ async function cmpLoadSide(side, silent) {
   cmpShowPreview();
 }
 
+// стороны сравнения с файлами в порядке фокуса (сторона последнего
+// касания — первой): для page_undo сервер применит фокусную, если ей
+// есть что отменять, иначе — со свежей записью
+function cmpOrderedPaths() {
+  const tab = state.tabs.find(tb => tb.id === state.activeTabId);
+  if (!tab || tab.type !== "compare") return [];
+  const order = state.cmpLastSide
+    ? [state.cmpLastSide, state.cmpLastSide === "left" ? "right" : "left"]
+    : ["left", "right"];
+  const pathOf = s => {
+    const d = state.cmpData && state.cmpData[s];
+    if (d && d.path) return d.path;
+    const j = state.compare;
+    if (j && !j.preview) return s === "left" ? (j.left || "") : (j.right || "");
+    return "";
+  };
+  const out = [];
+  for (const s of order) {
+    const p = pathOf(s);
+    if (p) out.push({ side: s, path: p });
+  }
+  return out;
+}
+
 // which compare file the next undo/redo/history action should target:
 // the side the user last interacted with, but a side whose flags say
 // "nothing to undo" never wins over a side that still has something
@@ -149,18 +173,19 @@ async function cmpSyncUndoButtons() {
     if (!paths.right && j.right) paths.right = j.right;
   }
   const sides = Object.keys(paths);
-  await Promise.all(sides.map(async s => {
-    try {
-      const r = await api("/api/history?path=" + encodeURIComponent(paths[s]));
-      const j = await r.json();
-      if (j.ok && state.cmpData && state.cmpData[s]) {
-        state.cmpData[s].flags = { can_undo: !!j.can_undo, can_redo: !!j.can_redo };
-      } else if (j.ok) {
-        state.cmpFlags = state.cmpFlags || {};
-        state.cmpFlags[s] = { can_undo: !!j.can_undo, can_redo: !!j.can_redo };
-      }
-    } catch (e) { /* keep the cached flags on network errors */ }
-  }));
+  // флаги обеих сторон — одним батч-запросом (веер GET на каждый чих убран)
+  const flags = (typeof histFlagsBatch === "function")
+    ? await histFlagsBatch(sides.map(s => paths[s])) : {};
+  sides.forEach(s => {
+    const f = flags[paths[s]];
+    if (!f) return;
+    const fl = { can_undo: !!f.can_undo, can_redo: !!f.can_redo };
+    if (state.cmpData && state.cmpData[s]) state.cmpData[s].flags = fl;
+    else {
+      state.cmpFlags = state.cmpFlags || {};
+      state.cmpFlags[s] = fl;
+    }
+  });
   const tgt = cmpUndoTarget();
   const fl = tgt && ((state.cmpData && state.cmpData[tgt.side] && state.cmpData[tgt.side].flags)
     || (state.cmpFlags && state.cmpFlags[tgt.side]));

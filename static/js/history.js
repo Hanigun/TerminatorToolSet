@@ -80,58 +80,53 @@ async function applyUndoPatch(patch) {
   }
 }
 
-// карты правят два файла (карта + species-правки попапа): undo бьёт
-// в файл с самой свежей применённой записью; redo — в файл последнего
-// отката (redoHint), иначе в файл с самой свежей откаченной записью.
-// Один клик — одно действие, кнопки — ИЛИ по файлам страницы.
+// флаги undo/redo для файлов страницы одним запросом (вместо веера
+// GET /api/history на каждый клик и каждую перерисовку кнопок)
+async function histFlagsBatch(paths) {
+  const out = {};
+  const list = (paths || []).filter(Boolean);
+  if (!list.length) return out;
+  try {
+    const r = await api("/api/history_flags", { method: "POST",
+      body: JSON.stringify({ paths: list }) });
+    const j = await r.json();
+    if (j && j.ok && j.flags) return j.flags;
+  } catch (e) { /* кнопки останутся как были */ }
+  return out;
+}
+
+// кнопки тулбара — ИЛИ по флагам файлов страницы
+function histApplyFlags(flags) {
+  try {
+    const list = Object.values(flags || {});
+    if (!list.length) return;
+    setUndoRedoButtons(list.some(f => f && f.can_undo),
+      list.some(f => f && f.can_redo));
+  } catch (e) {}
+}
+
+// карты правят два файла (карта + species-правки попапа): один клик —
+// одно действие на сервере (файл с самой свежей записью, redo — redoHint),
+// кнопки и флаги едут в том же ответе
 async function mapUndoRedo(endpoint, st, pathsFn, repaintFn, okMsg, noneMsg) {
-  const isUndo = endpoint.indexOf("/api/undo") !== -1;
+  const forward = endpoint.indexOf("/api/redo") !== -1;
   const paths = pathsFn();
   if (!paths.length) { toast(t("no_file")); return; }
   if (state.histBusy) return;
   state.histBusy = true;
   try {
-    const hs = [];
-    for (const p of paths) {
-      try {
-        const r = await api("/api/history?path=" + encodeURIComponent(p));
-        hs.push({ path: p, recs: ((await r.json()).records || []) });
-      } catch (e) { hs.push({ path: p, recs: [] }); }
-    }
-    const top = (h, undone) => h.recs.filter(r => !!r.undone === undone)
-      .sort((a, b) => (b.ts || 0) - (a.ts || 0))[0] || null;
-    let target = null;
-    if (isUndo) {
-      let bt = -1;
-      hs.forEach(h => {
-        const r = top(h, false);
-        if (r && (r.ts || 0) > bt) { bt = r.ts || 0; target = h.path; }
-      });
-    } else {
-      const hint = st.redoHint;
-      if (hint && hs.some(h => h.path === hint && top(h, true))) target = hint;
-      if (!target) {
-        let bt = -1;
-        hs.forEach(h => {
-          const r = top(h, true);
-          if (r && (r.ts || 0) > bt) { bt = r.ts || 0; target = h.path; }
-        });
-      }
-    }
-    if (!target) {
-      try { await repaintFn(); } catch (e) {}
-      toast(noneMsg);
-      return;
-    }
-    const r = await api(endpoint, { method: "POST",
-      body: JSON.stringify({ path: target }) });
+    const r = await api(forward ? "/api/page_redo" : "/api/page_undo",
+      { method: "POST",
+        body: JSON.stringify({ paths, hint: forward ? (st.redoHint || "") : "" }) });
     const j = await r.json();
+    const target = j && j.path;
     if (!j.ok) {
       if (j.error === "nothing_to_undo" || j.error === "nothing_to_redo") {
         toast(noneMsg);
       } else {
         toast(j.error || "error", "err");
       }
+      histApplyFlags(j.flags);
       try { await repaintFn(); } catch (e) {}
       return;
     }
@@ -145,13 +140,14 @@ async function mapUndoRedo(endpoint, st, pathsFn, repaintFn, okMsg, noneMsg) {
           markFileTabsStale(target);
       }
     } catch (e) {}
-    st.redoHint = isUndo ? target : "";
+    st.redoHint = forward ? "" : target;
     await repaintFn();
     // чужой файл страницы (конфиг/режим рандомайзера): открытый редактор
     // этого файла перечитывает диск, остальные редакторы не трогаем
     try {
       if (typeof uprCfgEdRefreshIf === "function") uprCfgEdRefreshIf(target);
     } catch (e) {}
+    histApplyFlags(j.flags);
     toast(okMsg, "ok");
   } finally {
     state.histBusy = false;
@@ -205,11 +201,12 @@ async function runUndoRedo(endpoint, okMsg, noneMsg) {
   const pv3t = pv3PopupTarget();
   if (pv3t) { await pv3PopupUndoRedo(endpoint, okMsg, noneMsg); return; }
   const tab = state.tabs.find(tb => tb.id === state.activeTabId);
-  let path = null, isCompare = false, cmpSide = null, isUprising = false, isCampaign = false;
+  let path = null, isCompare = false, isUprising = false, isCampaign = false;
+  let cmpPaths = null; // [{side, path}] в порядке фокуса — для page_undo
   if (tab && tab.type === "file") path = tab.path;
   else if (tab && tab.type === "compare") {
-    const tgt = cmpUndoTarget();
-    if (tgt) { path = tgt.path; cmpSide = tgt.side; isCompare = true; }
+    cmpPaths = cmpOrderedPaths();
+    if (cmpPaths.length) isCompare = true;
   }
   else if (state.activeTabId === "uprising" && state.uprising.path) {
     path = state.uprising.path;
@@ -228,7 +225,7 @@ async function runUndoRedo(endpoint, okMsg, noneMsg) {
       prov.paths, prov.repaint, okMsg, noneMsg);
     return;
   }
-  if (!path) { toast(t("no_file")); return; }
+  if (!path && !isCompare) { toast(t("no_file")); return; }
   // карты — мультиистория (карта + species): свой роутер, общий POST ниже
   // им не нужен (иначе один клик отменял бы сразу две записи)
   if (isUprising) { await mapUndoRedo(endpoint, state.uprising, uprHistPaths, uprRepaintUndo, okMsg, noneMsg); return; }
@@ -236,20 +233,31 @@ async function runUndoRedo(endpoint, okMsg, noneMsg) {
   if (state.histBusy) return;   // one request at a time (no repeat pile-up)
   state.histBusy = true;
   try {
-    const r = await api(endpoint, { method: "POST", body: JSON.stringify({ path }) });
-    const j = await r.json();
-    if (!j.ok) {
-      setUndoRedoButtons(!!j.can_undo, !!j.can_redo);
-      if (j.error === "nothing_to_undo" || j.error === "nothing_to_redo") {
-        toast(noneMsg);   // boundary reached - informational, not an error
-      } else {
-        toast(j.error || "error", "err");
-      }
-      return;
-    }
+    // сравнение: один page-запрос (выбор стороны — на сервере по фокусу),
+    // флаги обеих сторон едут в том же ответе
     if (isCompare) {
-      const d = state.cmpData && state.cmpData[cmpSide];
-      if (d) d.flags = { can_undo: !!j.can_undo, can_redo: !!j.can_redo };
+      const forward = endpoint.indexOf("/api/redo") !== -1;
+      const r = await api(forward ? "/api/page_redo" : "/api/page_undo",
+        { method: "POST", body: JSON.stringify({
+          paths: cmpPaths.map(x => x.path), prefer: cmpPaths[0].path }) });
+      const j = await r.json();
+      const hit = (cmpPaths || []).find(x => x.path === (j && j.path));
+      const cmpSide = hit && hit.side;
+      const d = cmpSide && state.cmpData && state.cmpData[cmpSide];
+      if (j.flags && j.flags[j.path]) {
+        const fl = { can_undo: !!j.flags[j.path].can_undo,
+          can_redo: !!j.flags[j.path].can_redo };
+        if (d) d.flags = fl;
+      }
+      if (!j.ok) {
+        histApplyFlags(j.flags);
+        if (j.error === "nothing_to_undo" || j.error === "nothing_to_redo") {
+          toast(noneMsg);
+        } else {
+          toast(j.error || "error", "err");
+        }
+        return;
+      }
       // правка на сервере уже отменена/возвращена: экран обязан показать
       // новое состояние даже если штатная перерисовка упадёт (иначе строка
       // визуально остаётся, а кнопки врут) — кнопки и тост ниже идут всегда
@@ -263,8 +271,22 @@ async function runUndoRedo(endpoint, okMsg, noneMsg) {
           toast(String((e2 && e2.message) || e2), "err");
         }
       }
+      histApplyFlags(j.flags);
+      toast(okMsg, "ok");
+      return;
     }
-    else if (isUprising) await uprRepaintUndo();
+    const r = await api(endpoint, { method: "POST", body: JSON.stringify({ path }) });
+    const j = await r.json();
+    if (!j.ok) {
+      setUndoRedoButtons(!!j.can_undo, !!j.can_redo);
+      if (j.error === "nothing_to_undo" || j.error === "nothing_to_redo") {
+        toast(noneMsg);   // boundary reached - informational, not an error
+      } else {
+        toast(j.error || "error", "err");
+      }
+      return;
+    }
+    if (isUprising) await uprRepaintUndo();
     else if (isCampaign) await cmpRepaintUndo();
     else await applyUndoPatch(j.patch);
     setUndoRedoButtons(!!j.can_undo, !!j.can_redo);
