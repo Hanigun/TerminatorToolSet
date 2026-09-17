@@ -40,7 +40,7 @@
 | 🗺 Uprising Map Editor | Map editor, prices and unit limits                                                       |
 | 📦 .pak unpacker       | Ordered extraction of base game and DLCs, per-pack skip                                  |
 | 🛠 Mod tools           | Create mods, copy files into them, GameAssets download, DDS to WEBP icons auto-convert   |
-| 🛡 Safety net          | Backups before every write, SQLite history, Undo / Redo, autosave                        |
+| 🛡 Safety net          | Original snapshot on first save, SQLite history, Undo / Redo, autosave                        |
 | ⚙ Service              | Auto-update, single instance, tray and browser modes                                     |
 
 ---

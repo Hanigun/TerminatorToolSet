@@ -110,6 +110,41 @@ class Files:
         self._saves.remove_edited_mark(path)
         return {"ok": True, "stock": src}
 
+    # -- original snapshot rollback ------------------------------------------------
+    def origin_state(self, path: str) -> dict:
+        """Does a pre-edit snapshot exist for this file (any location)?"""
+        path = self._store.normal(path or "")
+        if not path or not os.path.isfile(path):
+            return {"ok": False, "error": "not a file"}
+        return {"ok": True, "has_origin": self._saves.has_origin(path)}
+
+    def origin_restore(self, path: str) -> dict:
+        """Roll a file back to its pre-edit snapshot (first-save copy).
+
+        Unlike the journal (rewinds logged edits only) and stock_restore
+        (project files with a mod stock only), this works for ANY file and
+        also covers edits that were never journaled - as long as the file
+        was saved through the app at least once. Session dropped, journal
+        wiped: it described the rolled-back content."""
+        path = self._store.normal(path or "")
+        if not path or not os.path.isfile(path):
+            return {"ok": False, "error": "not a file"}
+        blob = self._saves.origin_bytes(path)
+        if blob is None:
+            return {"ok": False, "error": "no_origin"}
+        try:
+            tmp = path + ".origin-tmp"
+            with open(tmp, "wb") as fh:
+                fh.write(blob)
+            os.replace(tmp, path)
+        except OSError as e:
+            return {"ok": False, "error": str(e)}
+        self._store.drop(path)
+        self._db.clear_history(path)
+        self._saves.remove_edited_mark(path)
+        self._log.info("origin_restore %s (%d bytes)", path, len(blob))
+        return {"ok": True}
+
     # -- journal jump ---------------------------------------------------------------
     def restore_record(self, path: str, rec_id: int) -> dict:
         """Move the file to the state recorded by one journal entry.

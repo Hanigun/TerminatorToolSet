@@ -1,8 +1,10 @@
 """Save pipeline: disk writes, autosave policy, edited-file marks."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import shutil
 
 
 # -- save pipeline ----------------------------------------------------------
@@ -74,11 +76,89 @@ class SavePipeline:
             pass
 
     # -- writes ---------------------------------------------------------------
+    def _snap_dir(self) -> str:
+        """Central originals vault (NOT the SQLite DB: the history gate
+        forbids blob snapshots there, and a byte copy restores even files
+        whose edits were never journaled)."""
+        try:
+            base = getattr(self._config, "cfg_dir", None) \
+                or getattr(self._config, "dir", "") or ""
+        except Exception:  # noqa: BLE001
+            base = ""
+        d = os.path.join(base, "origin_snaps") if base else ""
+        return d
+
+    @staticmethod
+    def _snap_key(path: str) -> str:
+        return hashlib.sha1(os.path.normpath(path).lower()
+                            .encode("utf-8", "replace")).hexdigest()[:16]
+
+    def snap_paths(self, path: str):
+        """(bytes path, meta path) for a snapshot, or (None, None)."""
+        d = self._snap_dir()
+        if not d or not path:
+            return None, None
+        key = self._snap_key(path)
+        safe = "".join(c if (c.isalnum() or c in "._-") else "_"
+                       for c in os.path.basename(path))[:60] or "file"
+        return (os.path.join(d, "%s_%s.bin" % (key, safe)),
+                os.path.join(d, "%s_%s.json" % (key, safe)))
+
+    def has_origin(self, path: str) -> bool:
+        """Is there a pre-edit snapshot for this file?"""
+        blob, _meta = self.snap_paths(path or "")
+        try:
+            return bool(blob) and os.path.isfile(blob)
+        except Exception:  # noqa: BLE001
+            return False
+
+    def snapshot_origin(self, path: str) -> bool:
+        """Copy the current disk bytes aside ONCE (first save wins).
+
+        Called before the first overwrite: disk still holds the pre-session
+        content because edits live in memory until save. Later saves never
+        replace the snapshot, so 'restore original' is a real guarantee -
+        unlike the journal, which only rewinds logged edits."""
+        blob, meta = self.snap_paths(path or "")
+        if not blob or self.has_origin(path):
+            return False
+        try:
+            if not os.path.isfile(path):
+                return False
+            os.makedirs(os.path.dirname(blob), exist_ok=True)
+            tmp = blob + ".tmp"
+            shutil.copy2(path, tmp)
+            os.replace(tmp, blob)
+            st = os.stat(path)
+            with open(meta, "w", encoding="utf-8") as fh:
+                json.dump({"path": os.path.normpath(path),
+                           "mtime": st.st_mtime, "size": st.st_size}, fh)
+        except Exception:  # noqa: BLE001
+            return False
+        return True
+
+    def origin_bytes(self, path: str):
+        """Raw snapshot bytes, or None."""
+        blob, _meta = self.snap_paths(path or "")
+        try:
+            if blob and os.path.isfile(blob):
+                with open(blob, "rb") as fh:
+                    return fh.read()
+        except Exception:  # noqa: BLE001
+            pass
+        return None
+
     def safe_save(self, session, summary: str = "") -> dict:
         """Write the in-memory document to disk (history is stored as diffs,
         so saving no longer copies the whole file into the database).
         An unchanged document is NOT rewritten and gets NO edit mark."""
         try:
+            # first overwrite of the session: stash the disk original first
+            try:
+                if getattr(session, "dirty", False):
+                    self.snapshot_origin(getattr(session, "path", ""))
+            except Exception:  # noqa: BLE001
+                pass
             res = session.save()
             written = bool(res.get("written", True))
             self._store.dirty.discard(session.path)

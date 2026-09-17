@@ -61,6 +61,23 @@ def register_files(app, ctx):
         data = request.get_json(silent=True) or {}
         return jsonify(files.restore_stock(data.get("path", "")))
 
+    # (owned by Files: origin_state / origin_restore)
+    @app.route("/api/origin_state")
+    def api_origin_state():
+        """Есть ли досейвовый снимок оригинала для файла (откат к оригиналу
+        доступен для любого файла, не только внутри проекта)."""
+        return jsonify(files.origin_state(request.args.get("path", "") or ""))
+
+    @app.route("/api/origin_restore", methods=["POST"])
+    def api_origin_restore():
+        """Полный откат файла к снимку до первой записи из приложения.
+
+        В отличие от журнала (отматывает только залогированное) и стока
+        (только файлы проекта) — работает для любого файла и покрывает
+        даже незалогированные правки. Сессия сбрасывается, журнал чистится."""
+        data = request.get_json(silent=True) or {}
+        return jsonify(files.origin_restore(data.get("path", "")))
+
     # (owned by Files: restore_record)
     @app.route("/api/restore", methods=["POST"])
     def api_restore():
