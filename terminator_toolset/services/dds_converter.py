@@ -18,6 +18,26 @@ QUALITY = 85
 # Неизвестный слот и иконки — 85.
 QUALITY_BY_SLOT = {"albedo": 80, "normal": 75, "rough": 75}
 
+# Усилие WebP-энкодера: 2 вместо 4 (замер на 2K Абрамса: albedo
+# 1.18с->0.38с при +9% файла, normal 0.77с->0.23с при +6%; method 6
+# давал +13с ради −4% — ловушка, method 4 та же ловушка поменьше).
+# Качество (PSNR) от method почти не зависит — только скорость/размер.
+WEBP_METHOD = 2
+
+# Сырые маски несжатых DDS -> (mode, rawmode) Pillow: покрывает ~90%
+# текстур мода (901 BGRA + 120 BGR + 10 RGBA из 1122 в _ASSETS).
+# Pillow разбирает несжатые DDS построчно в Python (2K — 7-12с),
+# а frombytes делает то же одним C-memcpy за 0.01с, побайтово равно
+# (сверено на albedo/normal Абрамса, ориентация совпадает).
+_RAW_MODES = {
+    (32, 0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF):
+        ("RGBA", "BGRA"),
+    (24, 0, 0x00FF0000, 0x0000FF00, 0x000000FF):
+        ("RGB", "BGR"),
+    (32, 0xFF000000, 0x000000FF, 0x0000FF00, 0x00FF0000):
+        ("RGBA", "RGBA"),
+}
+
 
 def quality_for_slot(slot):
     """WebP-качество для слота материала (albedo|normal|rough)."""
@@ -64,6 +84,49 @@ def normal_hints(path):
     if "normal" in stem or "normaal" in stem:
         return (False, True)
     return (False, False)
+
+
+def _fast_uncompressed(path):
+    """Несжатый DDS -> PIL.Image одним C-memcpy (0.01с против 7-12с).
+
+    Берётся только FourCC==0 с известными масками (_RAW_MODES):
+    пиксели лежат подряд с offset 128, строки по pitch (паддинг
+    учитывается через stride). Главная мип-поверхность всегда первая,
+    остальные не читаются. Любое сомнение (размеры, маски, короткий
+    файл) — None, caller идёт обычным Image.open."""
+    try:
+        import struct
+        with open(path, "rb") as f:
+            head = f.read(128)
+            if len(head) < 128 or head[:4] != b"DDS ":
+                return None
+            _magic, _sz, _fl, h, w, pitch = struct.unpack(
+                "<4s7I", head[:32])[0:6]
+            _psz, _pfl, fourcc, bpp, r_m, g_m, b_m, a_m = struct.unpack(
+                "<8I", head[76:108])
+            if fourcc != 0:
+                return None
+            key = (bpp, a_m, r_m, g_m, b_m)
+            mode_raw = _RAW_MODES.get(key)
+            if mode_raw is None:
+                return None
+            mode, rawmode = mode_raw
+            if not (0 < w <= 16384 and 0 < h <= 16384):
+                return None
+            ch = bpp // 8
+            if ch not in (3, 4) or pitch < w * ch:
+                return None
+            f.seek(128)
+            data = f.read(h * pitch)
+            if len(data) < h * pitch:
+                return None
+        from PIL import Image
+        if pitch == w * ch:
+            return Image.frombytes(mode, (w, h), data, "raw", rawmode)
+        return Image.frombytes(mode, (w, h), data, "raw", rawmode,
+                               pitch)
+    except Exception:  # noqa: BLE001 - тихо: caller откроет как обычно
+        return None
 
 
 def _bands_need_blue(rgb):
@@ -174,8 +237,13 @@ def convert_file(src: str, dst: str, quality: int = QUALITY,
         except OSError:
             return False
         from PIL import Image
-        im = Image.open(src)
-        im.load()
+        # Несжатые DDS (90%+ текстур мода): сырые байты одним memcpy
+        # вместо построчного Python-разбора Pillow (2K: 0.01с vs 7-12с).
+        # Остальное (DXT/DX10/BC5) — обычным путём.
+        im = _fast_uncompressed(src)
+        if im is None:
+            im = Image.open(src)
+            im.load()
         if im.mode not in ("RGBA", "RGB"):
             im = im.convert("RGBA")
         if normal_fix:
@@ -192,7 +260,7 @@ def convert_file(src: str, dst: str, quality: int = QUALITY,
                         im = fixed
             except Exception:  # noqa: BLE001
                 pass
-        im.save(dst, "WEBP", quality=q)
+        im.save(dst, "WEBP", quality=q, method=WEBP_METHOD)
         return os.path.isfile(dst)
     except Exception:  # noqa: BLE001 - битый dds = False, не падение
         return False
