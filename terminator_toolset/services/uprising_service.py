@@ -3278,180 +3278,90 @@ class Uprising:
         return self.rnd_mode_save({"name": dest, "data": data})
 
     # -- map backup / reset ---------------------------------------------------------
-    _UPR_BACKUP_KEEP = 5    # generations per source root, newest wins
+    # Карта сбрасывается общим origin-механизмом (досейвовый снимок):
+    # bespoke-ротация поколений uprising_backups удалена; старые копии
+    # подхватываются как origin-снимок один раз (см. reset_map).
     _UPR_BACKUP_MIN = 100   # smaller files are failed writes, never restore
 
-    def prune_backups(self, key_dir):
-        """Generations per root: newest 5 shop_presets*.xml survive; tiny
-        failed writes and top-level strays (old test junk, never referenced
-        by any code path) are removed."""
+    def _legacy_backup(self, root):
+        """Старая копия карты из uprising_backups/<key>/shop_presets.xml
+        (ключ — md5 нормализованного корня), если она не мусор."""
         try:
-            names = os.listdir(key_dir)
-        except OSError:
-            return
-        cands = []
-        for fn in names:
-            if not (fn == "shop_presets.xml"
-                    or (fn.startswith("shop_presets.")
-                        and fn.endswith(".xml"))):
-                continue
-            p = os.path.join(key_dir, fn)
+            key = hashlib.md5(os.path.normcase(os.path.normpath(root or "unknown"))
+                              .encode("utf-8")).hexdigest()[:16]
+        except Exception:  # noqa: BLE001
+            return None
+        for base in (self.program_dir(), self._app_dir):
             try:
-                if os.path.isfile(p):
-                    cands.append((os.path.getmtime(p), os.path.getsize(p), p))
-            except OSError:
-                pass
-        for _mt, size, p in cands:
-            if size < self._UPR_BACKUP_MIN:
-                try:
-                    os.remove(p)
-                except OSError:
-                    pass
-        cands = [c for c in cands if c[1] >= self._UPR_BACKUP_MIN]
-        cands.sort()
-        for _mt, _sz, p in cands[:-self._UPR_BACKUP_KEEP]:
-            try:
-                os.remove(p)
-            except OSError:
-                pass
-        top = os.path.dirname(key_dir)
-        try:
-            top_names = os.listdir(top)
-        except OSError:
-            return
-        for fn in top_names:
-            low = fn.lower()
-            if not (low.endswith(".xml") and ("shop_presets" in low
-                                              or low.startswith("polluted_"))):
+                p = os.path.join(base or "", "uprising_backups", key,
+                                 "shop_presets.xml")
+            except Exception:  # noqa: BLE001
                 continue
             try:
-                if os.path.isfile(os.path.join(top, fn)):
-                    os.remove(os.path.join(top, fn))
-            except OSError:
+                if os.path.isfile(p) and os.path.getsize(p) >= self._UPR_BACKUP_MIN:
+                    return p
+            except OSError:  # noqa: BLE001
                 pass
+        return None
 
-    def _rotate_backup(self, key_dir, bpath):
-        """Shift generations (.3->.4 … live->.1) before a fresh snapshot;
-        prune keeps the newest 5 total."""
+    def _adopt_legacy_backup(self, path, legacy):
+        """Одноразовый переезд старой копии в origin-хранилище."""
         try:
-            if not os.path.isfile(bpath):
-                return
-            if os.path.getsize(bpath) < self._UPR_BACKUP_MIN:
-                os.remove(bpath)
-                return
-        except OSError:
-            return
-        base = os.path.join(key_dir, "shop_presets")
-        try:
-            for i in range(self._UPR_BACKUP_KEEP - 1, 0, -1):
-                src = bpath if i == 1 else base + ".%d.xml" % (i - 1)
-                dst = base + ".%d.xml" % i
-                if os.path.isfile(src):
-                    try:
-                        if os.path.isfile(dst):
-                            os.remove(dst)
-                    except OSError:
-                        pass
-                    try:
-                        os.rename(src, dst)
-                    except OSError:
-                        pass
-        except OSError:
-            pass
-
-    @staticmethod
-    def _same_file(a, b):
-        try:
-            if os.path.getsize(a) != os.path.getsize(b):
+            if self._saves is None:
                 return False
-            with open(a, "rb") as fa, open(b, "rb") as fb:
-                while True:
-                    ca, cb = fa.read(65536), fb.read(65536)
-                    if ca != cb:
-                        return False
-                    if not ca:
-                        return True
-        except OSError:
+            blob, meta = self._saves.snap_paths(path or "")
+            if not blob or os.path.isfile(blob):
+                return os.path.isfile(blob or "")
+            os.makedirs(os.path.dirname(blob), exist_ok=True)
+            tmp = blob + ".tmp"
+            shutil.copy2(legacy, tmp)
+            os.replace(tmp, blob)
+            try:
+                st = os.stat(legacy)
+                with open(meta, "w", encoding="utf-8") as fh:
+                    import json as _json
+                    _json.dump({"path": os.path.normpath(path),
+                                "mtime": st.st_mtime, "size": st.st_size,
+                                "adopted": legacy}, fh)
+            except OSError:  # noqa: BLE001
+                pass
+            return True
+        except Exception:  # noqa: BLE001
             return False
 
-    def backup_dir(self, root: str) -> str:
-        """Clean shop_presets.xml copy per source (mod project and unpacked
-        game have their own files): key = normalized root. The reserve
-        folder lives next to the exe; old BASE_DIR copies are picked up as
-        fallback and carried forward."""
-        key = hashlib.md5(os.path.normcase(os.path.normpath(root or "unknown"))
-                          .encode("utf-8")).hexdigest()[:16]
-        primary = os.path.join(self.program_dir(), "uprising_backups", key)
-        legacy = os.path.join(self._app_dir, "uprising_backups", key)
-        if primary != legacy and not os.path.isfile(os.path.join(primary, "shop_presets.xml")):
-            leg = os.path.join(legacy, "shop_presets.xml")
-            if os.path.isfile(leg) and os.path.getsize(leg) >= self._UPR_BACKUP_MIN:
-                try:
-                    os.makedirs(primary, exist_ok=True)
-                    shutil.copy2(leg, os.path.join(primary, "shop_presets.xml"))
-                except OSError:
-                    pass
-        return primary
-
     def reset_map(self, root, path, cfg_path, ensure_only):
-        """ensure_only: snapshot a clean map copy on first open from a root
-        (a changed file re-snapshots with rotation, newest 5 survive).
-        Otherwise - reset: restore shop_presets.xml from the clean copy and
-        delete the balance config. Tiny failed writes are never restored."""
+        """ensure_only: зафиксировать чистую карту при первом открытии
+        (origin-снимок; старые uprising_backups подхватываются один раз).
+        Иначе - сброс: откат файла к origin-снимку общим механизмом
+        (сессия сброшена, журнал очищен) + удаление баланс-конфига."""
         if not path or not os.path.isfile(path):
             return {"ok": False, "error": "no file"}
-        key_dir = self.backup_dir(root)
-        try:
-            self.prune_backups(key_dir)
-        except Exception:  # noqa: BLE001
-            pass
-        bpath = os.path.join(key_dir, "shop_presets.xml")
-        restored = False
-        if not os.path.isfile(bpath):
-            os.makedirs(key_dir, exist_ok=True)
-            shutil.copy2(path, bpath)
-            try:
-                self.prune_backups(key_dir)
-            except Exception:  # noqa: BLE001
-                pass
-        elif ensure_only:
-            # file changed since the snapshot (root re-added, external edit):
-            # rotate generations and snapshot the current state
-            try:
-                cur_ok = os.path.getsize(path) >= self._UPR_BACKUP_MIN
-            except OSError:
-                cur_ok = False
-            if cur_ok and not self._same_file(path, bpath):
-                self._rotate_backup(key_dir, bpath)
-                try:
-                    shutil.copy2(path, bpath)
-                except OSError as e:
-                    return {"ok": False, "error": str(e)}
-                try:
-                    self.prune_backups(key_dir)
-                except Exception:  # noqa: BLE001
-                    pass
-        else:
-            try:
-                tiny = os.path.getsize(bpath) < self._UPR_BACKUP_MIN
-            except OSError:
+        if ensure_only:
+            if self._saves is not None and not self._saves.has_origin(path):
+                leg = self._legacy_backup(root)
+                if leg:
+                    self._adopt_legacy_backup(path, leg)
+                else:
+                    try:
+                        self._saves.snapshot_origin(path)
+                    except Exception:  # noqa: BLE001
+                        pass
+            return {"ok": True, "restored": False, "cfg_removed": False}
+        if self._files is None:
+            return {"ok": False, "error": "no backup"}
+        res = self._files.origin_restore(path)
+        if not res.get("ok"):
+            if res.get("error") == "no_origin":
                 return {"ok": False, "error": "no backup"}
-            if tiny:
-                try:
-                    os.remove(bpath)
-                except OSError:
-                    pass
-                return {"ok": False, "error": "backup broken, removed"}
-            shutil.copy2(bpath, path)
-            restored = True
+            return res
         cfg_removed = False
-        if not ensure_only and cfg_path and os.path.isfile(cfg_path):
+        if cfg_path and os.path.isfile(cfg_path):
             try:
                 os.remove(cfg_path)
                 cfg_removed = True
             except OSError as e:
                 return {"ok": False, "error": str(e)}
-        return {"ok": True, "restored": restored, "cfg_removed": cfg_removed}
+        return {"ok": True, "restored": True, "cfg_removed": cfg_removed}
 
     def sniff_shop_counts(self, path):
         """Счётчики строк shop_presets.xml за один проход: sector (награды

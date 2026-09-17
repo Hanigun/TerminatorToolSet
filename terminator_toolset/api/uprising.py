@@ -317,7 +317,7 @@ def register_uprising(app, ctx):
                                           data.get("name", ""),
                                           data.get("new_name", "")))
 
-    # (owned by Uprising: program_dir / backup_dir / reset_map)
+    # (owned by Uprising: program_dir / reset_map via origin snapshot)
     @app.route("/api/uprising_reset", methods=["POST"])
     def api_uprising_reset():
         """ensure_only: снять чистую копию карты при первом открытии от корня.
