@@ -1967,6 +1967,42 @@ function uprIconNames() {
   return [...names];
 }
 
+// Движок иконок карты — общее ядро static/js/icons.js (одно на три
+// страницы). Своё здесь только: карта uprIconMap, готовность uprIconsReady,
+// спиннеры конвертируемых (uprPendingIcons), перекраска renderUprising,
+// бар upr-conv. Fail-карты нет (как было: missing добирают одиночными).
+let uprIconEng = null;
+function uprIconEngine() {
+  if (uprIconEng) return uprIconEng;
+  uprIconEng = iconEngine({
+    root: () => uprSrcRoot(),
+    map: () => uprIconMap,
+    pending: (typeof uprPendingIcons !== "undefined") ? uprPendingIcons : null,
+    isFresh: () => !!state.uprising,
+    ready: v => { uprIconsReady = !!v; },
+    states: (root, names) => {
+      try { uprEnsureIconStates(root, names); } catch (e) {}
+    },
+    onChunk: added => {
+      if ((added || []).length) {
+        try { renderUprising(); } catch (e) {}
+      }
+    },
+    onProgress: (done, total) => {
+      try {
+        state.uprising.preloading = true;
+        if (done === 0) uprConvShow(total);
+        else uprConvPaint(done, total);
+      } catch (e) {}
+    },
+    onSettled: () => {
+      try { state.uprising.preloading = false; } catch (e) {}
+      try { uprConvHide(); } catch (e) {}
+    },
+  });
+  return uprIconEng;
+}
+
 async function uprEnsureIcons(seq) {
   const my = (typeof seq === "number") ? seq : state.uprising.loadSeq;
   // корень фиксируем на старт: пока летит ответ, источник могли переключить —
@@ -1977,45 +2013,13 @@ async function uprEnsureIcons(seq) {
   uprIconsReady = false;
   if (!names.length) { uprIconsReady = true; return; }
   const fresh = () => my === state.uprising.loadSeq && root === uprSrcRoot();
+  // Ядро static/js/icons.js (одно на три страницы): URL-батч вместо
+  // data-URL мегабайтов, недостающие dds жмутся фоном чанками preload
+  // с прогрессом под сегментом, перекраска по мере готовности.
+  // Шильдики/состояния/плейсхолдеры — как были.
   try {
-    // один ответ со всеми байтами (data-URL): сотни отдельных <img>-запросов
-    // по HTTP/1.0 без keep-alive давали секунды оверхеда на соединения
-    const r = await api("/api/uprising_icons_data", { method: "POST",
-      body: JSON.stringify({ root, names }), timeout: 60000 });
-    const j = await r.json();
-    if (j && j.ok) {
-      if (fresh()) {
-        uprIconMap = j.icons || {}; uprIconsReady = true;
-        uprEnsureIconStates(root, names);
-      }
-    } else throw new Error("icons_data not ok");
-  } catch (e) {
-    if (!fresh()) return;   // устарело — ретрай за новым поколением
-    // транзиент (оборванный коннект): один повтор с паузой, иначе все чипы
-    // уйдут сотнями одиночных запросов и частью побьются — «недогруз»
-    await new Promise(res => setTimeout(res, 1500));
-    if (!fresh()) return;
-    try {
-      const r2 = await api("/api/uprising_icons_data", { method: "POST",
-        body: JSON.stringify({ root, names }), timeout: 60000 });
-      const j2 = await r2.json();
-      if (j2 && j2.ok && fresh()) {
-        uprIconMap = j2.icons || {}; uprIconsReady = true;
-        uprEnsureIconStates(root, names);
-      }
-    } catch (e2) { /* чипы доберут одиночными + onerror-ретраем */ }
-  }
-  // фон: icons_data видит только готовый webp-индекс (встроенные + уже
-  // сконвертированные), а новые иконки мода лежат сырыми .dds в его
-  // basis/textures — без дожатия чипы навсегда остаются плейсхолдерами
-  // (раньше конвертил только ручной «Анализ»). Предзагрузка жмёт недостающие
-  // dds в CustomImages чанками: после каждого добираем URL и перерисовываем —
-  // первый рендер не ждёт, иконки проявляются постепенно, спиннеры на чипах
-  // гаснут по мере готовности, прогресс висит под сегментом источника
-  if (fresh() && !state.uprising.preloading) {
-    const miss = names.filter(n => !uprIconMap[n]);
-    if (miss.length) uprPreloadMissing(root, my, miss);
-  }
+    await uprIconEngine().ensure(names, { root, fresh });
+  } catch (e) { /* чипы доберут одиночными + onerror-ретраем */ }
 }
 
 // ЭКСПЕРИМЕНТ «слот техники» (откат: удалить блок до uprConvShow + вызовы
@@ -2163,56 +2167,10 @@ function uprConvHide() {
 }
 
 // имена, чья иконка ещё может появиться (конвертация в полёте): чипы
-// держат спиннер поверх плейсхолдера вместо статичной заглушки
+// держат спиннер поверх плейсхолдера вместо статичной заглушки.
+// Ведёт общее ядро иконок (pending-Set ядра); наполнение/перекраска —
+// колбэками uprIconEngine выше.
 let uprPendingIcons = new Set();
-
-async function uprPreloadMissing(root, my, miss) {
-  const fresh = () => my === state.uprising.loadSeq && root === uprSrcRoot();
-  state.uprising.preloading = true;
-  miss.forEach(n => uprPendingIcons.add(n));
-  uprConvShow(miss.length);
-  const CH = 60;
-  try {
-    for (let i = 0; i < miss.length; i += CH) {
-      if (!fresh()) return;
-      const chunk = miss.slice(i, i + CH);
-      try {
-        const rp = await api("/api/uprising_icon_preload", { method: "POST",
-          body: JSON.stringify({ root, names: chunk }), timeout: 180000 });
-        const rj = await rp.json();
-        if (!rj || !rj.ok || !fresh()) return;
-        const r2 = await api("/api/uprising_icons_data", { method: "POST",
-          body: JSON.stringify({ root, names: chunk }), timeout: 60000 });
-        const j2 = await r2.json();
-        if (j2 && j2.ok && fresh()) {
-          let added = 0;
-          for (const n of chunk) {
-            const u = (j2.icons || {})[n];
-            if (u && !uprIconMap[n]) { uprIconMap[n] = u; added++; }
-            if (uprIconMap[n]) uprPendingIcons.delete(n);
-          }
-          if (added) renderUprising();
-        }
-      } catch (e) { /* чанк не дожался — остальные всё равно идут */ }
-      if (fresh()) uprConvPaint(Math.min(i + CH, miss.length), miss.length);
-    }
-    // всё дожато: остаток miss — честные missing (dds нет нигде), их чипы
-    // висели со спиннером — снять одним финальным рендером; состояния
-    // (ховер/выбранное) предпрогрев тоже дожал — подтянуть их URL
-    if (fresh()) {
-      let had = false;
-      miss.forEach(n => { if (uprPendingIcons.delete(n)) had = true; });
-      if (had) renderUprising();
-      uprEnsureIconStates(root, miss);
-    }
-  } finally {
-    state.uprising.preloading = false;
-    // несвежее поколение: чужую карту не трогаем, но свои pending
-    // снять надо, иначе спиннеры зависнут до следующего рендера
-    if (!fresh()) miss.forEach(n => uprPendingIcons.delete(n));
-    uprConvHide();
-  }
-}
 
 function uprChipEditor(container, items, onChange, meta) {
   // список чипов «имя ×n»: имя не редактируется кликом (F2/ПКМ → «Редактировать»),

@@ -339,11 +339,37 @@ function cmpSysnamesFor(cat) {
   return state.campaign.sysnames || [];
 }
 
-// иконки выбранного поселения одним запросом (код чипов — тот же, что
-// у Uprising: data-URL из памяти, добивка одиночным /api/uprising_icon).
+// иконки выбранного поселения — через общее ядро static/js/icons.js
+// (одно на три страницы): URL-батч вместо data-URL, добивка одиночным
+// /api/uprising_icon из uprChipIcon — как было. Своё здесь только карта,
+// fail, готовность и перекраска панели.
 // Защита от петли перерисовок: без флага полёта каждый cmpPaintPanel слал
 // новый батч, ответ снова красил панель — чипы пересоздавались, спиннер
 // мигал; имена без иконок запоминаем в iconFail и больше не запрашиваем
+let cmpIconEng = null;
+function cmpIconEngine() {
+  if (cmpIconEng) return cmpIconEng;
+  cmpIconEng = iconEngine({
+    root: () => cmpSrcRoot(),
+    map: () => (state.campaign ? state.campaign.iconMap : {}),
+    fail: () => (state.campaign ? state.campaign.iconFail : {}),
+    saveFail: () => {},
+    ready: v => { if (state.campaign) state.campaign.iconsReady = !!v; },
+    isFresh: () => !!state.campaign,
+    states: (root, names) => {
+      if (typeof uprEnsureIconStates === "function") {
+        try { uprEnsureIconStates(root, names); } catch (e) {}
+      }
+    },
+    onChunk: () => { try { cmpPaintPanel(); } catch (e) {} },
+    onSettled: () => {
+      try {
+        if (state.campaign) state.campaign.iconsLoading = false;
+      } catch (e) {}
+    },
+  });
+  return cmpIconEng;
+}
 function cmpEnsureIcons() {
   const sel = state.campaign.sel, path = state.campaign.path;
   if (!sel || !path || state.campaign.iconsLoading) return;
@@ -364,26 +390,17 @@ function cmpEnsureIcons() {
     }
     return;
   }
-  const root = cmpSrcRoot();
   state.campaign.iconsLoading = true;
-  api("/api/uprising_icons_data", { method: "POST",
-    body: JSON.stringify({ root, names: miss }), timeout: 60000 })
-    .then(r => r.json())
-    .then(j => {
-      if (j && j.ok && state.campaign.sel === sel && state.campaign.path === path) {
-        Object.assign(state.campaign.iconMap, j.icons || {});
-        miss.forEach(n => {
-          if (!state.campaign.iconMap[n]) state.campaign.iconFail[n] = 1;
-        });
-        state.campaign.iconsReady = true;
-        if (typeof uprEnsureIconStates === "function") {
-          try { uprEnsureIconStates(root, names); } catch (e) {}
-        }
-        cmpPaintPanel();
-      }
-    })
-    .catch(() => {})
-    .finally(() => { state.campaign.iconsLoading = false; });
+  // поселение могли переключить, пока летит батч — чужое не применяем
+  // (как было: сверка sel/path перед Object.assign)
+  cmpIconEngine().ensure(miss, {
+    fresh: () => !!state.campaign && state.campaign.sel === sel &&
+      state.campaign.path === path,
+  }).catch(() => {
+    try {
+      if (state.campaign) state.campaign.iconsLoading = false;
+    } catch (e) {}
+  });
 }
 
 // пустое состояние: оверлей поверх области карты + кнопка быстрого действия
