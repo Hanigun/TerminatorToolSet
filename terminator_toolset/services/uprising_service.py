@@ -1106,8 +1106,12 @@ class Uprising:
     def _custom_subdir_for(self, src, root):
         """Имя подпапки CustomImages по слою, где лежит исходный .dds:
         распакованная игра -> BaseGame, проект/мод -> имя папки их корня,
-        свой root карты -> имя его папки. Только один уровень, без
-        полного пути (CustomImages/<имя>/stem.webp). '' = не определился."""
+        саб-пути мода (ассеты, модели) -> имя их папки, свой root карты
+        -> имя его папки. Только один уровень, без полного пути
+        (CustomImages/<имя>/stem.webp). '' = не определился.
+
+        Без ветки саб-путей их webp ложился плоско в корень кэша
+        (коллизии стемов ассеты/модели + плоская свалка)."""
         try:
             ap = os.path.normcase(os.path.abspath(src or ""))
         except Exception:  # noqa: BLE001
@@ -1131,6 +1135,19 @@ class Uprising:
         except Exception:  # noqa: BLE001
             mod = ""
         try:
+            ovs = []
+            for _k in ("mod_assets_path", "mod_overlay_path",
+                       "mod_models_path"):
+                try:
+                    _v = self._store.normal(
+                        self._config.get(_k) or "") or ""
+                except Exception:  # noqa: BLE001
+                    _v = ""
+                if _v:
+                    ovs.append(os.path.normcase(os.path.abspath(_v)))
+        except Exception:  # noqa: BLE001
+            ovs = []
+        try:
             own = os.path.normcase(os.path.abspath(root or ""))
         except Exception:  # noqa: BLE001
             own = ""
@@ -1141,6 +1158,9 @@ class Uprising:
 
         if mod and inside(mod):
             return os.path.basename(os.path.normpath(mod)) or ""
+        for _ov in ovs:
+            if _ov and inside(_ov):
+                return os.path.basename(os.path.normpath(_ov)) or ""
         if proj and inside(proj):
             return os.path.basename(os.path.normpath(proj)) or ""
         if game and inside(game):
