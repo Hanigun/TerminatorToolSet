@@ -204,6 +204,7 @@ function m3dClose() {
   if (!pop) return;
   try { document.removeEventListener("keydown", pop._esc); } catch (e) {}
   try { document.removeEventListener("click", pop._armorDoc); } catch (e2) {}
+  try { document.removeEventListener("click", pop._turretDoc); } catch (e3) {}
   try {
     if (pop._raf) cancelAnimationFrame(pop._raf);
     if (pop._ro) pop._ro.disconnect();
@@ -282,7 +283,12 @@ function m3dStage(pop, view, bar, root) {
     disposables: [renderer],
     armorOn: false, turretOn: true, texOn: false,
     armorKinds: null,
-    barBuilt: false, home: null, turretSel: null, mgSel: null,
+    // Набор прикреплённых башен (их rel) + слоты вариантов: чекбоксы
+    // дропа башен (как виды брони). null = ещё не инициализирован
+    // (первая загрузка встанет на backend-selected).
+    turretSet: null, turretSlots: null, turretKnown: null,
+    turretDropBtn: null, turretDrop: null,
+    barBuilt: false, home: null, mgSel: null,
     armorKindBtn: null, armorDrop: null, armorKnown: null,
     armorLab: null, mgLab: null, params: null,
     texCache: {}, texMgr: null};
@@ -401,7 +407,9 @@ function m3dWantTex(st, texLoader, maxAniso, texUrl, mat, slot, rel, srgb) {
 // башни идут через него, состояние тумблеров применяется к новым мешам.
 // modelRel — rel модели-владельца (корпус или башня): бэкенд кладёт
 // текстуры в CustomImages/.../textures/<стем модели>.
-function m3dAddMeshes(st, meshes, materials, modelRel) {
+// turretRel — rel башни для мешей part turret/mg (иначе ""): по нему
+// чекбоксы дропа снимают/возвращают каждую башню отдельно.
+function m3dAddMeshes(st, meshes, materials, modelRel, turretRel) {
   const root = st.root;
   const texLoader = new THREE.TextureLoader(st.texMgr);
   texLoader.setCrossOrigin("anonymous");
@@ -458,6 +466,7 @@ function m3dAddMeshes(st, meshes, materials, modelRel) {
     const isTurret = m.part === "turret" || m.part === "mg";
     mesh.userData.isArmor = isArmor;
     mesh.userData.isTurret = isTurret;
+    if (isTurret) mesh.userData.turretRel = turretRel || "";
     mesh.userData.detail = m.detail || "";
     mesh.userData.layer = m.layer || "";
     mesh.visible = m3dVis(st, mesh.userData);
@@ -479,12 +488,15 @@ function m3dAddMeshes(st, meshes, materials, modelRel) {
 // Обмен только башни: старую снимаем, новую ставим — корпус, сетка
 // и камера не трогаются, чёрной вспышки нет
 // Единая видимость меша: выключенная башня гасит всё своё
-// (тело, обвес брони, пулемёт); броня — мастер-флаг + вид;
+// (тело, обвес брони, пулемёт); конкретная снятая с набора гасит
+// только свои меши (по turretRel); броня — мастер-флаг + вид;
 // корпус — всегда. Чинит сразу два бага: броня больше не включает
 // выключенную башню, а башня не показывает свой обвес
 // при выключенной броне.
 function m3dVis(st, ud) {
   if (ud.isTurret && !st.turretOn) return false;
+  if (ud.isTurret && st.turretSet && ud.turretRel &&
+      !st.turretSet.has(ud.turretRel)) return false;
   if (ud.isArmor) {
     if (!st.armorOn) return false;
     if (!ud.detail) return true;
@@ -501,12 +513,13 @@ function m3dApplyVis(st) {
   });
 }
 
-// Обмен только башни: старую снимаем, новую ставим — корпус, сетка
-// и камера не трогаются, чёрной вспышки нет
-function m3dSwapTurret(st, res) {
-  if (!res || !res.ok) return;
+// Снятие мешей одной башни (по turretRel; пустой rel — всех башен):
+// корпус, сетка и камера не трогаются, чёрной вспышки нет
+function m3dDropTurretMeshes(st, rel) {
   st.group.children.slice().forEach(mesh => {
-    if (!mesh.userData.isTurret) return;
+    const ud = mesh.userData;
+    if (!ud.isTurret) return;
+    if (rel && ud.turretRel !== rel) return;
     st.group.remove(mesh);
     try { mesh.geometry.dispose(); } catch (e) {}
     const mt = mesh.material;
@@ -515,24 +528,74 @@ function m3dSwapTurret(st, res) {
       try { mt.dispose(); } catch (e2) {}
     }
   });
+}
+
+// Первичная башня набора (для пулемёта и переоткрытия): первая
+// из порядка установки
+function m3dTurretPrimary(st) {
+  const s = st.turretSet;
+  if (s && s.size) return [...s][0];
+  return "";
+}
+
+// Прикрепление башни из чекбокса: меши своего rel снимаем (повторный
+// заход после смены пулемёта) и кладём новые поверх остальных —
+// соседние башни не трогаем, видно всё разом. Индексы материалов
+// бэкенд считает от числа материалов корпуса, а st.allMats уже
+// подрос на ранее прикреплённые — сдвигаем на дельту (только
+// дописываем в хвост, дыры от снятых никому не мешают).
+function m3dAddTurret(st, res) {
+  if (!res || !res.ok || !res.rel) return;
+  m3dDropTurretMeshes(st, res.rel);
   const mats = res.materials || [];
-  st.allMats = (st.baseMats || []).concat(mats);
-  m3dAddMeshes(st, res.meshes || [], st.allMats, res.rel);
-  if (st.turretSel && res.rel) st.turretSel.value = res.rel;
-  m3dRefreshTurretSel(st, res);
-  // Запоминаем выбор: переоткрытие вернёт этот же вариант, запись
-  // в кэше с прежней башней стираем (иначе воскреснет старая)
+  const delta = st.allMats.length - (st.matBase || 0);
+  (res.meshes || []).forEach(b => {
+    if (b.material != null && b.material >= 0) b.material += delta;
+  });
+  st.allMats = st.allMats.concat(mats);
+  m3dAddMeshes(st, res.meshes || [], st.allMats, res.rel, res.rel);
+  try {
+    if (!st.turretSet) st.turretSet = new Set();
+    st.turretSet.add(res.rel);
+  } catch (e) {}
+  m3dAfterTurretChange(st, res);
+}
+
+// Снятие башни чекбоксом: только свои меши, остальной набор стоит
+function m3dRemoveTurret(st, rel) {
+  if (!rel) return;
+  m3dDropTurretMeshes(st, rel);
+  try {
+    if (st.turretSet) st.turretSet.delete(rel);
+  } catch (e) {}
+  m3dAfterTurretChange(st, null);
+}
+
+// Общее после смены набора: свежий список вариантов, счётчики,
+// подпись дропа, пулемёт, пик переоткрытия. Кэш с прежним составом
+// стираем (иначе воскреснет старый набор).
+function m3dAfterTurretChange(st, res) {
+  if (res) m3dRefreshTurretSel(st, res);
+  m3dRecountPartBtns(st);
+  m3dTurretDropBtn(st);
+  if (res) m3dRefreshMgSel(st, res);
+  try {
+    st.params = Object.assign({}, st.params,
+      {turret: m3dTurretPrimary(st) || "@@auto@@"});
+  } catch (e) {}
   try {
     if (st.cacheKey) {
       m3dCache.delete(st.cacheKey);
-      m3dTurretPick.set(st.cacheKey, res.rel);
-      while (m3dTurretPick.size > 10)
-        m3dTurretPick.delete(m3dTurretPick.keys().next().value);
+      const prim = m3dTurretPrimary(st);
+      if (prim) {
+        m3dTurretPick.set(st.cacheKey, prim);
+        while (m3dTurretPick.size > 10)
+          m3dTurretPick.delete(m3dTurretPick.keys().next().value);
+      }
     }
   } catch (e) {}
-  m3dRecountPartBtns(st);
   try {
-    const srv = (res.srv_ms && res.srv_ms.total) || 0;
+    const srv = (res && res.srv_ms && res.srv_ms.total) || 0;
     st.perf.textContent = "turret " + srv + "ms · " +
       "meshes " + st.group.children.length +
       (st.gpuName ? " · " + st.gpuName : "") +
@@ -541,9 +604,25 @@ function m3dSwapTurret(st, res) {
   } catch (e) {}
 }
 
-// Пересчёт счётчиков брони/башни по живым мешам (после обмена башни)
+// Пересчёт счётчиков брони/башни по живым мешам (после смены набора):
+// у башни считаем штуки (разные rel), а не меши — иначе мадробот
+// с пятью пушками покажет десятки
+function m3dTurretRels(st) {
+  const out = [];
+  try {
+    st.group.children.forEach(mesh => {
+      const ud = mesh.userData;
+      if (ud.isTurret && !ud.isArmor && ud.turretRel &&
+          out.indexOf(ud.turretRel) < 0) out.push(ud.turretRel);
+    });
+  } catch (e) {}
+  return out;
+}
+
+// Пересчёт счётчиков брони/башни по живым мешам (после смены набора)
 function m3dRecountPartBtns(st) {
-  let armorCount = 0, turretCount = 0;
+  let armorCount = 0;
+  const turretCount = m3dTurretRels(st).length;
   const stat = {};
   st.group.children.forEach(mesh => {
     const ud = mesh.userData;
@@ -552,7 +631,6 @@ function m3dRecountPartBtns(st) {
       const k = [ud.detail, ud.layer].filter(Boolean).join("/");
       if (k) stat[k] = (stat[k] || 0) + 1;
     }
-    if (ud.isTurret && !ud.isArmor) turretCount++;
   });
   if (st.armorBtn) st.armorBtn.textContent =
     (t("m3d_armor") || "armor") + (armorCount ? " (" + armorCount + ")" : "");
@@ -586,7 +664,7 @@ function m3dFetchTurret(st, rel, slot, mg) {
   }).then(r => r.json()).catch(() => ({ok: false, error: "net"})
   ).then(res => {
     if (!st.pop.isConnected) return;
-    m3dSwapTurret(st, res);
+    m3dAddTurret(st, res);
   });
 }
 
@@ -667,8 +745,9 @@ function m3dShowData(st, data, first) {
   st.baseMats = (data.materials || []).slice(0, st.matBase);
   st.allMats = data.materials || [];
   const added = m3dAddMeshes(st, data.meshes || [], st.allMats,
-    data.value || (st.params && st.params.value) || "");
-  const armorCount = added.armor, turretCount = added.turret;
+    data.value || (st.params && st.params.value) || "",
+    (data.turret && data.turret.rel) || "");
+  const armorCount = added.armor;
   // Камера: цель в центр модели; вид по умолчанию — сбоку
   // (профиль, как на скрине юзера), чуть сверху и немного спереди:
   // нос модели в −Z, правый борт в +X
@@ -698,12 +777,17 @@ function m3dShowData(st, data, first) {
     st.barBuilt = true;
     m3dBuildBar(st);
   }
+  // Новый корпус — новый набор башен (старые rel недействительны)
+  st.turretSet = null;
+  st.turretSlots = null;
   m3dRefreshTurretSel(st, data);
-  // Подписи кнопок брони/башни — со счётчиками
+  m3dRefreshMgSel(st, (data && data.turret) || {});
+  // Подписи кнопок брони/башни — со счётчиками (у башни — штуки)
   if (st.armorBtn) st.armorBtn.textContent =
     (t("m3d_armor") || "armor") + (armorCount ? " (" + armorCount + ")" : "");
   m3dArmorTitle(st, added.armorStat);
   m3dRefreshArmorSel(st, added.armorStat);
+  const turretCount = m3dTurretRels(st).length;
   if (st.turretBtn) {
     st.turretBtn.textContent =
       (t("m3d_turret") || "turret") + (turretCount ? " (" + turretCount + ")" : "");
@@ -791,16 +875,41 @@ function m3dBuildBar(st) {
   lab.style.display = "none";
   bar.appendChild(lab);
   st.turretLab = lab;
-  const sel = document.createElement("select");
-  sel.className = "m3d-sel";
-  sel.style.display = "none";
-  sel.onchange = () => {
-    if (!sel.value) return;
-    const opt = sel.options[sel.selectedIndex];
-    m3dFetchTurret(st, sel.value, opt ? (opt.dataset.slot || "") : "");
+  // Набор башен: мульти-дроп с чекбоксами по вариантам (как виды
+  // брони) — каждую видно и снимать можно отдельно, все разом тоже.
+  // По умолчанию стоит backend-selected, остальные цепляются галками.
+  const tkbtn = document.createElement("button");
+  tkbtn.type = "button";
+  tkbtn.className = "m3d-btn m3d-selbtn";
+  tkbtn.style.display = "none";
+  tkbtn.onclick = ev => {
+    try { ev.stopPropagation(); } catch (e) {}
+    const dd = st.turretDrop;
+    if (dd) dd.style.display = dd.style.display === "none" ? "" : "none";
   };
-  bar.appendChild(sel);
-  st.turretSel = sel;
+  const tdrop = document.createElement("div");
+  tdrop.className = "m3d-drop";
+  tdrop.style.display = "none";
+  tdrop.onclick = ev => {
+    try { ev.stopPropagation(); } catch (e) {}
+  };
+  const twrap = document.createElement("span");
+  twrap.className = "m3d-kindwrap";
+  twrap.appendChild(tkbtn);
+  twrap.appendChild(tdrop);
+  bar.appendChild(twrap);
+  st.turretDropBtn = tkbtn;
+  st.turretDrop = tdrop;
+  // Клик мимо панели закрывает её (снимаем при закрытии диалога)
+  const tdlg = st.pop;
+  if (tdlg && !tdlg._turretDoc) {
+    tdlg._turretDoc = () => {
+      try {
+        if (st.turretDrop) st.turretDrop.style.display = "none";
+      } catch (e) {}
+    };
+    document.addEventListener("click", tdlg._turretDoc);
+  }
   // Вид брони: мульти-выпадашка с чекбоксами по видам плагина
   // (ceramic/carbon/…), по умолчанию все включены
   const alab = document.createElement("span");
@@ -854,10 +963,12 @@ function m3dBuildBar(st) {
   msel.className = "m3d-sel";
   msel.style.display = "none";
   msel.onchange = () => {
-    const tsel = st.turretSel;
-    const opt = tsel && tsel.options[tsel.selectedIndex];
-    m3dFetchTurret(st, tsel && tsel.value ? tsel.value : "",
-      opt ? (opt.dataset.slot || "") : "", msel.value || "");
+    // Пулемёт ставится на первичную башню набора (первую из порядка
+    // установки): её меши пересобираются тем же add-путём, соседи стоят
+    const prim = m3dTurretPrimary(st);
+    if (!prim) return;
+    const slots = st.turretSlots || {};
+    m3dFetchTurret(st, prim, slots[prim] || "", msel.value || "");
   };
   bar.appendChild(msel);
   st.mgSel = msel;
@@ -876,29 +987,79 @@ function m3dBuildBar(st) {
   bar.appendChild(x);
 }
 
-// Выбор варианта башни из найденных файлов (plasma/cannon/…)
+// Набор башен: выпадашка с чекбоксами по вариантам (мультивыбор,
+// как виды брони — каждую видно и снимать можно отдельно, все разом
+// тоже). Состояние живёт в st.turretSet (пустой набор = все сняты).
+// Первая загрузка встаёт на backend-selected, новые варианты после
+// ответов включаются сами. Слоты вариантов — в st.turretSlots
+// (для пулемёта и fetch).
 function m3dRefreshTurretSel(st, data) {
-  const sel = st.turretSel;
-  if (!sel) return;
+  const btn = st.turretDropBtn, drop = st.turretDrop;
+  if (!btn || !drop) return;
   const t = data.turret || (data.ok && data.rel ? data : null) || {};
   const ch = t.choices || [];
-  sel.options.length = 0;
-  if (ch.length < 2) {
-    sel.style.display = "none";
-    if (st.turretLab) st.turretLab.style.display = "none";
+  const slots = {};
+  ch.forEach(c => { slots[c.rel] = c.slot || ""; });
+  st.turretSlots = slots;
+  const list = ch.map(c => c.rel);
+  drop.textContent = "";
+  if (!st.turretKnown) st.turretKnown = [];
+  if (!st.turretSet) {
+    const sel = ch.filter(c => c.selected).map(c => c.rel);
+    st.turretSet = new Set(sel.length ? sel : list.slice(0, 1));
   } else {
-    ch.forEach(c => {
-      const o = document.createElement("option");
-      o.value = c.rel;
-      o.textContent = c.label || c.rel;
-      o.dataset.slot = c.slot || "";
-      if (c.selected) o.selected = true;
-      sel.appendChild(o);
+    list.forEach(rel => {
+      if (st.turretKnown.indexOf(rel) < 0) st.turretSet.add(rel);
     });
-    sel.style.display = "";
-    if (st.turretLab) st.turretLab.style.display = "";
   }
-  m3dRefreshMgSel(st, t);
+  st.turretKnown = list.slice();
+  if (list.length < 2) {
+    btn.style.display = "none";
+    if (st.turretLab) st.turretLab.style.display = "none";
+    drop.style.display = "none";
+    return;
+  }
+  const on = st.turretSet;
+  list.forEach(rel => {
+    const c = ch.filter(x => x.rel === rel)[0] || {};
+    const lab = document.createElement("label");
+    lab.className = "m3d-check";
+    lab.title = rel;
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = on.has(rel);
+    cb.onchange = () => {
+      if (cb.checked) {
+        const cslot = (st.turretSlots || {})[rel] || "";
+        // Пулемёт нового варианта — по умолчанию (как смена селекта
+        // раньше): выбор пулемёта живёт на первичной башне
+        m3dFetchTurret(st, rel, cslot, "@@auto@@");
+      } else {
+        m3dRemoveTurret(st, rel);
+      }
+    };
+    lab.appendChild(cb);
+    lab.appendChild(document.createTextNode(c.label || rel));
+    drop.appendChild(lab);
+  });
+  btn.style.display = "";
+  if (st.turretLab) st.turretLab.style.display = "";
+  m3dTurretDropBtn(st);
+}
+
+// Подпись кнопки набора: название + счётчик прикреплённых
+function m3dTurretDropBtn(st) {
+  const btn = st.turretDropBtn;
+  if (!btn) return;
+  const base = t("m3d_turret_pick") || "";
+  const known = st.turretKnown || [];
+  const on = st.turretSet;
+  if (!on || known.every(k => on.has(k))) {
+    btn.textContent = base + " ▾";
+    return;
+  }
+  const n = known.filter(k => on.has(k)).length;
+  btn.textContent = base + " (" + n + "/" + known.length + ") ▾";
 }
 
 // Выбор пулемёта поверх башни (из общего списка корпуса)
@@ -1103,6 +1264,10 @@ function m3dDisposeTab(tab) {
   try {
     if (host && host._armorDoc)
       document.removeEventListener("click", host._armorDoc);
+  } catch (e) {}
+  try {
+    if (host && host._turretDoc)
+      document.removeEventListener("click", host._turretDoc);
   } catch (e) {}
   try {
     (st.disposables || []).forEach(d => {
