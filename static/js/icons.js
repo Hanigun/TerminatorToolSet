@@ -38,6 +38,18 @@ function iconEngine(o) {
   let gen = 0, activeFresh = null;
   const alive = g => g === gen && isFresh() &&
     (!activeFresh || activeFresh());
+  // Сессионный кэш на корень {map, fail, dead}: переживает закрытие вкладок
+  // (движки — синглтоны страниц). Повторное открытие сеется из памяти и
+  // красится мгновенно, батч добирает только новое. dead — имена без иконок
+  // после полного preload-прохода: предзагрузку за сессию не повторяем
+  // (URL-проверка дешёвая и остаётся — внешний webp подхватится).
+  // reset() (смена источника, «Анализ») чистит fail/dead, карты URL живут
+  // (готовый webp никуда не девается).
+  const sess = {};
+  const entry = root => {
+    if (!sess[root]) sess[root] = { map: {}, fail: {}, dead: {} };
+    return sess[root];
+  };
 
   const missOf = names => {
     const map = mapOf() || {}, fail = failOf() || {};
@@ -78,19 +90,21 @@ function iconEngine(o) {
   }
 
   // Фоновая предзагрузка недостающего: жмём dds чанками, после каждого
-  // добираем URL и красим. Возвращает остаток без иконок (финал добит
-  // ещё одним URL-батчем — транзиент предзагрузки не равно «нет иконки»).
-  async function preloadBack(g, root, names) {
-    const total = (names || []).length;
+  // добираем URL и красим. dead пропускаем (см. sess). Возвращает остаток
+  // без иконок (финал добит ещё одним URL-батчем — транзиент предзагрузки
+  // не равно «нет иконки»).
+  async function preloadBack(g, root, names, ent) {
+    const queue = (names || []).filter(n => !ent.dead[n]);
+    const total = queue.length;
     let done = 0;
     try {
       if (onProgress && total) onProgress(0, total);
     } catch (e) {}
-    if (pending) names.forEach(n => pending.add(n));
+    if (pending) queue.forEach(n => pending.add(n));
     const still = [];
-    for (let i = 0; i < names.length; i += PRE_CH) {
+    for (let i = 0; i < queue.length; i += PRE_CH) {
       if (!alive(g)) return [];
-      const chunk = names.slice(i, i + PRE_CH);
+      const chunk = queue.slice(i, i + PRE_CH);
       try {
         await api("/api/uprising_icon_preload", { method: "POST",
           body: JSON.stringify({ root, names: chunk }), timeout: 180000 });
@@ -104,6 +118,9 @@ function iconEngine(o) {
       } catch (e) {}
       if (r.added.length) {
         if (pending) r.added.forEach(n => pending.delete(n));
+        r.added.forEach(n => {
+          try { ent.map[n] = (mapOf() || {})[n] || ent.map[n]; } catch (e) {}
+        });
         try { onChunk(r.added); } catch (e) {}
       }
       r.missing.forEach(n => {
@@ -115,12 +132,17 @@ function iconEngine(o) {
       if (!alive(g)) return [];
       if (r.added.length) {
         if (pending) r.added.forEach(n => pending.delete(n));
+        r.added.forEach(n => {
+          try { ent.map[n] = (mapOf() || {})[n] || ent.map[n]; } catch (e) {}
+        });
         try { onChunk(r.added); } catch (e) {}
       }
       if (pending) r.missing.forEach(n => pending.delete(n));
+      r.missing.forEach(n => { ent.dead[n] = 1; });
       return r.missing;
     }
     if (pending) still.forEach(n => pending.delete(n));
+    still.forEach(n => { ent.dead[n] = 1; });
     return still;
   }
 
@@ -134,6 +156,18 @@ function iconEngine(o) {
     const g = ++gen;
     const root = (opt.root !== undefined) ? opt.root : (rootOf() || "");
     activeFresh = (typeof opt.fresh === "function") ? opt.fresh : null;
+    const ent = entry(root);
+    // посев из сессионного кэша: повторное открытие красится сразу
+    // из памяти, батч доберёт только новое
+    try {
+      const pmap = mapOf() || {}, pfail = failOf() || {};
+      const seeded = [];
+      Object.keys(ent.map).forEach(n => {
+        if (!pmap[n] && ent.map[n]) { pmap[n] = ent.map[n]; seeded.push(n); }
+      });
+      Object.keys(ent.fail).forEach(n => { if (!pfail[n]) pfail[n] = 1; });
+      if (seeded.length) onChunk(seeded);
+    } catch (e) {}
     const miss = missOf(names);
     if (!miss.length) {
       try { setReady(true); } catch (e) {}
@@ -153,6 +187,9 @@ function iconEngine(o) {
       return;
     }
     if (r.added.length) {
+      r.added.forEach(n => {
+        try { ent.map[n] = (mapOf() || {})[n] || ent.map[n]; } catch (e) {}
+      });
       try { onChunk(r.added); } catch (e) {}
     }
     try { setReady(true); } catch (e) {}
@@ -164,20 +201,17 @@ function iconEngine(o) {
       return;
     }
     // фон: страницу не держим — чипы дорисует onChunk
-    preloadBack(g, root, r.missing).then(rest => {
+    preloadBack(g, root, r.missing, ent).then(rest => {
       if (!alive(g)) {
         try { onSettled(); } catch (e) {}
         return;
-      }
-      // состояния (ховер/selected) дожатого — подтянуть их URL тоже
-      if (wantStates) {
-        try { wantStates(root, names); } catch (e) {}
       }
       if ((rest || []).length) {
         const fail = failOf() || {};
         let changed = false;
         rest.forEach(n => {
           if (!(mapOf() || {})[n] && !fail[n]) { fail[n] = 1; changed = true; }
+          try { ent.fail[n] = 1; } catch (e) {}
         });
         if (changed) {
           try { saveFail(); } catch (e) {}
@@ -195,15 +229,19 @@ function iconEngine(o) {
     const g = ++gen;
     const root = (opt.root !== undefined) ? opt.root : (rootOf() || "");
     activeFresh = (typeof opt.fresh === "function") ? opt.fresh : null;
+    const ent = entry(root);
     const miss = missOf(names);
     if (!miss.length) return Promise.resolve();
     return urlBatch(g, root, miss).then(r => {
       if (!alive(g)) return;
       if (r.added.length) {
+        r.added.forEach(n => {
+          try { ent.map[n] = (mapOf() || {})[n] || ent.map[n]; } catch (e) {}
+        });
         try { onChunk(r.added); } catch (e) {}
       }
       if (!r.missing.length || r.stale) return;
-      return preloadBack(g, root, r.missing).then(rest => {
+      return preloadBack(g, root, r.missing, ent).then(rest => {
         if (!alive(g)) return;
         if ((rest || []).length) {
           try { onChunk([]); } catch (e) {}
@@ -212,8 +250,18 @@ function iconEngine(o) {
     }).catch(() => {});
   }
 
-  // Смена источника: гасит полёты, чистит поколение.
-  function reset() { gen++; }
+  // Смена источника / «Анализ»: гасит полёты, чистит поколение, fail и dead
+  // (карты URL живут — готовый webp никуда не девается; посев ускорит
+  // следующий заход, батч доберёт новое).
+  function reset() {
+    gen++;
+    try {
+      Object.keys(sess).forEach(k => {
+        sess[k].fail = {};
+        sess[k].dead = {};
+      });
+    } catch (e) {}
+  }
 
   return { ensure, refresh, reset };
 }

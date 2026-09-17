@@ -152,6 +152,12 @@ class Uprising:
         self.webp_idx = {"mt": 0.0, "map": {}}  # stem.lower() -> (bucket, file)
         self.icon_cache = {}  # layers-key -> {"mt": float, "map": {...}}
         self.icon_low_cache = {}  # layers-key -> пониженный индекс карты
+        # мемо поиска исходников состояний: (layers-key, species-mt, имя) ->
+        # {hover/selected: path}. Повторные открытия страниц звали
+        # icon_state_sources на каждое имя заново (десятки stat на имя,
+        # 400+ имён — под секунду каждый раз); пути от wepb-кэша не зависят,
+        # валидность — по mt species-карты.
+        self._state_src_memo = {}
         # (состояния иконок: запрос любым регистром при регистрозависимых
         # ключах species; строится один раз на поколение icon_cache)
         self.dlc_cache = {}   # root -> (dlc dir mtime, [dlc dirs])
@@ -1543,6 +1549,42 @@ class Uprising:
     }
 
     def icon_state_sources(self, root, name):
+        """Файлы-состояния иконки {hover, selected}: мемо поверх скана.
+
+        Горячий путь повторных открытий: скан — десятки stat на имя,
+        мемо отдаёт готовые пути (валидность по mt species-карты —
+        пути исходников от webp-кэша не зависят)."""
+        key = (name or "").strip()
+        if not key:
+            return {}
+        mkey = None
+        try:
+            layers = self._layer_roots(root)
+            lkey = "|".join(layers)
+            mt = (self.icon_cache.get(lkey) or {}).get("mt")
+            if mt is None:
+                try:
+                    self.icon_map(root)
+                except Exception:  # noqa: BLE001
+                    pass
+                mt = (self.icon_cache.get(lkey) or {}).get("mt")
+            mkey = (lkey, mt, key.lower())
+            hit = self._state_src_memo.get(mkey)
+            if hit is not None:
+                return dict(hit)
+        except Exception:  # noqa: BLE001
+            mkey = None
+        out = self._icon_state_sources_scan(root, key)
+        if mkey is not None:
+            try:
+                if len(self._state_src_memo) > 20000:
+                    self._state_src_memo.clear()
+                self._state_src_memo[mkey] = dict(out)
+            except Exception:  # noqa: BLE001
+                pass
+        return out
+
+    def _icon_state_sources_scan(self, root, name):
         """Файлы-состояния иконки {hover, selected}: сиблинги исходника
         со сменой стема (тот же фолбэк-цепочка слоёв, что icon_source_file).
         Ключи species-карты регистрозависимы (Fnd_abrams), запрос может
