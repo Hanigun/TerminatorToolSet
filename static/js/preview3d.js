@@ -270,45 +270,30 @@ function pv3TexAssign(st) {
 
 // Наблюдатель загрузок: дожимает назначение на каждом затишье менеджера
 // (покрывает поздние догрузки и своп башни — её текстуры идут через тот
-// же менеджер) и показывает живой статус в панели: сколько карт приехало,
-// сколько упало. Оригиналы колбэков ядра вызываются как были.
+// же менеджер). Упавшие запросы — в консоль. Оригиналы колбэков ядра
+// вызываются как были.
 function pv3TexWatch(pv3, st) {
   const mgr = st && st.texMgr;
   if (!mgr || mgr._pv3) return;
   mgr._pv3 = true;
-  const stat = {total: 0, done: 0, err: 0};
-  const paint = () => {
-    if (pv3.ui && pv3.ui.tex)
-      pv3.ui.tex.textContent = "tex " + stat.done + "/" + stat.total +
-        (stat.err ? " · err " + stat.err : "");
-  };
   const prevStart = mgr.onStart, prevProg = mgr.onProgress,
     prevLoad = mgr.onLoad, prevErr = mgr.onError;
   mgr.onStart = (url, a, b) => {
     try { if (typeof prevStart === "function") prevStart(url, a, b); }
     catch (e) {}
-    stat.total = b || 0;
-    paint();
   };
   mgr.onProgress = (url, a, b) => {
     try { if (typeof prevProg === "function") prevProg(url, a, b); }
     catch (e) {}
-    stat.done = a || 0;
-    stat.total = b || stat.total;
-    paint();
   };
   mgr.onLoad = () => {
     try { if (typeof prevLoad === "function") prevLoad(); } catch (e) {}
     pv3TexAssign(st);
-    paint();
   };
   mgr.onError = url => {
     try { if (typeof prevErr === "function") prevErr(url); } catch (e) {}
-    stat.err++;
     try { console.warn("[pv3] texture failed: " + url); } catch (e2) {}
-    paint();
   };
-  paint();
 }
 
 // Рамка кадра игры: квадрат как слот карточки юнита в игре (~1:1).
@@ -369,8 +354,9 @@ function pv3WritePose(pv3, pose) {
 }
 
 // Тонкий слайдер одной оси: буква + ползунок (значение уже видно
-// в readout выше). Возвращает input; позицию подтягивает pv3Update.
-function pv3Slider(parent, axis, min, max, step, onInput) {
+// в readout выше). Даблклик — возврат в стоковую позу (как Reset).
+// Возвращает input; позицию подтягивает pv3Update.
+function pv3Slider(parent, axis, min, max, step, onInput, onReset) {
   const row = document.createElement("div");
   row.className = "pv3-srow";
   const lab = document.createElement("span");
@@ -380,11 +366,21 @@ function pv3Slider(parent, axis, min, max, step, onInput) {
   s.min = min;
   s.max = max;
   s.step = step;
+  s.title = axis;
   s.addEventListener("input", () => onInput(parseFloat(s.value)));
+  if (typeof onReset === "function")
+    s.addEventListener("dblclick", onReset);
   row.appendChild(lab);
   row.appendChild(s);
   parent.appendChild(row);
   return s;
+}
+
+// Стоковая поза: сохранённый конфиг, без него — домашний вид ядра.
+function pv3ResetView(pv3) {
+  if (!pv3 || !pv3.st) return;
+  if (pv3.cam) pv3ApplyPose(pv3, pv3.cam);
+  else if (pv3.st.home) { pv3.st.home(); pv3Update(pv3); }
 }
 
 // Применить позу из конфига: точка прицеливания, угол обзора, затем
@@ -588,7 +584,7 @@ function pv3BuildSide(pv3, st) {
       const pose = pv3ReadPose(pv3);
       pose.position[ax] = v;
       pv3WritePose(pv3, pose);
-    });
+    }, () => pv3ResetView(pv3));
   });
   mkLab("pv3_rot");
   const rot = mkVal();
@@ -603,7 +599,7 @@ function pv3BuildSide(pv3, st) {
       const pose = pv3ReadPose(pv3);
       pose.origin[ax] = v;
       pv3WritePose(pv3, pose);
-    });
+    }, () => pv3ResetView(pv3));
   });
   mkLab("pv3_fov");
   const fov = mkVal();
@@ -627,7 +623,7 @@ function pv3BuildSide(pv3, st) {
     const pose = pv3ReadPose(pv3);
     pose.fov = v;
     pv3WritePose(pv3, pose);
-  });
+  }, () => pv3ResetView(pv3));
   mkLab("pv3_zoom");
   const zoom = mkVal();
   // Слайдер дистанции: едет камера вдоль текущего луча, цель стоит.
@@ -641,7 +637,7 @@ function pv3BuildSide(pv3, st) {
     pose.position = {x: o.x + dx / len * v,
       y: o.y + dy / len * v, z: o.z + dz / len * v};
     pv3WritePose(pv3, pose);
-  });
+  }, () => pv3ResetView(pv3));
   mkLab("pv3_name");
   const name = document.createElement("input");
   name.className = "pv3-in";
@@ -659,13 +655,6 @@ function pv3BuildSide(pv3, st) {
   frameLab.appendChild(frame);
   frameLab.appendChild(document.createTextNode(L("pv3_frame")));
   side.appendChild(frameLab);
-  // Живой статус текстур (заполняет наблюдатель pv3TexWatch):
-  // сколько карт приехало, сколько упало — видно, грузится ли вообще.
-  const tex = document.createElement("div");
-  tex.className = "pv3-val";
-  tex.style.marginTop = "8px";
-  tex.textContent = "tex 0/0";
-  side.appendChild(tex);
   const row = document.createElement("div");
   row.className = "pv3-row";
   const save = document.createElement("button");
@@ -677,15 +666,12 @@ function pv3BuildSide(pv3, st) {
   reset.type = "button";
   reset.className = "pv3-btn pv3-ghost";
   reset.textContent = L("pv3_reset");
-  reset.onclick = () => {
-    if (pv3.cam) pv3ApplyPose(pv3, pv3.cam);
-    else if (st.home) { st.home(); pv3Update(pv3); }
-  };
+  reset.onclick = () => pv3ResetView(pv3);
   row.appendChild(save);
   row.appendChild(reset);
   side.appendChild(row);
   pv3.ui = {sel: sel, pos: pos, rot: rot, org: org, fov: fov,
-    fovIn: fovIn, zoom: zoom, name: name, frame: frame, tex: tex,
+    fovIn: fovIn, zoom: zoom, name: name, frame: frame,
     posS: posS, orgS: orgS, fovS: fovS, zoomS: zoomS};
   pv3Update(pv3);
 }

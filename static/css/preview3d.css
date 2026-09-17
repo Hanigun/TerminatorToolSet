@@ -1,13 +1,16 @@
 /* Редактор preview_config: попап как превью модели, но шире —
 тело делят сцена слева и панель координат справа */
 .pv3-pop {
-  width: min(1140px, 94vw);
+  width: min(1280px, 96vw);
 }
 .pv3-pop .m3d-view {
   width: auto;
   /* Вуаль рамки живёт только над сценой: без клипа огромная тень
   накрывает соседнюю панель параметров */
   overflow: hidden;
+  /* Панель разрослась (слайдеры осей): сцена выше, чтобы всё
+  помещалось без прокрутки */
+  height: min(72vh, 680px);
 }
 .pv3-body {
   display: flex;
@@ -33,7 +36,7 @@
   width: 248px;
   flex: none;
   overflow-y: auto;
-  max-height: min(60vh, 560px);
+  max-height: min(72vh, 680px);
   padding: 10px 12px 14px;
   background: #2a2c30;
   border-left: 1px solid #3a3d43;
@@ -167,8 +170,8 @@ box-shadow накрывает всё за пределами рамки одни
   margin: 0;
   cursor: pointer;
 }
-/* Тонкие слайдеры осей: буква оси + ползунок в акцентном цвете.
-Трек 3px, круглая ручка 11px со свечением — в стиле HUD рамки. */
+/* Тонкие слайдеры осей: буква оси + ползунок в жёлтом акценте.
+Трек 3px, прямоугольная ручка 6x12 со свечением. */
 .pv3-srow {
   display: flex;
   align-items: center;
@@ -199,21 +202,21 @@ box-shadow накрывает всё за пределами рамки одни
 .pv3-srow input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: #5eead4;
+  width: 6px;
+  height: 12px;
+  border-radius: 2px;
+  background: #ffcf40;
   border: none;
-  box-shadow: 0 0 6px rgba(94, 234, 212, 0.7);
+  box-shadow: 0 0 6px rgba(255, 207, 64, 0.7);
   cursor: pointer;
 }
 .pv3-srow input[type="range"]::-moz-range-thumb {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: #5eead4;
+  width: 6px;
+  height: 12px;
+  border-radius: 2px;
+  background: #ffcf40;
   border: none;
-  box-shadow: 0 0 6px rgba(94, 234, 212, 0.7);
+  box-shadow: 0 0 6px rgba(255, 207, 64, 0.7);
   cursor: pointer;
 }
 .pv3-srow input[type="range"]::-moz-range-track {
