@@ -1,7 +1,7 @@
 /* TerminatorToolSet frontend — history.js: undo/redo + панель истории
    Вырезано из app.js без изменений логики. Классические скрипты,
    общий глобальный скоуп, порядок загрузки — FILES в templates/index.html. */
-// ---------- undo / redo (snapshot-based, like the History panel) ----------
+// ---------- undo / redo (diff-journal based, like the History panel) ----------
 async function reloadActiveFile() {
   const tab = state.tabs.find(tb => tb.id === state.activeTabId);
   if (!tab || tab.type !== "file") return;
@@ -208,7 +208,7 @@ async function runUndoRedo(endpoint, okMsg, noneMsg) {
         await compareRepaintUndo(cmpSide, j.patch);
       } catch (e) {
         try {
-          if (state.compare) { state.compare = null; await runCompare(); }
+          if (state.compare) { state.compare = null; await refreshCompareSilent(); }
           else if (d) { state.cmpData[cmpSide] = null; await cmpLoadSide(cmpSide); }
         } catch (e2) {
           toast(String((e2 && e2.message) || e2), "err");
@@ -600,6 +600,51 @@ async function openHistory() {
   stockRow.appendChild(stockBtn);
   body.appendChild(stockRow);
   }
+  // откат к досейвовому снимку оригинала: работает для любого файла
+  // (не только внутри проекта) и покрывает даже незалогированные правки —
+  // снимок делается при первой записи файла из приложения
+  try {
+    const origins = await Promise.all(targets.map(async tg => {
+      try {
+        const r = await api("/api/origin_state?path=" + encodeURIComponent(tg.path));
+        const j = await r.json();
+        return (j && j.ok && j.has_origin) ? tg : null;
+      } catch (e) { return null; }
+    }));
+    for (const tg of origins) {
+      if (!tg) continue;
+      const orgRow = document.createElement("div");
+      orgRow.className = "hist-stock";
+      const orgBtn = document.createElement("button");
+      orgBtn.className = "btn";
+      const base = String(tg.path || "").split(/[\\/]/).pop();
+      orgBtn.textContent = (t("hist_origin") || "Откатить к оригиналу")
+        + (base ? " · " + base : "");
+      orgBtn.onclick = async () => {
+        const choice = await askConfirm({
+          title: t("hist_origin") || "Откат к оригиналу",
+          message: t("hist_origin_confirm") ||
+            "Файл будет перезаписан версией до первой записи из приложения, журнал очищен.",
+          buttons: [
+            { id: "ok", label: t("hist_origin") || "Откатить", kind: "danger" },
+            { id: "cancel", label: t("cancel"), kind: "ghost" },
+          ],
+        });
+        if (choice !== "ok") return;
+        if (!await histConfirmSwtDirty()) return;
+        const rr = await api("/api/origin_restore", { method: "POST",
+          body: JSON.stringify({ path: tg.path }) });
+        const jj = await rr.json();
+        if (!jj.ok) { toast(jj.error || "error", "err"); return; }
+        await histRepaintContext(tg.path, tg.side);
+        setUndoRedoButtons(false, false);
+        toast(t("hist_origin_done") || "Восстановлен оригинал", "ok");
+        openHistory();
+      };
+      orgRow.appendChild(orgBtn);
+      body.appendChild(orgRow);
+    }
+  } catch (e) { /* без снимка — просто нет кнопки */ }
   $("#history-modal").hidden = false;
 }
 

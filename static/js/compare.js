@@ -171,7 +171,7 @@ async function cmpSyncUndoButtons() {
 // the diff re-runs on the server; a preview reloads just that side
 async function compareRepaintUndo(side, patch) {
   if (!side) return;
-  if (state.compare) { await runCompare(); return; }
+  if (state.compare) { await refreshCompareSilent(); return; }
   const d = state.cmpData && state.cmpData[side];
   if (d && patch && patch.kind === "cell" &&
       d.rows[patch.row] && patch.col < d.rows[patch.row].length) {
@@ -1070,7 +1070,7 @@ function cmpBeginDiffEdit(side, td, i, ci) {
     state.cmpLastSide = side;
     markCompareDirty();
     try { syncFileTabsCells(filePath, [{ row: ri, col: fci, value: nv }]); } catch (e) {}
-    await runCompare();
+    await refreshCompareSilent();
     cmpSyncUndoButtons();
   };
   input.addEventListener("blur", commit);
@@ -1124,7 +1124,7 @@ async function cmpTransferCell(side, i, ci) {
   state.cmpLastSide = "left"; // перенос значения пишет в основу
   markCompareDirty();
   try { syncFileTabsCells(j.left, [{ row: d.left_index, col: lci, value: String(val ?? "") }]); } catch (e) {}
-  await runCompare();
+  await refreshCompareSilent();
   cmpSyncUndoButtons();
 }
 
@@ -1157,7 +1157,7 @@ async function cmpStructOp(side, op, extra) {
   markCompareDirty();
   // структура файла поменялась: открытые таблицы перечитаются при возврате
   try { markFileTabsStale(path); } catch (e) {}
-  if (state.compare && !state.compare.preview) await runCompare();
+  if (state.compare && !state.compare.preview) await refreshCompareSilent();
   else { state.cmpData[side] = null; await cmpLoadSide(side); }
   cmpSyncUndoButtons();
 }
@@ -1179,7 +1179,7 @@ async function cmpTransferCol(srcCi) {
   toast(t("cmp_moved_ok") || "Перенесено", "ok");
   markCompareDirty();
   try { markFileTabsStale(j.left); } catch (e) {}
-  await runCompare();
+  await refreshCompareSilent();
 }
 
 // действия контекстного меню на панелях сравнения
@@ -1623,7 +1623,8 @@ function cmpResolved(side) {
   return p;
 }
 
-async function runCompare() {
+async function runCompare(opts) {
+  const silent = !!(opts && opts.silent);
   const left = cmpResolved("left"), right = cmpResolved("right");
   if (!left || !right) { toast(t("cmp_need_paths"), "err"); return; }
   const keyCol = state.cmpKeyCol == null || state.cmpKeyCol < 0 ? -1 : state.cmpKeyCol;
@@ -1640,8 +1641,12 @@ async function runCompare() {
     await cmpSnapshotBaseline(left, right, movedFor);
   }
   // per-pane loading animation while the files are read on the server
-  $("#cmp-loading-left").classList.remove("hidden");
-  $("#cmp-loading-right").classList.remove("hidden");
+  // (silent background refresh skips it: the diff recomputes from the
+  // in-memory sessions, the panes just repaint with the scroll kept)
+  if (!silent) {
+    $("#cmp-loading-left").classList.remove("hidden");
+    $("#cmp-loading-right").classList.remove("hidden");
+  }
   try {
     const r = await api("/api/compare", { method: "POST",
       body: JSON.stringify({ left, right, key_col: keyCol,
@@ -1664,9 +1669,41 @@ async function runCompare() {
     renderKeyDropdown();
     renderCompare();
   } finally {
-    $("#cmp-loading-left").classList.add("hidden");
-    $("#cmp-loading-right").classList.add("hidden");
+    if (!silent) {
+      $("#cmp-loading-left").classList.add("hidden");
+      $("#cmp-loading-right").classList.add("hidden");
+    }
   }
+}
+
+// пересчёт диффа после merge/переноса/undo без спиннеров и прыжка экрана:
+// прокрутка панелей сохраняется (чанки дорисовываются до старого смещения)
+async function refreshCompareSilent() {
+  const pos = {};
+  ["left", "right"].forEach(s => {
+    const pane = $("#cmp-pane-" + s);
+    if (pane) pos[s] = { top: pane.scrollTop, left: pane.scrollLeft };
+  });
+  await runCompare({ silent: true });
+  ["left", "right"].forEach(s => {
+    const pane = $("#cmp-pane-" + s);
+    if (!pane || !pos[s]) return;
+    let guard = 0;
+    while (guard++ < 25 && state.cmpCtx
+      && state.cmpPane[s] < state.cmpCtx.visible.length
+      && pane.scrollHeight < pos[s].top + pane.clientHeight + 400) {
+      appendCmpRows(s, CMP_CHUNK);
+    }
+    if (pane.dataset.synced !== "1") {
+      pane.dataset.synced = "1";
+      pane.scrollTop = pos[s].top;
+      pane.scrollLeft = pos[s].left;
+      setTimeout(() => { pane.dataset.synced = ""; }, 60);
+    } else {
+      pane.scrollTop = pos[s].top;
+      pane.scrollLeft = pos[s].left;
+    }
+  });
 }
 
 // переключатель кнопки запуска: вне дифа — «Сравнить», в дифе —
@@ -2040,7 +2077,7 @@ async function transferRow(d) {
     try { markFileTabsStale(j.left); } catch (e) {}
   } else toast(res.error, "err");
   state.cmpLastSide = "left"; // перенос пишет в основу
-  await runCompare();
+  await refreshCompareSilent();
   cmpSyncUndoButtons();
 }
 
@@ -2184,7 +2221,7 @@ async function mergeAll() {
     }
   });
   state.cmpLastSide = "left"; // слияние пишет в основу
-  await runCompare();
+  await refreshCompareSilent();
   cmpSyncUndoButtons();
 }
 
