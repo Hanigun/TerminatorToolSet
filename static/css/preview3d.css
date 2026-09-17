@@ -115,18 +115,18 @@ box-shadow накрывает всё за пределами рамки одни
 .pv3-frame {
   position: absolute;
   pointer-events: none;
-  border: 1px solid rgba(94, 234, 212, 0.55);
+  border: 1px solid rgba(255, 207, 64, 0.6);
   box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55),
-    0 0 16px rgba(94, 234, 212, 0.35),
-    inset 0 0 28px rgba(94, 234, 212, 0.07);
+    0 0 16px rgba(255, 207, 64, 0.35),
+    inset 0 0 28px rgba(255, 207, 64, 0.07);
   z-index: 5;
 }
 .pv3-frame i {
   position: absolute;
   width: 16px;
   height: 16px;
-  border: 0 solid #5eead4;
-  filter: drop-shadow(0 0 4px rgba(94, 234, 212, 0.9));
+  border: 0 solid #ffcf40;
+  filter: drop-shadow(0 0 4px rgba(255, 207, 64, 0.9));
 }
 .pv3-frame i:nth-child(1) {
   left: -2px;
@@ -187,8 +187,7 @@ box-shadow накрывает всё за пределами рамки одни
   text-align: center;
 }
 .pv3-srow input[type="range"] {
-  flex: 1;
-  min-width: 0;
+  width: 100%;
   -webkit-appearance: none;
   appearance: none;
   height: 3px;
@@ -196,14 +195,15 @@ box-shadow накрывает всё за пределами рамки одни
   background: #3a3d43;
   outline: none;
   cursor: pointer;
-  margin: 0;
+  margin: 5px 0 0;
   padding: 0;
+  display: block;
 }
 .pv3-srow input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 6px;
-  height: 12px;
+  width: 8px;
+  height: 16px;
   border-radius: 2px;
   background: #ffcf40;
   border: none;
@@ -211,13 +211,31 @@ box-shadow накрывает всё за пределами рамки одни
   cursor: pointer;
 }
 .pv3-srow input[type="range"]::-moz-range-thumb {
-  width: 6px;
-  height: 12px;
+  width: 8px;
+  height: 16px;
   border-radius: 2px;
   background: #ffcf40;
   border: none;
   box-shadow: 0 0 6px rgba(255, 207, 64, 0.7);
   cursor: pointer;
+}
+/* Дорожка ползунка: точка стокового положения под треком */
+.pv3-strack {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 7px;
+}
+.pv3-dot {
+  position: absolute;
+  bottom: 0;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #ffcf40;
+  opacity: 0.75;
+  transform: translateX(-50%);
+  pointer-events: none;
 }
 .pv3-srow input[type="range"]::-moz-range-track {
   height: 3px;
