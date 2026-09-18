@@ -399,7 +399,7 @@ def material_payload(upr, root, mtrl_rel, fallback="", overlay=()):
     """
     out = {"name": mtrl_rel, "albedo": "", "normal": "", "rough": "",
             "emission": "", "emission_power": 0.0, "transparent": False,
-            "double_sided": False, "missing": True}
+            "double_sided": False, "render_priority": 0, "missing": True}
     p = find_file(root, mtrl_rel, fallback, overlay)
     if not p:
         return out
@@ -422,6 +422,12 @@ def material_payload(upr, root, mtrl_rel, fallback="", overlay=()):
     except (TypeError, ValueError):
         out["emission_power"] = 0.0
     out["double_sided"] = (mat.rasterizer_state == "CullNone")
+    # Порядок отрисовки из движка (глобальная карта: террейн/подложка
+    # -100, декали 0) — фронт ставит через renderOrder
+    try:
+        out["render_priority"] = int(mat.render_priority or 0)
+    except (TypeError, ValueError):
+        out["render_priority"] = 0
     return out
 
 
