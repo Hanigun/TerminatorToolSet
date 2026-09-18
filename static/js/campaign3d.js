@@ -88,8 +88,10 @@ var CMP3D_MAP_ROT = -Math.PI / 2;
 // Стартовая точка — центр Техаса (среднее 15 POI штата):
 // игра открывает карту регионом, TEXAS читается крупно
 var CMP3D_HOME = [-165, 3, -338];
-// Свет карты одним местом (диагностика возвращает ровно эти значения)
-var CMP3D_KEY = 3.5, CMP3D_HEMI = 0.75, CMP3D_EXPO = 1.3;
+// Свет карты одним местом (диагностика возвращает ровно эти значения).
+// Старт под линейный выход (GEM без кинокривой): темноту альбедо
+// (R~40) поднимает сам свет, а не тонемаппинг
+var CMP3D_KEY = 2.2, CMP3D_HEMI = 0.55, CMP3D_EXPO = 1.15;
 
 // ---------- libs ----------
 // Ленивая подгрузка three.js — копия m3dLibs своим состоянием,
@@ -182,7 +184,11 @@ function cmp3dBoot(view, root) {
     renderer.setPixelRatio(softGL ? 1 : Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(W(), H());
     renderer.outputEncoding = THREE.sRGBEncoding;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    // GEM — LDR-движок без кинокривой (эквивалент Blender Standard):
+    // ACESFilmic (эквивалент Filmic) съедал насыщенность и давил
+    // средние тона — отсюда «тускло» при любом свете. Линейный выход:
+    // цвет как в текстуре, яркость — только светом
+    renderer.toneMapping = THREE.LinearToneMapping;
     renderer.toneMappingExposure = CMP3D_EXPO;
     box.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
@@ -198,15 +204,15 @@ function cmp3dBoot(view, root) {
     ctl.enableZoom = false;
     ctl.screenSpacePanning = false;
     ctl.target.set(0, 0, 0);
-    // Свой свет: ключ почти строго сверху по light.xml
-    // (direction 0,0,-1.37), оттенки полусферы — цвета из global_map.lighting
-    // Рельеф лепит направленный ключ, фил слабый — иначе всё
-    // выбеливается в плоскую кашу (как было при hemi 1.15)
-    const hemi = new THREE.HemisphereLight(0x3f748f, 0x233236, CMP3D_HEMI);
+    // Свой свет: солнце строго сверху по light.xml
+    // (direction 0,0,-1.37 — отвесно вниз). Наклона нет и в игре:
+    // рельеф лепится нормалями, а не боковым светом.
+    // Цвета полусферы — из хвоста global_map.lighting
+    // (небо 0.3294,0.4627,0.5059 / земля 0.1373,0.1961,0.2118)
+    const hemi = new THREE.HemisphereLight(0x547681, 0x233236, CMP3D_HEMI);
     scene.add(hemi);
     const key = new THREE.DirectionalLight(0xffffff, CMP3D_KEY);
-    // Лёгкий наклон для лепки рельефа (в игре горы с теневой стороной)
-    key.position.set(15, 100, -45);
+    key.position.set(0, 100, 0);
     scene.add(key);
     const group = new THREE.Group();
     group.rotation.y = CMP3D_MAP_ROT;
@@ -367,6 +373,13 @@ function cmp3dAddMeshes(st, data) {
         mat.depthWrite = isGhost ? false : true;
       }
       if (md.double_sided) mat.side = THREE.DoubleSide;
+      // Порядок отрисовки — из движка (RenderPriority: террейн
+      // и подложка -100, декали 0): текст всегда поверх террейна,
+      // а не по прихоти сортировки прозрачных
+      try {
+        mat.renderOrder = (md.render_priority != null) ?
+          md.render_priority : 0;
+      } catch (e8) { mat.renderOrder = 0; }
     } else {
       mat.color.setHex(0x9aa0a8);
     }
@@ -409,9 +422,13 @@ function cmp3dDecalEmissive(st, url, mat, power) {
       cx.putImageData(id, 0, 0);
       try { tx.dispose(); } catch (e0) {}
       const dt = new THREE.CanvasTexture(cv);
+      // Проявка — sRGB-картинка: без метки three читал бы её
+      // как линейную и текст уходил бы не в ту яркость
+      dt.encoding = THREE.sRGBEncoding;
       mat.emissiveMap = dt;
       mat.emissive = new THREE.Color(0xffffff);
-      mat.emissiveIntensity = mat.userData.decalPower;
+      mat.emissiveIntensity = mat.userData.decalPower *
+        ((st.lset && st.lset.decal != null) ? st.lset.decal : 1);
       mat.needsUpdate = true;
       mat.userData.tex.push(dt);
       st.disposables.push(dt);
@@ -426,8 +443,11 @@ function cmp3dTexReady(st, mat, slot) {
     mat[slot] = tx;
     if (slot === "emissiveMap") {
       mat.emissive = new THREE.Color(0xffffff);
-      // Дороги и огни светятся, но не выбеливают террейн
-      mat.emissiveIntensity = mat.userData.emissionPower || 0;
+      // Ночные огни и светящиеся дороги днём не горят (в игре их
+      // включает ночь): сила — ползунок «Ночь», по умолчанию 0.
+      // Иначе emission_power 0.6 лежит поверх дня белесой вуалью
+      mat.emissiveIntensity = (mat.userData.emissionPower || 0) *
+        ((st.lset && st.lset.night != null) ? st.lset.night : 0);
     }
     mat.needsUpdate = true;
   } catch (e) {}
@@ -537,11 +557,18 @@ function cmp3dDbg(view) {
       if (what === "all") {
         st.group.children.forEach(m => {
           try {
-            if (m.material && m.material.emissive)
-              m.material.emissiveIntensity =
-                (m.material.userData.decalPower ||
-                  m.material.userData.emissionPower || 0) *
-                ((st.lset && st.lset.emis) || 1);
+            if (m.material && m.material.emissive) {
+              if (m.material.userData.decalPower)
+                m.material.emissiveIntensity =
+                  m.material.userData.decalPower *
+                  ((st.lset && st.lset.decal != null) ?
+                    st.lset.decal : 1);
+              else
+                m.material.emissiveIntensity =
+                  (m.material.userData.emissionPower || 0) *
+                  ((st.lset && st.lset.night != null) ?
+                    st.lset.night : 0);
+            }
           } catch (e3) {}
         });
         st._emisOff = false;
@@ -557,11 +584,19 @@ function cmp3dDbg(view) {
         st._emisOff = !st._emisOff;
         st.group.children.forEach(m => {
           try {
-            if (m.material && m.material.emissive)
-              m.material.emissiveIntensity = st._emisOff ? 0 :
-                ((m.material.userData.decalPower ||
-                  m.material.userData.emissionPower || 0) *
-                ((st.lset && st.lset.emis) || 1));
+            if (m.material && m.material.emissive) {
+              if (st._emisOff) m.material.emissiveIntensity = 0;
+              else if (m.material.userData.decalPower)
+                m.material.emissiveIntensity =
+                  m.material.userData.decalPower *
+                  ((st.lset && st.lset.decal != null) ?
+                    st.lset.decal : 1);
+              else
+                m.material.emissiveIntensity =
+                  (m.material.userData.emissionPower || 0) *
+                  ((st.lset && st.lset.night != null) ?
+                    st.lset.night : 0);
+            }
           } catch (e2) {}
         });
       }
@@ -579,10 +614,9 @@ function cmp3dDbg(view) {
         try { st.scene.fog = st._fogOff ? null : st._fog; } catch (e7) {}
       }
       const vis = st.group.children.map(m => m.visible ? 1 : 0).join("");
-      const lv = st.lset || {key: CMP3D_KEY, hemi: CMP3D_HEMI,
-        expo: CMP3D_EXPO};
+      const lv = st.lset || cmp3dLightDef();
       cmp3dStatus(view, "DBG key=" + k + " meshes[" + vis + "]" +
-        " L" + lv.key + "/" + lv.hemi + "/" + lv.expo +
+        " " + cmp3dLightText(lv) +
         (st._emisOff ? " EMIS-OFF" : "") +
         (st._lightsOff ? " LIGHTS-OFF" : "") +
         (st._fogOff ? " FOG-OFF" : ""));
@@ -631,20 +665,27 @@ function cmp3dHome(st) {
 }
 
 // ВРЕМЕННЫЙ пульт света (убрать после подбора 1:1): ползунки
-// Ключ/Фил/Экспо/Свечение/Туман справа поверх карты + видимые
-// значения строкой (прислать её — зашью константами).
+// Ключ/Фил/Экспо/Ночь/Текст/Туман справа поверх карты + кривая
+// рендера (Standard/Без кривой/Кино) + видимые значения строкой
+// (прислать её — зашью константами).
+// Ночь — сила ночных огней террейна (днём в игре 0, иначе вуаль);
+// Текст — яркость названий штатов (у них почти нулевая альфа,
+// видны только через свечение, как в движке).
 // Значения живут в localStorage (cmp3dLight), «Сброс» возвращает
 // константы CMP3D_*
 function cmp3dLightDef() {
   return {key: CMP3D_KEY, hemi: CMP3D_HEMI, expo: CMP3D_EXPO,
-    emis: 1.0, fog: 1.0};
+    night: 0, decal: 1.0, fog: 1.0, tm: "linear"};
 }
 function cmp3dLightLoad() {
   const d = cmp3dLightDef();
   try {
     const s = JSON.parse(localStorage.getItem("cmp3dLight") || "null");
     if (s) Object.keys(d).forEach(k => {
-      if (typeof s[k] === "number" && isFinite(s[k])) d[k] = s[k];
+      if (k === "tm") {
+        if (s.tm === "linear" || s.tm === "none" || s.tm === "aces")
+          d.tm = s.tm;
+      } else if (typeof s[k] === "number" && isFinite(s[k])) d[k] = s[k];
     });
   } catch (e) {}
   return d;
@@ -656,7 +697,8 @@ function cmp3dLightSave(lset) {
 function cmp3dLightText(l) {
   const f = v => (Math.round(v * 100) / 100).toFixed(2);
   return "K" + f(l.key) + " F" + f(l.hemi) + " E" + f(l.expo) +
-    " S" + f(l.emis) + " T" + f(l.fog);
+    " N" + f(l.night) + " D" + f(l.decal) + " T" + f(l.fog) +
+    " TM:" + l.tm;
 }
 function cmp3dLightApply(st) {
   if (!st || !st.key || !st.lset) return;
@@ -664,12 +706,30 @@ function cmp3dLightApply(st) {
   try { st.key.intensity = l.key; } catch (e) {}
   try { st.hemi.intensity = l.hemi; } catch (e2) {}
   try { st.renderer.toneMappingExposure = l.expo; } catch (e3) {}
+  // Кривая рендера: linear — как GEM (Standard), none — совсем без
+  // кривой, aces — киношная (было, для сравнения). После смены кривой
+  // шейдеры пересобираются — иначе картинка не обновится
+  try {
+    const want = l.tm === "aces" ? THREE.ACESFilmicToneMapping :
+      l.tm === "none" ? THREE.NoToneMapping : THREE.LinearToneMapping;
+    if (st.renderer.toneMapping !== want) {
+      st.renderer.toneMapping = want;
+      st.group.children.forEach(m => {
+        try { if (m.material) m.material.needsUpdate = true; }
+        catch (e6) {}
+      });
+    }
+  } catch (e7) {}
   try {
     st.group.children.forEach(m => {
-      if (m.material && m.material.emissive)
-        m.material.emissiveIntensity =
-          (m.material.userData.decalPower ||
-            m.material.userData.emissionPower || 0) * l.emis;
+      if (m.material && m.material.emissive) {
+        if (m.material.userData.decalPower)
+          m.material.emissiveIntensity =
+            m.material.userData.decalPower * l.decal;
+        else
+          m.material.emissiveIntensity =
+            (m.material.userData.emissionPower || 0) * l.night;
+      }
     });
   } catch (e4) {}
   try {
@@ -690,11 +750,12 @@ function cmp3dPanel(box, st) {
   if (!panel) {
     panel = document.createElement("div");
     panel.id = "cmp3d-light";
-    [["key", "Ключ", 0, 6, 0.05],
-     ["hemi", "Фил", 0, 1.5, 0.01],
-     ["expo", "Экспо", 0.5, 2, 0.01],
-     ["emis", "Свечение", 0, 2, 0.01],
-     ["fog", "Туман", 0, 2, 0.05]].forEach(r => {
+    [["key", "Ключ", 0, 8, 0.05],
+     ["hemi", "Фил", 0, 2, 0.01],
+     ["expo", "Экспо", 0.3, 2.5, 0.01],
+     ["night", "Ночь", 0, 2.5, 0.01],
+     ["decal", "Текст", 0, 3, 0.01],
+     ["fog", "Туман", 0, 3, 0.05]].forEach(r => {
       const row = document.createElement("label");
       row.className = "cmp3d-light-row";
       const nm = document.createElement("span");
@@ -715,6 +776,29 @@ function cmp3dPanel(box, st) {
       row.appendChild(nm); row.appendChild(inp); row.appendChild(val);
       panel.appendChild(row);
     });
+    // Кривая рендера: Standard (linear) / без кривой (none) / кино (aces)
+    const tmRow = document.createElement("label");
+    tmRow.className = "cmp3d-light-row";
+    const tmNm = document.createElement("span");
+    tmNm.textContent = "Кривая";
+    const tmSel = document.createElement("select");
+    [["linear", "Standard"], ["none", "Без кривой"],
+     ["aces", "Кино"]].forEach(o => {
+      const opt = document.createElement("option");
+      opt.value = o[0];
+      opt.textContent = o[1];
+      tmSel.appendChild(opt);
+    });
+    tmSel.addEventListener("change", () => {
+      const cur = panel._st;
+      if (!cur) return;
+      cur.lset.tm = tmSel.value;
+      cmp3dLightSave(cur.lset);
+      cmp3dLightApply(cur);
+      cmp3dLightSync(panel);
+    });
+    tmRow.appendChild(tmNm); tmRow.appendChild(tmSel);
+    panel.appendChild(tmRow);
     const out = document.createElement("div");
     out.className = "cmp3d-light-val";
     out.title = "Клик — выделить, Ctrl+C — скопировать";
@@ -746,6 +830,8 @@ function cmp3dLightSync(panel) {
     const b = inp.parentNode.querySelector("b");
     if (b) b.textContent = Number(st.lset[k]).toFixed(2);
   });
+  const sel = panel.querySelector("select");
+  if (sel) sel.value = st.lset.tm;
   const out = panel.querySelector(".cmp3d-light-val");
   if (out) out.textContent = cmp3dLightText(st.lset);
 }

@@ -68,6 +68,15 @@
   min-width: 0;
   accent-color: var(--accent, #ffcf40);
 }
+.cmp3d-light-row select {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: #141a20;
+  border: 1px solid var(--accent, #ffcf40);
+  border-radius: 4px;
+  color: #cfd8dc;
+  font-size: 11px;
+}
 .cmp3d-light-row b {
   flex: 0 0 36px;
   text-align: right;
