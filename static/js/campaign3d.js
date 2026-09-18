@@ -228,6 +228,8 @@ function cmp3dBoot(view, root) {
     st.texMgr.onLoad = () => cmp3dStatus(view, "");
     cmp3dLoop(view, st);
     cmp3dDbg(view);
+    // Временный пульт света: ползунки + видимые значения для фиксации
+    try { cmp3dPanel(box, st); } catch (e9) {}
     try {
       st.ro = new ResizeObserver(() => {
         try {
@@ -537,16 +539,17 @@ function cmp3dDbg(view) {
           try {
             if (m.material && m.material.emissive)
               m.material.emissiveIntensity =
-                m.material.userData.decalPower ||
-                m.material.userData.emissionPower || 0;
+                (m.material.userData.decalPower ||
+                  m.material.userData.emissionPower || 0) *
+                ((st.lset && st.lset.emis) || 1);
           } catch (e3) {}
         });
         st._emisOff = false;
         st._lightsOff = false;
         st._fogOff = false;
         try {
-          st.key.intensity = CMP3D_KEY;
-          st.hemi.intensity = CMP3D_HEMI;
+          st.key.intensity = (st.lset && st.lset.key) || CMP3D_KEY;
+          st.hemi.intensity = (st.lset && st.lset.hemi) || CMP3D_HEMI;
         } catch (e4) {}
         try { st.scene.fog = st._fog; } catch (e5) {}
       }
@@ -556,16 +559,19 @@ function cmp3dDbg(view) {
           try {
             if (m.material && m.material.emissive)
               m.material.emissiveIntensity = st._emisOff ? 0 :
-                (m.material.userData.decalPower ||
-                  m.material.userData.emissionPower || 0);
+                ((m.material.userData.decalPower ||
+                  m.material.userData.emissionPower || 0) *
+                ((st.lset && st.lset.emis) || 1));
           } catch (e2) {}
         });
       }
       if (what === "lights") {
         st._lightsOff = !st._lightsOff;
         try {
-          st.key.intensity = st._lightsOff ? 0 : CMP3D_KEY;
-          st.hemi.intensity = st._lightsOff ? 0 : CMP3D_HEMI;
+          st.key.intensity = st._lightsOff ? 0 :
+            ((st.lset && st.lset.key) || CMP3D_KEY);
+          st.hemi.intensity = st._lightsOff ? 0 :
+            ((st.lset && st.lset.hemi) || CMP3D_HEMI);
         } catch (e6) {}
       }
       if (what === "fog") {
@@ -573,8 +579,10 @@ function cmp3dDbg(view) {
         try { st.scene.fog = st._fogOff ? null : st._fog; } catch (e7) {}
       }
       const vis = st.group.children.map(m => m.visible ? 1 : 0).join("");
+      const lv = st.lset || {key: CMP3D_KEY, hemi: CMP3D_HEMI,
+        expo: CMP3D_EXPO};
       cmp3dStatus(view, "DBG key=" + k + " meshes[" + vis + "]" +
-        " L" + CMP3D_KEY + "/" + CMP3D_HEMI + "/" + CMP3D_EXPO +
+        " L" + lv.key + "/" + lv.hemi + "/" + lv.expo +
         (st._emisOff ? " EMIS-OFF" : "") +
         (st._lightsOff ? " LIGHTS-OFF" : "") +
         (st._fogOff ? " FOG-OFF" : ""));
@@ -610,15 +618,140 @@ function cmp3dHome(st) {
     st.home = {target: c.clone(), dist: dist};
     st.bounds = bb;
     // Туман — только самый дальний обрыв: видимая карта чистая,
-    // как в игре (край просто обрывается в чёрное)
-    st.scene.fog.near = dist * 2.2;
-    st.scene.fog.far = dist * 6;
+    // как в игре (край просто обрывается в чёрное).
+    // Множитель — с временного пульта света (0 — туман выкл)
+    const fmul = (st.lset && st.lset.fog) || 1;
+    if (fmul <= 0) st.scene.fog = null;
+    else {
+      st.scene.fog = st._fog;
+      st.scene.fog.near = dist * 2.2 * fmul;
+      st.scene.fog.far = dist * 6 * fmul;
+    }
   } catch (e) {}
 }
 
+// ВРЕМЕННЫЙ пульт света (убрать после подбора 1:1): ползунки
+// Ключ/Фил/Экспо/Свечение/Туман справа поверх карты + видимые
+// значения строкой (прислать её — зашью константами).
+// Значения живут в localStorage (cmp3dLight), «Сброс» возвращает
+// константы CMP3D_*
+function cmp3dLightDef() {
+  return {key: CMP3D_KEY, hemi: CMP3D_HEMI, expo: CMP3D_EXPO,
+    emis: 1.0, fog: 1.0};
+}
+function cmp3dLightLoad() {
+  const d = cmp3dLightDef();
+  try {
+    const s = JSON.parse(localStorage.getItem("cmp3dLight") || "null");
+    if (s) Object.keys(d).forEach(k => {
+      if (typeof s[k] === "number" && isFinite(s[k])) d[k] = s[k];
+    });
+  } catch (e) {}
+  return d;
+}
+function cmp3dLightSave(lset) {
+  try { localStorage.setItem("cmp3dLight", JSON.stringify(lset)); }
+  catch (e) {}
+}
+function cmp3dLightText(l) {
+  const f = v => (Math.round(v * 100) / 100).toFixed(2);
+  return "K" + f(l.key) + " F" + f(l.hemi) + " E" + f(l.expo) +
+    " S" + f(l.emis) + " T" + f(l.fog);
+}
+function cmp3dLightApply(st) {
+  if (!st || !st.key || !st.lset) return;
+  const l = st.lset;
+  try { st.key.intensity = l.key; } catch (e) {}
+  try { st.hemi.intensity = l.hemi; } catch (e2) {}
+  try { st.renderer.toneMappingExposure = l.expo; } catch (e3) {}
+  try {
+    st.group.children.forEach(m => {
+      if (m.material && m.material.emissive)
+        m.material.emissiveIntensity =
+          (m.material.userData.decalPower ||
+            m.material.userData.emissionPower || 0) * l.emis;
+    });
+  } catch (e4) {}
+  try {
+    if (st._fog) {
+      if (l.fog <= 0) st.scene.fog = null;
+      else {
+        st.scene.fog = st._fog;
+        const dist = (st.home && st.home.dist) || 170;
+        st._fog.near = dist * 2.2 * l.fog;
+        st._fog.far = dist * 6 * l.fog;
+      }
+    }
+  } catch (e5) {}
+}
+function cmp3dPanel(box, st) {
+  st.lset = cmp3dLightLoad();
+  let panel = box.querySelector("#cmp3d-light");
+  if (!panel) {
+    panel = document.createElement("div");
+    panel.id = "cmp3d-light";
+    [["key", "Ключ", 0, 6, 0.05],
+     ["hemi", "Фил", 0, 1.5, 0.01],
+     ["expo", "Экспо", 0.5, 2, 0.01],
+     ["emis", "Свечение", 0, 2, 0.01],
+     ["fog", "Туман", 0, 2, 0.05]].forEach(r => {
+      const row = document.createElement("label");
+      row.className = "cmp3d-light-row";
+      const nm = document.createElement("span");
+      nm.textContent = r[1];
+      const inp = document.createElement("input");
+      inp.type = "range";
+      inp.min = r[2]; inp.max = r[3]; inp.step = r[4];
+      inp.dataset.k = r[0];
+      inp.addEventListener("input", () => {
+        const cur = panel._st;
+        if (!cur) return;
+        cur.lset[r[0]] = parseFloat(inp.value);
+        cmp3dLightSave(cur.lset);
+        cmp3dLightApply(cur);
+        cmp3dLightSync(panel);
+      });
+      const val = document.createElement("b");
+      row.appendChild(nm); row.appendChild(inp); row.appendChild(val);
+      panel.appendChild(row);
+    });
+    const out = document.createElement("div");
+    out.className = "cmp3d-light-val";
+    out.title = "Клик — выделить, Ctrl+C — скопировать";
+    panel.appendChild(out);
+    const rst = document.createElement("button");
+    rst.type = "button";
+    rst.textContent = "Сброс";
+    rst.onclick = () => {
+      const cur = panel._st;
+      if (!cur) return;
+      cur.lset = cmp3dLightDef();
+      cmp3dLightSave(cur.lset);
+      cmp3dLightApply(cur);
+      cmp3dLightSync(panel);
+    };
+    panel.appendChild(rst);
+    box.appendChild(panel);
+  }
+  panel._st = st;
+  cmp3dLightSync(panel);
+  cmp3dLightApply(st);
+}
+function cmp3dLightSync(panel) {
+  const st = panel._st;
+  if (!st || !st.lset) return;
+  panel.querySelectorAll("input[type=range]").forEach(inp => {
+    const k = inp.dataset.k;
+    if (k in st.lset) inp.value = st.lset[k];
+    const b = inp.parentNode.querySelector("b");
+    if (b) b.textContent = Number(st.lset[k]).toFixed(2);
+  });
+  const out = panel.querySelector(".cmp3d-light-val");
+  if (out) out.textContent = cmp3dLightText(st.lset);
+}
+
 // ---------- setup ----------
-function setupCampaign3d() {
-  if (!state.camp3d) state.camp3d = cmp3dFreshState();
+function setupCampaign3d() {  if (!state.camp3d) state.camp3d = cmp3dFreshState();
   const btn = $("#cmp-3d");
   if (btn) btn.onclick = () => cmp3dToggle();
   cmp3dPaint();

@@ -40,3 +40,52 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* ВРЕМЕННЫЙ пульт света (убрать после подбора 1:1): оверлей справа */
+#cmp3d-light {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 196px;
+  padding: 8px 10px 10px;
+  background: rgba(10, 14, 18, 0.88);
+  border: 1px solid var(--accent, #ffcf40);
+  border-radius: 6px;
+  font-size: 11px;
+  color: #cfd8dc;
+  z-index: 5;
+}
+.cmp3d-light-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+.cmp3d-light-row span {
+  flex: 0 0 64px;
+}
+.cmp3d-light-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: var(--accent, #ffcf40);
+}
+.cmp3d-light-row b {
+  flex: 0 0 36px;
+  text-align: right;
+  font-weight: normal;
+}
+.cmp3d-light-val {
+  margin: 6px 0;
+  font-weight: bold;
+  color: var(--accent, #ffcf40);
+  user-select: all;
+}
+#cmp3d-light button {
+  width: 100%;
+  padding: 3px 0;
+  background: transparent;
+  border: 1px solid var(--accent, #ffcf40);
+  border-radius: 4px;
+  color: var(--accent, #ffcf40);
+  font-size: 11px;
+  cursor: pointer;
+}
