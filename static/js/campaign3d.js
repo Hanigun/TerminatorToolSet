@@ -89,7 +89,7 @@ var CMP3D_MAP_ROT = -Math.PI / 2;
 // игра открывает карту регионом, TEXAS читается крупно
 var CMP3D_HOME = [-165, 3, -338];
 // Свет карты одним местом (диагностика возвращает ровно эти значения)
-var CMP3D_KEY = 2.2, CMP3D_HEMI = 0.5, CMP3D_EXPO = 1.22;
+var CMP3D_KEY = 3.5, CMP3D_HEMI = 0.75, CMP3D_EXPO = 1.3;
 
 // ---------- libs ----------
 // Ленивая подгрузка three.js — копия m3dLibs своим состоянием,
@@ -356,10 +356,13 @@ function cmp3dAddMeshes(st, data) {
       mat.userData.emissionPower =
         (isGhost || isUnder) ? 0 : (md.emission_power || 0);
       // Декали штатов/точек (IsTransparent): только прозрачность фона —
-      // геометрию не трогаем, TEXAS парит как задумано
+      // геометрию не трогаем, TEXAS парит как задумано.
+      // Глубину не пишет только парящая декаль; террейн и рамка пишут:
+      // иначе рамка подложки просвечивает сквозь террейн ступенями
+      // затемнения по краю (в игре — один ровный спад)
       if (md.transparent) {
         mat.transparent = true;
-        mat.depthWrite = false;
+        mat.depthWrite = isGhost ? false : true;
       }
       if (md.double_sided) mat.side = THREE.DoubleSide;
     } else {
