@@ -7,7 +7,7 @@ import {
 	RGB_S3TC_DXT1_Format,
 	RGB_BPTC_SIGNED_Format,
 	RGB_BPTC_UNSIGNED_Format
-} from 'three';
+} from '../../three.module.min.js';
 
 /**
  * A loader for the S3TC texture compression format.
