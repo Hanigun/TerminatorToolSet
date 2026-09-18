@@ -49,6 +49,10 @@ function cmp3dPaint() {
 // высота над горизонтом и азимут взгляда; дистанция — от размера карты
 var CMP3D_ELEV = 52, CMP3D_AZIM = 0;
 var CMP3D_VALUE = "models\\global_map\\glbmp_main.model";
+// Карта в модели лежит повёрнутой: доворачиваем саму группу мешей
+// на 90° по часовой (вид сверху). Камеру не трогаем.
+// Координаты точек из global_map.swt позже пройдут через тот же доворот
+var CMP3D_MAP_ROT = -Math.PI / 2;
 
 // ---------- libs ----------
 // Ленивая подгрузка three.js — копия m3dLibs своим состоянием,
@@ -144,6 +148,7 @@ function cmp3dBoot(view) {
     key.position.set(0, 100, -14);
     scene.add(key);
     const group = new THREE.Group();
+    group.rotation.y = CMP3D_MAP_ROT;
     scene.add(group);
     const st = {view: view, box: box, root: "",
       renderer: renderer, scene: scene, camera: camera, ctl: ctl,
