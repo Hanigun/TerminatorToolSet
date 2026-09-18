@@ -398,7 +398,8 @@ def material_payload(upr, root, mtrl_rel, fallback="", overlay=()):
     overlay — слои саб-пути _ASSETS мода между root и fallback.
     """
     out = {"name": mtrl_rel, "albedo": "", "normal": "", "rough": "",
-           "transparent": False, "double_sided": False, "missing": True}
+            "emission": "", "transparent": False, "double_sided": False,
+            "missing": True}
     p = find_file(root, mtrl_rel, fallback, overlay)
     if not p:
         return out
@@ -409,7 +410,7 @@ def material_payload(upr, root, mtrl_rel, fallback="", overlay=()):
     out["missing"] = False
     tex = mat.textures or {}
     for slot, key in (("albedo", "albedo"), ("normal", "normal"),
-                      ("rough", "rough")):
+                      ("rough", "rough"), ("emission", "emission")):
         rel = safe_rel(tex.get(slot) or "")
         # Текстура реально лежит в слоях — иначе битая ссылка
         out[key] = rel if rel and find_file(root, rel, fallback,

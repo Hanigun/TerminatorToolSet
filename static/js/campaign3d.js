@@ -53,6 +53,8 @@ var CMP3D_VALUE = "models\\global_map\\glbmp_main.model";
 // на 90° по часовой (вид сверху). Камеру не трогаем.
 // Координаты точек из global_map.swt позже пройдут через тот же доворот
 var CMP3D_MAP_ROT = -Math.PI / 2;
+// Сетка поверх карты: клеток по стороне (на камеру влезает ~11)
+var CMP3D_GRID = 12;
 
 // ---------- libs ----------
 // Ленивая подгрузка three.js — копия m3dLibs своим состоянием,
@@ -142,8 +144,8 @@ function cmp3dBoot(view) {
     ctl.screenSpacePanning = false;
     ctl.target.set(0, 0, 0);
     // Свой свет: ключ почти строго сверху по light.xml
-    // (direction 0,0,-1.37), снизу — чистый чёрный, студийного нет
-    scene.add(new THREE.HemisphereLight(0x8fa3c7, 0x000000, 0.85));
+    // (direction 0,0,-1.37), оттенки полусферы — цвета из global_map.lighting
+    scene.add(new THREE.HemisphereLight(0x547682, 0x233236, 0.85));
     const key = new THREE.DirectionalLight(0xffffff, 1.7);
     key.position.set(0, 100, -14);
     scene.add(key);
@@ -224,6 +226,7 @@ function cmp3dFetch(st) {
     cmp3dStatus(view, "tex 0/…");
     cmp3dAddMeshes(st, data);
     cmp3dHome(st);
+    cmp3dGrid(st);
     cmp3dStatus(view, "");
   });
 }
@@ -236,7 +239,7 @@ function cmp3dAddMeshes(st, data) {
   const texUrl = (rel, slot) => "/api/model_tex?root=" + encodeURIComponent(st.root || "") +
     "&rel=" + encodeURIComponent(rel || "") + "&model=glbmp_main" +
     "&slot=" + encodeURIComponent({map: "albedo", normalMap: "normal",
-      roughnessMap: "rough"}[slot] || "");
+      roughnessMap: "rough", emissiveMap: "emission"}[slot] || "");
   (data.meshes || []).forEach(m => {
     const p = m.positions || [], n = m.normals || [], u = m.uvs || [], ix = m.indices || [];
     if (!p.length || !ix.length) return;
@@ -254,12 +257,17 @@ function cmp3dAddMeshes(st, data) {
         color: 0xffffff, metalness: 0.05, roughness: 0.85,
       });
     mat.userData.tex = [];
-    mat.userData.slots = {map: null, normalMap: null, roughnessMap: null};
+    mat.userData.slots = {map: null, normalMap: null, roughnessMap: null,
+      emissiveMap: null};
     if (md && !md.missing) {
       cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, "map", md.albedo, true);
       cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, "normalMap", md.normal, false);
       if (!st.softGL) cmp3dWantTex(st, texLoader, maxAniso, texUrl,
         mat, "roughnessMap", md.rough, false);
+      // Ночные огни и светящиеся дороги: emission двигает цвет сильнее
+      // всего (без него карта тусклая)
+      cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, "emissiveMap",
+        md.emission, true);
       // Декали штатов/точек (IsTransparent): только прозрачность фона —
       // геометрию не трогаем, TEXAS парит как задумано
       if (md.transparent) {
@@ -277,6 +285,19 @@ function cmp3dAddMeshes(st, data) {
     mat.userData.tex.forEach(tx => st.disposables.push(tx));
   });
 }
+// Текстура готова: назначаем на материал; emission включает свечение
+function cmp3dTexReady(st, mat, slot) {
+  try {
+    const tx = mat.userData.slots[slot];
+    if (!tx) return;
+    mat[slot] = tx;
+    if (slot === "emissiveMap") {
+      mat.emissive = new THREE.Color(0xffffff);
+      mat.emissiveIntensity = 1.0;
+    }
+    mat.needsUpdate = true;
+  } catch (e) {}
+}
 // Заказ текстуры в фон с дедупом — копия m3dWantTex (назначение всегда,
 // тумблера текстур на карте нет)
 function cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, slot, rel, srgb) {
@@ -285,14 +306,8 @@ function cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, slot, rel, srgb) {
   let tx = st.texCache[key];
   if (!tx) {
     try {
-      tx = texLoader.load(texUrl(rel, slot), () => {
-        try {
-          const cur = mat.userData.slots[slot];
-          if (!cur) return;
-          mat[slot] = cur;
-          mat.needsUpdate = true;
-        } catch (e) {}
-      });
+      tx = texLoader.load(texUrl(rel, slot),
+        () => cmp3dTexReady(st, mat, slot));
       if (srgb) tx.encoding = THREE.sRGBEncoding;
       tx.anisotropy = maxAniso;
       tx.wrapS = THREE.RepeatWrapping;
@@ -301,14 +316,72 @@ function cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, slot, rel, srgb) {
     st.texCache[key] = tx;
   }
   mat.userData.slots[slot] = tx;
+  // Уже готовая (кэш/повтор) — назначаем сразу
   try {
-    if (tx.image && tx.image.complete !== false && tx.image.width) {
-      mat[slot] = tx;
-      mat.needsUpdate = true;
+    if (tx.image && tx.image.complete !== false && tx.image.width)
+      cmp3dTexReady(st, mat, slot);
+  } catch (e) {}
+}
+// Сетка как в игре: линии + точки на пересечениях, ложатся на рельеф
+// (рейкаст вниз от каждой вершины). Строится в мировых координатах,
+// доворот карты уже учтён боксом
+function cmp3dGrid(st) {
+  try {
+    if (!st.bounds) return;
+    const bb = st.bounds;
+    const n = CMP3D_GRID, seg = 32;
+    const ray = new THREE.Raycaster();
+    const down = new THREE.Vector3(0, -1, 0);
+    const top = bb.max.y + 50;
+    const drape = (x, z) => {
+      ray.set(new THREE.Vector3(x, top, z), down);
+      const hit = ray.intersectObjects(st.group.children, false);
+      return hit.length ? hit[0].point.y + 0.5 : null;
+    };
+    const lp = [], dp = [];
+    for (let i = 0; i <= n; i++) {
+      const fx = bb.min.x + (bb.max.x - bb.min.x) * i / n;
+      const fz = bb.min.z + (bb.max.z - bb.min.z) * i / n;
+      // линия вдоль Z на x=fx и вдоль X на z=fz
+      let prev = null;
+      for (let j = 0; j <= seg; j++) {
+        const z = bb.min.z + (bb.max.z - bb.min.z) * j / seg;
+        const y = drape(fx, z);
+        if (y === null) { prev = null; continue; }
+        if (prev) lp.push(prev[0], prev[1], prev[2], fx, y, z);
+        prev = [fx, y, z];
+      }
+      prev = null;
+      for (let j = 0; j <= seg; j++) {
+        const x = bb.min.x + (bb.max.x - bb.min.x) * j / seg;
+        const y = drape(x, fz);
+        if (y === null) { prev = null; continue; }
+        if (prev) lp.push(prev[0], prev[1], prev[2], x, y, fz);
+        prev = [x, y, fz];
+      }
+      const cy = drape(fx, fz);
+      // точки пересечений — тем же рейкастом, без второго прохода
+      if (cy !== null) dp.push(fx, cy + 0.1, fz);
+    }
+    if (!lp.length) return;
+    const lg = new THREE.BufferGeometry();
+    lg.setAttribute("position", new THREE.Float32BufferAttribute(lp, 3));
+    const lm = new THREE.LineBasicMaterial({color: 0x9fc0c0,
+      transparent: true, opacity: 0.22});
+    const lines = new THREE.LineSegments(lg, lm);
+    st.scene.add(lines);
+    st.disposables.push(lg, lm);
+    if (dp.length) {
+      const dg = new THREE.BufferGeometry();
+      dg.setAttribute("position", new THREE.Float32BufferAttribute(dp, 3));
+      const dm = new THREE.PointsMaterial({color: 0xcfe8e8, size: 2.2,
+        sizeAttenuation: false, transparent: true, opacity: 0.55});
+      const dots = new THREE.Points(dg, dm);
+      st.scene.add(dots);
+      st.disposables.push(dg, dm);
     }
   } catch (e) {}
 }
-// Домой: центр бокса карты, дистанция — по радиусу, ракурс фиксирован
 function cmp3dHome(st) {
   try {
     const bb = new THREE.Box3().setFromObject(st.group);
