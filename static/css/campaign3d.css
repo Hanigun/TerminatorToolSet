@@ -15,6 +15,15 @@
 #cmp3d-view[hidden] {
   display: none;
 }
+/* campaign.css задаёт .cmp-wrap/.cmp-map через display:flex — он сильнее
+   атрибута hidden, витрина остаётся висеть над сценой. Глушим точечно
+   здесь, сам campaign.css не трогаем */
+#cmp-wrap[hidden] {
+  display: none !important;
+}
+.cmp-map[hidden] {
+  display: none !important;
+}
 .cmp3d-view {
   flex: 1 1 auto;
   min-height: 320px;
