@@ -88,8 +88,8 @@ var CMP3D_MAP_ROT = -Math.PI / 2;
 // Стартовая точка — центр Техаса (среднее 15 POI штата):
 // игра открывает карту регионом, TEXAS читается крупно
 var CMP3D_HOME = [-165, 3, -338];
-// Мелкая сетка как в игре (линии + точки на пересечениях)
-var CMP3D_GRID = 28;
+// Свет карты одним местом (диагностика возвращает ровно эти значения)
+var CMP3D_KEY = 1.7, CMP3D_HEMI = 0.32, CMP3D_EXPO = 1.12;
 
 // ---------- libs ----------
 // Ленивая подгрузка three.js — копия m3dLibs своим состоянием,
@@ -178,7 +178,7 @@ function cmp3dBoot(view, root) {
     renderer.setSize(W(), H());
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
+    renderer.toneMappingExposure = CMP3D_EXPO;
     box.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
@@ -197,8 +197,9 @@ function cmp3dBoot(view, root) {
     // (direction 0,0,-1.37), оттенки полусферы — цвета из global_map.lighting
     // Рельеф лепит направленный ключ, фил слабый — иначе всё
     // выбеливается в плоскую кашу (как было при hemi 1.15)
-    scene.add(new THREE.HemisphereLight(0x547682, 0x233236, 0.22));
-    const key = new THREE.DirectionalLight(0xffffff, 1.4);
+    const hemi = new THREE.HemisphereLight(0x3f748f, 0x233236, CMP3D_HEMI);
+    scene.add(hemi);
+    const key = new THREE.DirectionalLight(0xffffff, CMP3D_KEY);
     // Лёгкий наклон для лепки рельефа (в игре горы с теневой стороной)
     key.position.set(15, 100, -45);
     scene.add(key);
@@ -207,6 +208,7 @@ function cmp3dBoot(view, root) {
     scene.add(group);
     const st = {view: view, box: box, root: "",
       renderer: renderer, scene: scene, camera: camera, ctl: ctl,
+      key: key, hemi: hemi, _fog: scene.fog,
       group: group, softGL: softGL, texCache: {},
       disposables: [renderer], home: null, bounds: null};
     view._cmp3d = st;
@@ -282,7 +284,6 @@ function cmp3dFetch(st) {
     cmp3dStatus(view, "tex 0/…");
     cmp3dAddMeshes(st, data);
     cmp3dHome(st);
-    cmp3dGrid(st);
     cmp3dStatus(view, "");
   });
 }
@@ -321,12 +322,14 @@ function cmp3dAddMeshes(st, data) {
       if (!st.softGL) cmp3dWantTex(st, texLoader, maxAniso, texUrl,
         mat, "roughnessMap", md.rough, false);
       // Ночные огни и светящиеся дороги: сила — из материала
-      // (террейн 0.6). Декали штатов (state_names: белый RGB,
-      // альфа ~0 — движок их светит по-своему) свечением не мажем:
-      // иначе белые простыни вуалью по карте
+      // (террейн 0.6). Декали штатов (state_names: текст чуть темнее
+      // фона в R, альфа ~0) светим проявкой через canvas — иначе либо
+      // белые простыни вуалью, либо ничего не видно
       const isGhost = /state_names/.test(md.albedo || "");
       if (!isGhost) cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat,
         "emissiveMap", md.emission, true);
+      else cmp3dDecalEmissive(st, texUrl(md.emission || md.albedo,
+        "emissiveMap"), mat, md.emission_power || 2.0);
       mat.userData.emissionPower = isGhost ? 0 : (md.emission_power || 0);
       // Декали штатов/точек (IsTransparent): только прозрачность фона —
       // геометрию не трогаем, TEXAS парит как задумано
@@ -346,7 +349,41 @@ function cmp3dAddMeshes(st, data) {
     mat.userData.tex.forEach(tx => st.disposables.push(tx));
   });
 }
-// Текстура готова: назначаем на материал; emission включает свечение
+// Проявка текста декалей: буквы темнее фона в R — инверсия
+// с растяжкой в свечение (фон уходит в чёрный, вуали нет).
+// Тот же рантайм-кэш URL, обработка в фоне один раз на сцену
+function cmp3dDecalEmissive(st, url, mat, power) {
+  if (!url || mat.userData.decalOn) return;
+  mat.userData.decalOn = true;
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.onload = () => {
+    try {
+      const cv = document.createElement("canvas");
+      cv.width = img.width; cv.height = img.height;
+      const cx = cv.getContext("2d");
+      cx.drawImage(img, 0, 0);
+      const id = cx.getImageData(0, 0, cv.width, cv.height);
+      const d = id.data;
+      for (let i = 0; i < d.length; i += 4) {
+        let v = (255 - d[i]) * 4 - 30;
+        v = v < 0 ? 0 : (v > 255 ? 255 : v);
+        d[i] = d[i + 1] = d[i + 2] = v;
+        d[i + 3] = 255;
+      }
+      cx.putImageData(id, 0, 0);
+      const tx = new THREE.CanvasTexture(cv);
+      mat.emissiveMap = tx;
+      mat.emissive = new THREE.Color(0xffffff);
+      mat.emissiveIntensity = power || 2.0;
+      mat.needsUpdate = true;
+      mat.userData.tex.push(tx);
+      st.disposables.push(tx);
+    } catch (e) {}
+  };
+  img.onerror = () => {};
+  img.src = url;
+}
 function cmp3dTexReady(st, mat, slot) {
   try {
     const tx = mat.userData.slots[slot];
@@ -384,93 +421,51 @@ function cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, slot, rel, srgb) {
       cmp3dTexReady(st, mat, slot);
   } catch (e) {}
 }
-// Мелкая сетка как в игре: линии + точки на пересечениях,
-// ложатся на рельеф (рейкаст вниз). Строится в мировых координатах,
-// доворот карты уже учтён боксом
-function cmp3dGrid(st) {
-  try {
-    if (!st.bounds) return;
-    const bb = st.bounds;
-    const n = CMP3D_GRID, seg = 16;
-    const ray = new THREE.Raycaster();
-    const down = new THREE.Vector3(0, -1, 0);
-    const top = bb.max.y + 50;
-    const drape = (x, z) => {
-      ray.set(new THREE.Vector3(x, top, z), down);
-      const hit = ray.intersectObjects(st.group.children, false);
-      return hit.length ? hit[0].point.y + 0.4 : null;
-    };
-    const lp = [], dp = [];
-    for (let i = 0; i <= n; i++) {
-      const fx = bb.min.x + (bb.max.x - bb.min.x) * i / n;
-      const fz = bb.min.z + (bb.max.z - bb.min.z) * i / n;
-      let prev = null;
-      for (let j = 0; j <= seg; j++) {
-        const z = bb.min.z + (bb.max.z - bb.min.z) * j / seg;
-        const y = drape(fx, z);
-        if (y === null) { prev = null; continue; }
-        if (prev) lp.push(prev[0], prev[1], prev[2], fx, y, z);
-        prev = [fx, y, z];
-      }
-      prev = null;
-      for (let j = 0; j <= seg; j++) {
-        const x = bb.min.x + (bb.max.x - bb.min.x) * j / seg;
-        const y = drape(x, fz);
-        if (y === null) { prev = null; continue; }
-        if (prev) lp.push(prev[0], prev[1], prev[2], x, y, fz);
-        prev = [x, y, fz];
-      }
-      const cy = drape(fx, fz);
-      if (cy !== null) dp.push(fx, cy + 0.1, fz);
-    }
-    if (!lp.length) return;
-    const lg = new THREE.BufferGeometry();
-    lg.setAttribute("position", new THREE.Float32BufferAttribute(lp, 3));
-    const lm = new THREE.LineBasicMaterial({color: 0x9fc0c0,
-      transparent: true, opacity: 0.16});
-    const lines = new THREE.LineSegments(lg, lm);
-    st.scene.add(lines);
-    st.disposables.push(lg, lm);
-    (st.sceneExtras = st.sceneExtras || []).push(lines);
-    if (dp.length) {
-      const dg = new THREE.BufferGeometry();
-      dg.setAttribute("position", new THREE.Float32BufferAttribute(dp, 3));
-      const dm = new THREE.PointsMaterial({color: 0xcfe8e8, size: 2,
-        sizeAttenuation: false, transparent: true, opacity: 0.45});
-      const dots = new THREE.Points(dg, dm);
-      st.scene.add(dots);
-      st.disposables.push(dg, dm);
-      (st.sceneExtras = st.sceneExtras || []).push(dots);
-    }
-  } catch (e) {}
-}
-// ВРЕМЕННАЯ диагностика вуали (убрать после поимки): клавиши 1-5
-// гасят слои (террейн/подложка/декали/сетка/свечение), 0 — вернуть всё.
-// Работает только на открытой 3D-карте.
+// ВРЕМЕННАЯ диагностика вуали (убрать после поимки): 1 террейн,
+// 2 подложка, 3 декали, 5 свечение, 6 свет, 7 туман,
+// 8 только террейн, 0 — вернуть всё. Только на открытой 3D-карте.
 function cmp3dDbg(view) {
   if (view._cmp3dDbg) return;
   view._cmp3dDbg = true;
   document.addEventListener("keydown", e => {
     if (!cmp3dIsOn() || !view._cmp3d || view.hidden) return;
     const k = (e.key || "");
-    if (k !== "0" && k !== "1" && k !== "2" && k !== "3" && k !== "4" &&
-        k !== "5") return;
+    if (k !== "0" && k !== "1" && k !== "2" && k !== "3" &&
+        k !== "5" && k !== "6" && k !== "7" && k !== "8") return;
     const st = view._cmp3d;
     const show = what => {
       st.group.children.forEach(m => {
         const mid = m.userData.mid;
-        if (what === "all") { m.visible = true; return; }
-        if (what === "terrain" && mid === 3) m.visible = !m.visible;
-        if (what === "under" && (mid === 0 || mid === 1 || mid === 4))
-          m.visible = !m.visible;
-        if (what === "decal" && mid === 2) m.visible = !m.visible;
+        if (what === "all") {
+          m.visible = true;
+        } else if (what === "tonly") {
+          m.visible = (mid === 3);
+        } else {
+          if (what === "terrain" && mid === 3) m.visible = !m.visible;
+          if (what === "under" && (mid === 0 || mid === 1 || mid === 4))
+            m.visible = !m.visible;
+          if (what === "decal" && mid === 2) m.visible = !m.visible;
+        }
       });
-      (st.sceneExtras || []).forEach(o => {
-        if (what === "all") { o.visible = true; return; }
-        if (what === "grid") o.visible = !o.visible;
-      });
-      if (what === "emis" || what === "all") {
-        st._emisOff = (what === "emis") ? !st._emisOff : false;
+      if (what === "all") {
+        st.group.children.forEach(m => {
+          try {
+            if (m.material && m.material.emissive)
+              m.material.emissiveIntensity =
+                m.material.userData.emissionPower || 0;
+          } catch (e3) {}
+        });
+        st._emisOff = false;
+        st._lightsOff = false;
+        st._fogOff = false;
+        try {
+          st.key.intensity = CMP3D_KEY;
+          st.hemi.intensity = CMP3D_HEMI;
+        } catch (e4) {}
+        try { st.scene.fog = st._fog; } catch (e5) {}
+      }
+      if (what === "emis") {
+        st._emisOff = !st._emisOff;
         st.group.children.forEach(m => {
           try {
             if (m.material && m.material.emissive)
@@ -479,15 +474,30 @@ function cmp3dDbg(view) {
           } catch (e2) {}
         });
       }
+      if (what === "lights") {
+        st._lightsOff = !st._lightsOff;
+        try {
+          st.key.intensity = st._lightsOff ? 0 : CMP3D_KEY;
+          st.hemi.intensity = st._lightsOff ? 0 : CMP3D_HEMI;
+        } catch (e6) {}
+      }
+      if (what === "fog") {
+        st._fogOff = !st._fogOff;
+        try { st.scene.fog = st._fogOff ? null : st._fog; } catch (e7) {}
+      }
       const vis = st.group.children.map(m => m.visible ? 1 : 0).join("");
       cmp3dStatus(view, "DBG key=" + k + " meshes[" + vis + "]" +
-        (st._emisOff ? " EMIS-OFF" : ""));
+        (st._emisOff ? " EMIS-OFF" : "") +
+        (st._lightsOff ? " LIGHTS-OFF" : "") +
+        (st._fogOff ? " FOG-OFF" : ""));
     };
     if (k === "1") show("terrain");
     else if (k === "2") show("under");
     else if (k === "3") show("decal");
-    else if (k === "4") show("grid");
     else if (k === "5") show("emis");
+    else if (k === "6") show("lights");
+    else if (k === "7") show("fog");
+    else if (k === "8") show("tonly");
     else show("all");
   });
 }
