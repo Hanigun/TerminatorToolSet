@@ -318,14 +318,18 @@ function cmp3dAddMeshes(st, data) {
   (data.meshes || []).forEach(m => {
     const p = m.positions || [], n = m.normals || [], u = m.uvs || [], ix = m.indices || [];
     if (!p.length || !ix.length) return;
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute(p, 3));
+    const g = new THREE.BufferGeometry();    g.setAttribute("position", new THREE.Float32BufferAttribute(p, 3));
     if (n.length === p.length) g.setAttribute("normal", new THREE.Float32BufferAttribute(n, 3));
     else g.computeVertexNormals();
     if (u.length === (p.length / 3) * 2) g.setAttribute("uv", new THREE.Float32BufferAttribute(u, 2));
     g.setIndex(ix);
     const mi = (m.material != null) ? m.material : -1;
     const md = (data.materials && data.materials[mi]) || null;
+    // Рамки side/corner не строим: их tessellated-полосы поверх плиты
+    // и давали лишнюю сетку. Остаётся только undercoat_main —
+    // край карты обрывается глухой плитой в чёрное, как в игре
+    var _alb = (md && md.albedo) || "";
+    if (/undercoat_side|undercoat_corner/.test(_alb)) return;
     // Слои по именам текстур, не по индексам — порядок мешей
     // в модели может плавать
     var isGhost = /state_names/.test((md && md.albedo) || "");
@@ -491,11 +495,11 @@ function cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, slot, rel, srgb) {
       tx.anisotropy = maxAniso;
       tx.wrapS = THREE.RepeatWrapping;
       tx.wrapT = THREE.RepeatWrapping;
-      // Клетка подложки в игре — одна на текстуру, а не 2x2:
-      // тайл 256² содержит 4 квадрата, дублируем половину —
-      // виден один квадрат, как в игре
+      // Клетка подложки в игре вдвое крупней модельной: UV модели
+      // гонят 32 тайла (u 0..32), тайл 256² несёт 2x2 квадрата —
+      // множитель 0.25 даёт 8 тайлов = 16 клеток, как в игре
       if (mat.userData.isUnder && slot === "map")
-        tx.repeat.set(0.5, 0.5);
+        tx.repeat.set(0.25, 0.25);
     } catch (e) { return; }
     st.texCache[key] = tx;
   }
