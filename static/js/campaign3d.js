@@ -32,7 +32,19 @@ function cmp3dPaint() {
   // Прячем только карту с плитками; правая панель (магазин/найм/
   // снабжение) остаётся — на этапе 4 она откроется при выборе сектора
   const map = $("#cmp-map"), view = $("#cmp3d-view");
+  const wrap = $("#cmp-wrap");
   if (map) map.hidden = on;
+  // 3D — отдельная страница: прячем всю витрину с плитками,
+  // сцена занимает вкладку целиком; назад — возвращаем как было
+  if (wrap && view) {
+    if (on) {
+      if (view._wrapWas === undefined) view._wrapWas = wrap.hidden;
+      wrap.hidden = true;
+    } else if (view._wrapWas !== undefined) {
+      wrap.hidden = view._wrapWas;
+      view._wrapWas = undefined;
+    }
+  }
   if (view) {
     view.hidden = !on;
     // Уход со сцены — останавливаем цикл и возвращаем ресурсы;
@@ -53,8 +65,11 @@ var CMP3D_VALUE = "models\\global_map\\glbmp_main.model";
 // на 90° по часовой (вид сверху). Камеру не трогаем.
 // Координаты точек из global_map.swt позже пройдут через тот же доворот
 var CMP3D_MAP_ROT = -Math.PI / 2;
-// Сетка поверх карты: клеток по стороне (на камеру влезает ~11)
-var CMP3D_GRID = 12;
+// Стартовая точка — центр Техаса (среднее 15 POI штата):
+// игра открывает карту регионом, TEXAS читается крупно
+var CMP3D_HOME = [-165, 3, -338];
+// Мелкая сетка как в игре (линии + точки на пересечениях)
+var CMP3D_GRID = 28;
 
 // ---------- libs ----------
 // Ленивая подгрузка three.js — копия m3dLibs своим состоянием,
@@ -128,7 +143,7 @@ function cmp3dBoot(view) {
     renderer.setSize(W(), H());
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.55;
+    renderer.toneMappingExposure = 1.75;
     box.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
@@ -145,8 +160,8 @@ function cmp3dBoot(view) {
     ctl.target.set(0, 0, 0);
     // Свой свет: ключ почти строго сверху по light.xml
     // (direction 0,0,-1.37), оттенки полусферы — цвета из global_map.lighting
-    scene.add(new THREE.HemisphereLight(0x547682, 0x233236, 0.85));
-    const key = new THREE.DirectionalLight(0xffffff, 1.7);
+    scene.add(new THREE.HemisphereLight(0x547682, 0x233236, 1.15));
+    const key = new THREE.DirectionalLight(0xffffff, 2.6);
     key.position.set(0, 100, -14);
     scene.add(key);
     const group = new THREE.Group();
@@ -201,6 +216,13 @@ function cmp3dDispose(view) {
       try { mt.dispose(); } catch (e2) {}
     }
   });
+  // Внесценовые довески (сетка): снять со сцены и вернуть ресурсы
+  (st.sceneExtras || []).forEach(o => {
+    try { st.scene.remove(o); } catch (e) {}
+    try { o.geometry.dispose(); } catch (e2) {}
+    try { o.material.dispose(); } catch (e3) {}
+  });
+  st.sceneExtras = [];
   try { st.renderer.dispose(); } catch (e) {}
   try { st.renderer.domElement.remove(); } catch (e) {}
 }
@@ -322,27 +344,26 @@ function cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, slot, rel, srgb) {
       cmp3dTexReady(st, mat, slot);
   } catch (e) {}
 }
-// Сетка как в игре: линии + точки на пересечениях, ложатся на рельеф
-// (рейкаст вниз от каждой вершины). Строится в мировых координатах,
+// Мелкая сетка как в игре: линии + точки на пересечениях,
+// ложатся на рельеф (рейкаст вниз). Строится в мировых координатах,
 // доворот карты уже учтён боксом
 function cmp3dGrid(st) {
   try {
     if (!st.bounds) return;
     const bb = st.bounds;
-    const n = CMP3D_GRID, seg = 32;
+    const n = CMP3D_GRID, seg = 16;
     const ray = new THREE.Raycaster();
     const down = new THREE.Vector3(0, -1, 0);
     const top = bb.max.y + 50;
     const drape = (x, z) => {
       ray.set(new THREE.Vector3(x, top, z), down);
       const hit = ray.intersectObjects(st.group.children, false);
-      return hit.length ? hit[0].point.y + 0.5 : null;
+      return hit.length ? hit[0].point.y + 0.4 : null;
     };
     const lp = [], dp = [];
     for (let i = 0; i <= n; i++) {
       const fx = bb.min.x + (bb.max.x - bb.min.x) * i / n;
       const fz = bb.min.z + (bb.max.z - bb.min.z) * i / n;
-      // линия вдоль Z на x=fx и вдоль X на z=fz
       let prev = null;
       for (let j = 0; j <= seg; j++) {
         const z = bb.min.z + (bb.max.z - bb.min.z) * j / seg;
@@ -360,36 +381,41 @@ function cmp3dGrid(st) {
         prev = [x, y, fz];
       }
       const cy = drape(fx, fz);
-      // точки пересечений — тем же рейкастом, без второго прохода
       if (cy !== null) dp.push(fx, cy + 0.1, fz);
     }
     if (!lp.length) return;
     const lg = new THREE.BufferGeometry();
     lg.setAttribute("position", new THREE.Float32BufferAttribute(lp, 3));
     const lm = new THREE.LineBasicMaterial({color: 0x9fc0c0,
-      transparent: true, opacity: 0.22});
+      transparent: true, opacity: 0.16});
     const lines = new THREE.LineSegments(lg, lm);
     st.scene.add(lines);
     st.disposables.push(lg, lm);
+    (st.sceneExtras = st.sceneExtras || []).push(lines);
     if (dp.length) {
       const dg = new THREE.BufferGeometry();
       dg.setAttribute("position", new THREE.Float32BufferAttribute(dp, 3));
-      const dm = new THREE.PointsMaterial({color: 0xcfe8e8, size: 2.2,
-        sizeAttenuation: false, transparent: true, opacity: 0.55});
+      const dm = new THREE.PointsMaterial({color: 0xcfe8e8, size: 2,
+        sizeAttenuation: false, transparent: true, opacity: 0.45});
       const dots = new THREE.Points(dg, dm);
       st.scene.add(dots);
       st.disposables.push(dg, dm);
+      (st.sceneExtras = st.sceneExtras || []).push(dots);
     }
   } catch (e) {}
 }
+// Домой: стартуем с Техаса крупно (как игра), дистанция — доля радиуса
 function cmp3dHome(st) {
   try {
     const bb = new THREE.Box3().setFromObject(st.group);
     if (bb.isEmpty()) return;
-    const c = bb.getCenter(new THREE.Vector3());
     const r = bb.getSize(new THREE.Vector3()).length() / 2;
     const el = CMP3D_ELEV * Math.PI / 180, az = CMP3D_AZIM * Math.PI / 180;
-    const dist = r * 1.45;
+    const dist = r * 0.5;
+    const c = new THREE.Vector3(CMP3D_HOME[0], CMP3D_HOME[1], CMP3D_HOME[2]);
+    // доворот группы меняет мировые координаты цели
+    st.group.updateMatrixWorld(true);
+    c.applyMatrix4(st.group.matrixWorld);
     st.camera.position.set(
       c.x + dist * Math.cos(el) * Math.sin(az),
       c.y + dist * Math.sin(el),
@@ -398,10 +424,9 @@ function cmp3dHome(st) {
     st.ctl.update();
     st.home = {target: c.clone(), dist: dist};
     st.bounds = bb;
-    // Туман от размера карты: ближний край модели чистый,
-    // дальний обрыв тонет в чёрном
-    st.scene.fog.near = dist * 1.1;
-    st.scene.fog.far = dist * 2.6;
+    // Ближний план чистый, дальний обрыв тонет в чёрном
+    st.scene.fog.near = dist * 1.2;
+    st.scene.fog.far = dist * 3.5;
   } catch (e) {}
 }
 
