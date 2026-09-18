@@ -9,12 +9,20 @@ terminator_toolset.api (one register_* group per area).
 from __future__ import annotations
 
 import logging
+import mimetypes as _mimetypes
 import os
 import time
 from types import SimpleNamespace
 from typing import Optional
 
 from flask import Flask, request
+
+# ES-модули three.js r185: Chromium требует строгий JS-MIME для module-
+# скриптов, а в реестре Windows .mjs часто отсутствует или чужой.
+# Без явной фиксации мост three-bridge отдаётся как octet-stream
+# и 3D не стартует. Регистрируем раньше любых раздач статики.
+_mimetypes.add_type("text/javascript", ".mjs")
+_mimetypes.add_type("text/javascript", ".js")
 
 log = logging.getLogger("terminatorsheet.api")
 
