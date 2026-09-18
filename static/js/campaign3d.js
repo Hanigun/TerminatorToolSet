@@ -89,7 +89,7 @@ var CMP3D_MAP_ROT = -Math.PI / 2;
 // игра открывает карту регионом, TEXAS читается крупно
 var CMP3D_HOME = [-165, 3, -338];
 // Свет карты одним местом (диагностика возвращает ровно эти значения)
-var CMP3D_KEY = 1.7, CMP3D_HEMI = 0.32, CMP3D_EXPO = 1.12;
+var CMP3D_KEY = 2.0, CMP3D_HEMI = 0.4, CMP3D_EXPO = 1.25;
 
 // ---------- libs ----------
 // Ленивая подгрузка three.js — копия m3dLibs своим состоянием,
@@ -317,20 +317,27 @@ function cmp3dAddMeshes(st, data) {
     mat.userData.slots = {map: null, normalMap: null, roughnessMap: null,
       emissiveMap: null};
     if (md && !md.missing) {
+      // Слои по именам текстур, не по индексам — порядок мешей
+      // в модели может плавать
+      var isGhost = /state_names/.test(md.albedo || "");
+      var isUnder = /undercoat/.test(md.albedo || "");
       cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, "map", md.albedo, true);
       cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, "normalMap", md.normal, false);
       if (!st.softGL) cmp3dWantTex(st, texLoader, maxAniso, texUrl,
         mat, "roughnessMap", md.rough, false);
       // Ночные огни и светящиеся дороги: сила — из материала
-      // (террейн 0.6). Декали штатов (state_names: текст чуть темнее
-      // фона в R, альфа ~0) светим проявкой через canvas — иначе либо
-      // белые простыни вуалью, либо ничего не видно
-      const isGhost = /state_names/.test(md.albedo || "");
-      if (!isGhost) cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat,
-        "emissiveMap", md.emission, true);
-      else cmp3dDecalEmissive(st, texUrl(md.emission || md.albedo,
-        "emissiveMap"), mat, md.emission_power || 2.0);
-      mat.userData.emissionPower = isGhost ? 0 : (md.emission_power || 0);
+      // (террейн 0.6). Подложка свечения не получает вообще: её
+      // белёсый emissive в 2 см под террейном и давал вуаль
+      // (z-fighting на дистанции). Декали штатов (state_names:
+      // текст чуть темнее фона в R, emission-слот пустой) светим
+      // проявкой из albedo через canvas — иначе либо белые
+      // простыни, либо ничего не видно
+      if (!isGhost && !isUnder) cmp3dWantTex(st, texLoader, maxAniso,
+        texUrl, mat, "emissiveMap", md.emission, true);
+      else if (isGhost) cmp3dDecalEmissive(st,
+        texUrl(md.albedo, "emissiveMap"), mat, md.emission_power || 2.0);
+      mat.userData.emissionPower =
+        (isGhost || isUnder) ? 0 : (md.emission_power || 0);
       // Декали штатов/точек (IsTransparent): только прозрачность фона —
       // геометрию не трогаем, TEXAS парит как задумано
       if (md.transparent) {
@@ -342,6 +349,9 @@ function cmp3dAddMeshes(st, data) {
       mat.color.setHex(0x9aa0a8);
     }
     const mesh = new THREE.Mesh(g, mat);
+    // Подложка — скрытая база под террейном: топим на метр вниз.
+    // Вида не меняет (она и так под ним), но убивает z-fighting
+    if (typeof isUnder !== "undefined" && isUnder) mesh.position.y -= 1.0;
     mesh.userData.mid = mi;
     mesh.userData.title = [m.name, m.node].filter(Boolean).join(" @ ");
     st.group.add(mesh);
