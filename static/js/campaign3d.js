@@ -89,17 +89,18 @@ var CMP3D_MAP_ROT = -Math.PI / 2;
 // игра открывает карту регионом, TEXAS читается крупно
 var CMP3D_HOME = [-165, 3, -338];
 // Свет карты одним местом (диагностика возвращает ровно эти значения).
-// Старт под линейный выход (GEM без кинокривой): темноту альбедо
-// (R~40) поднимает сам свет, а не тонемаппинг
-var CMP3D_KEY = 2.2, CMP3D_HEMI = 0.55, CMP3D_EXPO = 1.15;
+// Старт под линейный выход (GEM без кинокривой): альбедо террейна
+// тёмное (R~40) и полупрозрачное (альфа ~0.24 поверх чёрной плиты) —
+// яркость добирается силой света, а не тонемаппингом
+var CMP3D_KEY = 4.5, CMP3D_HEMI = 0.6, CMP3D_EXPO = 1.2;
 
 // ---------- libs ----------
-// Ленивая подгрузка three.js — копия m3dLibs своим состоянием,
-// чтобы не трогать ядро model3d.js
+// three.js — из моста three-bridge.mjs (шапка index.html, r185):
+// ждём window.THREE (событие + опрос), тегов вендора больше нет
 var cmp3dLibState = 0, cmp3dLibQueue = [];
 function cmp3dLibs(cb) {
   if (typeof THREE !== "undefined" && THREE.WebGLRenderer &&
-      THREE.OrbitControls) { cb(true); return; }
+      THREE.OrbitControls) { cmp3dLibState = 2; cb(true); return; }
   if (cmp3dLibState === 2) { cb(true); return; }
   cmp3dLibQueue.push(cb);
   if (cmp3dLibState === 1) return;
@@ -109,22 +110,26 @@ function cmp3dLibs(cb) {
     const q = cmp3dLibQueue.splice(0);
     q.forEach(f => { try { f(ok); } catch (e) {} });
   };
-  const load = (url, next) => {
-    const s = document.createElement("script");
-    s.src = url;
-    s.onload = () => next(true);
-    s.onerror = () => next(false);
-    document.head.appendChild(s);
+  let settled = false;
+  const settle = ok => {
+    if (settled) return;
+    settled = true;
+    try { clearInterval(timer); } catch (e) {}
+    done(ok);
   };
-  load("/static/js/vendor/three.min.js", ok => {
-    if (!ok) { done(false); return; }
-    load("/static/js/vendor/OrbitControls.js", ok2 => {
-      if (!ok2) { done(false); return; }
-      // ВРЕМЕННЫЙ эксперимент DDS без конвертации (клавиша 9):
-      // грузим всегда, файл маленький
-      load("/static/js/vendor/DDSLoader.js", done);
-    });
-  });
+  try {
+    window.addEventListener("tsh:three", () => settle(true),
+      {once: true});
+  } catch (e) {
+    try { window.addEventListener("tsh:three", () => settle(true)); }
+    catch (e2) {}
+  }
+  let n = 0;
+  const timer = setInterval(() => {
+    if (typeof THREE !== "undefined" && THREE.WebGLRenderer &&
+        THREE.OrbitControls) settle(true);
+    else if (++n > 100) settle(false);
+  }, 100);
 }
 
 // Вход на сцену: живая — будим цикл (корень тот же — мгновенно),
@@ -183,7 +188,7 @@ function cmp3dBoot(view, root) {
     } catch (e) {}
     renderer.setPixelRatio(softGL ? 1 : Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(W(), H());
-    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     // GEM — LDR-движок без кинокривой (эквивалент Blender Standard):
     // ACESFilmic (эквивалент Filmic) съедал насыщенность и давил
     // средние тона — отсюда «тускло» при любом свете. Линейный выход:
@@ -338,6 +343,10 @@ function cmp3dAddMeshes(st, data) {
     mat.userData.tex = [];
     mat.userData.slots = {map: null, normalMap: null, roughnessMap: null,
       emissiveMap: null};
+    // Рамка (side/corner) — как обычная подложка: глухая и непрозрачная.
+    // Их полупрозрачная альфа давала лишние ступени затемнения по краю;
+    // main и так глухой (IsTransparent=false), теперь вся семья глухая
+    mat.userData.isUnder = isUnder;
     if (md && !md.missing) {
       mat.userData.albedoRel = md.albedo || "";
       cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, "map", md.albedo, true);
@@ -365,12 +374,15 @@ function cmp3dAddMeshes(st, data) {
         (isGhost || isUnder) ? 0 : (md.emission_power || 0);
       // Декали штатов/точек (IsTransparent): только прозрачность фона —
       // геометрию не трогаем, TEXAS парит как задумано.
-      // Глубину не пишет только парящая декаль; террейн и рамка пишут:
-      // иначе рамка подложки просвечивает сквозь террейн ступенями
-      // затемнения по краю (в игре — один ровный спад)
-      if (md.transparent) {
+      // Глубину не пишет только парящая декаль; террейн и рамка пишут.
+      // Подложка — глухая целиком (и рамка тоже): полупрозрачные
+      // полосы side/corner затемняли край ступенями вместо одного
+      // ровного спада
+      if (md.transparent && !isUnder) {
         mat.transparent = true;
         mat.depthWrite = isGhost ? false : true;
+      } else {
+        mat.depthWrite = true;
       }
       if (md.double_sided) mat.side = THREE.DoubleSide;
       // Порядок отрисовки — из движка (RenderPriority: террейн
@@ -394,7 +406,8 @@ function cmp3dAddMeshes(st, data) {
   });
 }
 // Проявка текста декалей: буквы темнее фона в R — инверсия
-// с растяжкой в свечение (фон уходит в чёрный, вуали нет).
+// с растяжкой по реальному min/max (фон уходит в чёрный, вуали нет).
+// Фиксированная формула давила контраст — текст тонул.
 // Грузим через общий менеджер — статус «tex» ждёт и проявку,
 // скрин раньше готовности исключён. Сила — decalPower, её же
 // возвращают клавиши 5/0 (иначе текст умирал до перезахода)
@@ -413,8 +426,16 @@ function cmp3dDecalEmissive(st, url, mat, power) {
       cx.drawImage(img, 0, 0);
       const id = cx.getImageData(0, 0, cv.width, cv.height);
       const d = id.data;
+      // Сначала min/max инверсии — потом растяжка на весь диапазон
+      let mn = 255, mx = 0;
       for (let i = 0; i < d.length; i += 4) {
-        let v = (255 - d[i]) * 4 - 30;
+        const v = 255 - d[i];
+        if (v < mn) mn = v;
+        if (v > mx) mx = v;
+      }
+      const span = (mx - mn) || 1;
+      for (let i = 0; i < d.length; i += 4) {
+        let v = ((255 - d[i]) - mn) * 255 / span;
         v = v < 0 ? 0 : (v > 255 ? 255 : v);
         d[i] = d[i + 1] = d[i + 2] = v;
         d[i + 3] = 255;
@@ -424,7 +445,7 @@ function cmp3dDecalEmissive(st, url, mat, power) {
       const dt = new THREE.CanvasTexture(cv);
       // Проявка — sRGB-картинка: без метки three читал бы её
       // как линейную и текст уходил бы не в ту яркость
-      dt.encoding = THREE.sRGBEncoding;
+      dt.colorSpace = THREE.SRGBColorSpace;
       mat.emissiveMap = dt;
       mat.emissive = new THREE.Color(0xffffff);
       mat.emissiveIntensity = mat.userData.decalPower *
@@ -434,7 +455,9 @@ function cmp3dDecalEmissive(st, url, mat, power) {
       st.disposables.push(dt);
       cmp3dStatus(st.view, "decal TEXAS ok");
     } catch (e) {}
-  }, undefined, () => {});
+  }, undefined, () => {
+    try { cmp3dStatus(st.view, "decal FAIL " + url); } catch (e2) {}
+  });
 }
 function cmp3dTexReady(st, mat, slot) {
   try {
@@ -464,10 +487,15 @@ function cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, slot, rel, srgb) {
         () => cmp3dTexReady(st, mat, slot), undefined,
         () => { try { cmp3dStatus(st.view, "tex FAIL " + rel); }
           catch (e2) {} });
-      if (srgb) tx.encoding = THREE.sRGBEncoding;
+      if (srgb) tx.colorSpace = THREE.SRGBColorSpace;
       tx.anisotropy = maxAniso;
       tx.wrapS = THREE.RepeatWrapping;
       tx.wrapT = THREE.RepeatWrapping;
+      // Клетка подложки в игре — одна на текстуру, а не 2x2:
+      // тайл 256² содержит 4 квадрата, дублируем половину —
+      // виден один квадрат, как в игре
+      if (mat.userData.isUnder && slot === "map")
+        tx.repeat.set(0.5, 0.5);
     } catch (e) { return; }
     st.texCache[key] = tx;
   }
@@ -511,7 +539,7 @@ function cmp3dDdsSwap(view, st) {
         "&rel=" + encodeURIComponent(mt.userData.albedoRel);
       loader.load(url, tx => {
         try {
-          tx.encoding = THREE.sRGBEncoding;
+          tx.colorSpace = THREE.SRGBColorSpace;
           tx.anisotropy =
             st.renderer.capabilities.getMaxAnisotropy();
           mt.map = tx;
@@ -638,7 +666,10 @@ function cmp3dHome(st) {
     if (bb.isEmpty()) return;
     const r = bb.getSize(new THREE.Vector3()).length() / 2;
     const el = CMP3D_ELEV * Math.PI / 180, az = CMP3D_AZIM * Math.PI / 180;
-    const dist = r * 0.5;
+    // Дальность — с временного пульта (Z): TEXAS шире экрана на
+    // заводской дистанции — отъезд подбирается ползунком
+    const dk = (st.lset && st.lset.dist) || 1;
+    const dist = r * 0.5 * dk;
     const c = new THREE.Vector3(CMP3D_HOME[0], CMP3D_HOME[1], CMP3D_HOME[2]);
     // доворот группы меняет мировые координаты цели
     st.group.updateMatrixWorld(true);
@@ -675,7 +706,7 @@ function cmp3dHome(st) {
 // константы CMP3D_*
 function cmp3dLightDef() {
   return {key: CMP3D_KEY, hemi: CMP3D_HEMI, expo: CMP3D_EXPO,
-    night: 0, decal: 1.0, fog: 1.0, tm: "linear"};
+    night: 0, decal: 1.0, fog: 1.0, tm: "linear", dist: 1.0};
 }
 function cmp3dLightLoad() {
   const d = cmp3dLightDef();
@@ -698,7 +729,7 @@ function cmp3dLightText(l) {
   const f = v => (Math.round(v * 100) / 100).toFixed(2);
   return "K" + f(l.key) + " F" + f(l.hemi) + " E" + f(l.expo) +
     " N" + f(l.night) + " D" + f(l.decal) + " T" + f(l.fog) +
-    " TM:" + l.tm;
+    " Z" + f(l.dist) + " TM:" + l.tm;
 }
 function cmp3dLightApply(st) {
   if (!st || !st.key || !st.lset) return;
@@ -750,12 +781,13 @@ function cmp3dPanel(box, st) {
   if (!panel) {
     panel = document.createElement("div");
     panel.id = "cmp3d-light";
-    [["key", "Ключ", 0, 8, 0.05],
+    [["key", "Ключ", 0, 20, 0.1],
      ["hemi", "Фил", 0, 2, 0.01],
      ["expo", "Экспо", 0.3, 2.5, 0.01],
      ["night", "Ночь", 0, 2.5, 0.01],
      ["decal", "Текст", 0, 3, 0.01],
-     ["fog", "Туман", 0, 3, 0.05]].forEach(r => {
+     ["fog", "Туман", 0, 3, 0.05],
+     ["dist", "Дальность", 0.3, 1.5, 0.05]].forEach(r => {
       const row = document.createElement("label");
       row.className = "cmp3d-light-row";
       const nm = document.createElement("span");
@@ -770,6 +802,10 @@ function cmp3dPanel(box, st) {
         cur.lset[r[0]] = parseFloat(inp.value);
         cmp3dLightSave(cur.lset);
         cmp3dLightApply(cur);
+        // Дальность двигает камеру — пересчитываем наводку
+        if (r[0] === "dist") {
+          try { cmp3dHome(cur); } catch (e8) {}
+        }
         cmp3dLightSync(panel);
       });
       const val = document.createElement("b");

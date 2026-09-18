@@ -1,20 +1,21 @@
 // 3D-превью .model: тёмный диалог в духе вьюпорта Blender (тёмный фон,
 // сетка пола с цветными осями), модель с натянутыми текстурами
 // (albedo/normal/rough из .material через /api/model_tex), вращение
-// мышью (OrbitControls). three.js вендорен локально (static/js/vendor,
-// r128) — CDN не нужен, программа офлайн.
+// мышью (OrbitControls). three.js вендорен локально (static/js/vendor/three,
+// r185, модули) — CDN не нужен, программа офлайн. Мост three-bridge.mjs
+// из шапки index.html кладёт window.THREE (importmap), классика ждёт.
 // Сцена (свет, камера, спиннер) встаёт СРАЗУ при открытии — геометрия
 // догружается асинхронно, окно не висит. Башня подтягивается отдельным
 // файлом на маунт-кость корпуса (бэкенд считает сдвиг по правилам
 // Blender-плагина); навесная броня скрыта по умолчанию, тумблер в меню.
-var M3D_THREE_URL = "/static/js/vendor/three.min.js";
-var M3D_ORBIT_URL = "/static/js/vendor/OrbitControls.js";
-var m3dLibState = 0; // 0 — нет, 1 — грузится, 2 — готов
+var m3dLibState = 0; // 0 — нет, 1 — ждём мост, 2 — готов
 var m3dLibQueue = [];
 
 // Ленивая подгрузка three.js только при первом открытии превью, чтобы
 // не тормозить старт программы. Колбэки ждут готовности.
 function m3dLibs(cb) {
+  if (typeof THREE !== "undefined" && THREE.WebGLRenderer &&
+      THREE.OrbitControls) { m3dLibState = 2; cb(true); return; }
   if (m3dLibState === 2) { cb(true); return; }
   m3dLibQueue.push(cb);
   if (m3dLibState === 1) return;
@@ -24,17 +25,26 @@ function m3dLibs(cb) {
     const q = m3dLibQueue.splice(0);
     q.forEach(f => { try { f(ok); } catch (e) {} });
   };
-  const load = (url, next) => {
-    const s = document.createElement("script");
-    s.src = url;
-    s.onload = () => next(true);
-    s.onerror = () => next(false);
-    document.head.appendChild(s);
+  let settled = false;
+  const settle = ok => {
+    if (settled) return;
+    settled = true;
+    try { clearInterval(timer); } catch (e) {}
+    done(ok);
   };
-  load(M3D_THREE_URL, ok => {
-    if (!ok) { done(false); return; }
-    load(M3D_ORBIT_URL, done);
-  });
+  try {
+    window.addEventListener("tsh:three", () => settle(true),
+      {once: true});
+  } catch (e) {
+    try { window.addEventListener("tsh:three", () => settle(true)); }
+    catch (e2) {}
+  }
+  let n = 0;
+  const timer = setInterval(() => {
+    if (typeof THREE !== "undefined" && THREE.WebGLRenderer &&
+        THREE.OrbitControls) settle(true);
+    else if (++n > 100) settle(false);
+  }, 100);
 }
 
 let m3dPopEl = null;
@@ -239,7 +249,7 @@ function m3dStage(pop, view, bar, root) {
   } catch (e) {}
   renderer.setPixelRatio(softGL ? 1 : Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(W(), H());
-  renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.1;
   view.appendChild(renderer.domElement);
@@ -381,7 +391,7 @@ function m3dWantTex(st, texLoader, maxAniso, texUrl, mat, slot, rel, srgb) {
   if (!tx) {
     try {
       tx = texLoader.load(texUrl(rel, slot), () => m3dTexReady(st, mat, slot));
-      if (srgb) tx.encoding = THREE.sRGBEncoding;
+      if (srgb) tx.colorSpace = THREE.SRGBColorSpace;
       tx.anisotropy = maxAniso;
       // UV игры тайлятся (гусеницы: v до −13) — без повтора Clamp
       // размазывает крайний пиксель полосами
