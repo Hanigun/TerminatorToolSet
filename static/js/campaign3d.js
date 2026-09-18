@@ -571,6 +571,7 @@ function cmp3dDbg(view) {
       }
       const vis = st.group.children.map(m => m.visible ? 1 : 0).join("");
       cmp3dStatus(view, "DBG key=" + k + " meshes[" + vis + "]" +
+        " L" + CMP3D_KEY + "/" + CMP3D_HEMI + "/" + CMP3D_EXPO +
         (st._emisOff ? " EMIS-OFF" : "") +
         (st._lightsOff ? " LIGHTS-OFF" : "") +
         (st._fogOff ? " FOG-OFF" : ""));
