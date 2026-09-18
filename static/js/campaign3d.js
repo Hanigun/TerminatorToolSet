@@ -349,8 +349,12 @@ function cmp3dAddMeshes(st, data) {
       emissiveMap: null};
     // Рамка (side/corner) — как обычная подложка: глухая и непрозрачная.
     // Их полупрозрачная альфа давала лишние ступени затемнения по краю;
-    // main и так глухой (IsTransparent=false), теперь вся семья глухая
+    // main и так глухой (IsTransparent=false), теперь вся семья глухая.
+    // Плита пригашена (0x999999): её линии R~45, точки R~130 — под
+    // линейным выходом точки светились, множитель возвращает яркость
+    // как была при ACES. Света на плите нет и не было (unlit)
     mat.userData.isUnder = isUnder;
+    if (isUnder) mat.color.setHex(0x999999);
     if (md && !md.missing) {
       mat.userData.albedoRel = md.albedo || "";
       cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, "map", md.albedo, true);
@@ -495,11 +499,6 @@ function cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, slot, rel, srgb) {
       tx.anisotropy = maxAniso;
       tx.wrapS = THREE.RepeatWrapping;
       tx.wrapT = THREE.RepeatWrapping;
-      // Клетка подложки в игре вдвое крупней модельной: UV модели
-      // гонят 32 тайла (u 0..32), тайл 256² несёт 2x2 квадрата —
-      // множитель 0.25 даёт 8 тайлов = 16 клеток, как в игре
-      if (mat.userData.isUnder && slot === "map")
-        tx.repeat.set(0.25, 0.25);
     } catch (e) { return; }
     st.texCache[key] = tx;
   }
