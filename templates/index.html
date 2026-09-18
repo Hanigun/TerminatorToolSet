@@ -34,6 +34,16 @@
   <link rel="stylesheet" href="/static/css/units.css?v={{ v }}">
   <link rel="stylesheet" href="/static/css/model3d.css?v={{ v }}">
   <link rel="stylesheet" href="/static/css/preview3d.css?v={{ v }}">
+  <!-- three.js r185 — только ES-модули: importmap + мост в классику
+       (static/js/vendor/three-bridge.mjs кладёт window.THREE).
+       Модули отложенные — 3D встаёт по клику, старт не тормозят -->
+  <script type="importmap">
+  {"imports": {
+    "three": "/static/js/vendor/three/three.module.min.js",
+    "three/addons/": "/static/js/vendor/three/addons/"
+  }}
+  </script>
+  <script type="module" src="/static/js/vendor/three-bridge.mjs?v={{ v }}"></script>
 </head>
 <body>
   <header class="topbar pywebview-drag-region">
