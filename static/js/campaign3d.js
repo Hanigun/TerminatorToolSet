@@ -23,6 +23,9 @@ function cmp3dPaint() {
   const on = cmp3dIsOn();
   const btn = $("#cmp-3d");
   if (btn) {
+    // Временная кнопка не зависит от загрузки shop_presets.xml
+    // (карта из «Игры») — видна всегда, в отличие от соседних
+    btn.hidden = false;
     btn.classList.toggle("is-on", on);
     btn.textContent = on ? "2D" : (t("cpg_3d") || "3D");
   }
