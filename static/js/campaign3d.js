@@ -366,9 +366,8 @@ function cmp3dAddMeshes(st, data) {
       mat.color.setHex(0x9aa0a8);
     }
     const mesh = new THREE.Mesh(g, mat);
-    // Подложка — скрытая база под террейном: топим на метр вниз.
-    // Вида не меняет (она и так под ним), но убивает z-fighting
-    if (typeof isUnder !== "undefined" && isUnder) mesh.position.y -= 1.0;
+    // Геометрию не двигаем: рамка подложки сходится с краем
+    // террейна ровно на движковой высоте, её видно по краям карты
     mesh.userData.mid = mi;
     mesh.userData.title = [m.name, m.node].filter(Boolean).join(" @ ");
     st.group.add(mesh);
