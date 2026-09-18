@@ -6,12 +6,14 @@
    (с полями OrbitControls/DDSLoader, как раньше) и пинает событием.
    Классика ждёт готовности через m3dLibs/cmp3dLibs (событие + опрос),
    тегов <script src> вендора больше нет. Офлайн: всё завендорено. */
-import * as THREE from "./three/three.module.min.js";
+import * as ThreeCore from "./three/three.module.min.js";
 import { OrbitControls } from "./three/addons/controls/OrbitControls.js";
 import { DDSLoader } from "./three/addons/loaders/DDSLoader.js";
 
-THREE.OrbitControls = OrbitControls;
-THREE.DDSLoader = DDSLoader;
+// Пространство модуля заморожено (туда нельзя дописать поля, как
+// в UMD r128) — собираем свой объект с тем же содержимым ядра
+// плюс аддоны под старыми именами
+const THREE = Object.assign({}, ThreeCore, {OrbitControls, DDSLoader});
 window.THREE = THREE;
 try {
   window.dispatchEvent(new Event("tsh:three"));
