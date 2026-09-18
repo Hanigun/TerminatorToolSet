@@ -289,10 +289,14 @@ function cmp3dAddMeshes(st, data) {
       cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, "normalMap", md.normal, false);
       if (!st.softGL) cmp3dWantTex(st, texLoader, maxAniso, texUrl,
         mat, "roughnessMap", md.rough, false);
-      // Ночные огни и светящиеся дороги: emission двигает цвет сильнее
-      // всего (без него карта тусклая)
-      cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, "emissiveMap",
-        md.emission, true);
+      // Ночные огни и светящиеся дороги: сила — из материала
+      // (террейн 0.6). Декали штатов (state_names: белый RGB,
+      // альфа ~0 — движок их светит по-своему) свечением не мажем:
+      // иначе белые простыни вуалью по карте
+      const isGhost = /state_names/.test(md.albedo || "");
+      if (!isGhost) cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat,
+        "emissiveMap", md.emission, true);
+      mat.userData.emissionPower = isGhost ? 0 : (md.emission_power || 0);
       // Декали штатов/точек (IsTransparent): только прозрачность фона —
       // геометрию не трогаем, TEXAS парит как задумано
       if (md.transparent) {
@@ -319,7 +323,7 @@ function cmp3dTexReady(st, mat, slot) {
     if (slot === "emissiveMap") {
       mat.emissive = new THREE.Color(0xffffff);
       // Дороги и огни светятся, но не выбеливают террейн
-      mat.emissiveIntensity = 0.35;
+      mat.emissiveIntensity = mat.userData.emissionPower || 0;
     }
     mat.needsUpdate = true;
   } catch (e) {}
@@ -428,10 +432,10 @@ function cmp3dHome(st) {
     st.ctl.update();
     st.home = {target: c.clone(), dist: dist};
     st.bounds = bb;
-    // Ближний план чистый, дальний обрыв тонет в чёрном
-    // (на близком плане туман почти не виден, как в игре)
-    st.scene.fog.near = dist * 1.5;
-    st.scene.fog.far = dist * 5;
+    // Туман — только самый дальний обрыв: видимая карта чистая,
+    // как в игре (край просто обрывается в чёрное)
+    st.scene.fog.near = dist * 2.2;
+    st.scene.fog.far = dist * 6;
   } catch (e) {}
 }
 

@@ -398,8 +398,8 @@ def material_payload(upr, root, mtrl_rel, fallback="", overlay=()):
     overlay — слои саб-пути _ASSETS мода между root и fallback.
     """
     out = {"name": mtrl_rel, "albedo": "", "normal": "", "rough": "",
-            "emission": "", "transparent": False, "double_sided": False,
-            "missing": True}
+            "emission": "", "emission_power": 0.0, "transparent": False,
+            "double_sided": False, "missing": True}
     p = find_file(root, mtrl_rel, fallback, overlay)
     if not p:
         return out
@@ -416,6 +416,11 @@ def material_payload(upr, root, mtrl_rel, fallback="", overlay=()):
         out[key] = rel if rel and find_file(root, rel, fallback,
                                             overlay) else ""
     out["transparent"] = bool(mat.is_transparent)
+    try:
+        out["emission_power"] = float((mat.floats or {}).get(
+            "emission_power") or 0.0)
+    except (TypeError, ValueError):
+        out["emission_power"] = 0.0
     out["double_sided"] = (mat.rasterizer_state == "CullNone")
     return out
 
