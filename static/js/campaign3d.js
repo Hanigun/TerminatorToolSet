@@ -143,7 +143,7 @@ function cmp3dBoot(view) {
     renderer.setSize(W(), H());
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.15;
+    renderer.toneMappingExposure = 1.0;
     box.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
@@ -162,8 +162,8 @@ function cmp3dBoot(view) {
     // (direction 0,0,-1.37), оттенки полусферы — цвета из global_map.lighting
     // Рельеф лепит направленный ключ, фил слабый — иначе всё
     // выбеливается в плоскую кашу (как было при hemi 1.15)
-    scene.add(new THREE.HemisphereLight(0x547682, 0x233236, 0.5));
-    const key = new THREE.DirectionalLight(0xffffff, 2.2);
+    scene.add(new THREE.HemisphereLight(0x547682, 0x233236, 0.22));
+    const key = new THREE.DirectionalLight(0xffffff, 1.4);
     // Лёгкий наклон для лепки рельефа (в игре горы с теневой стороной)
     key.position.set(15, 100, -45);
     scene.add(key);
@@ -319,7 +319,7 @@ function cmp3dTexReady(st, mat, slot) {
     if (slot === "emissiveMap") {
       mat.emissive = new THREE.Color(0xffffff);
       // Дороги и огни светятся, но не выбеливают террейн
-      mat.emissiveIntensity = 0.6;
+      mat.emissiveIntensity = 0.35;
     }
     mat.needsUpdate = true;
   } catch (e) {}
