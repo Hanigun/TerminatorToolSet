@@ -220,6 +220,7 @@ function cmp3dBoot(view, root) {
     };
     st.texMgr.onLoad = () => cmp3dStatus(view, "");
     cmp3dLoop(view, st);
+    cmp3dDbg(view);
     try {
       st.ro = new ResizeObserver(() => {
         try {
@@ -338,6 +339,7 @@ function cmp3dAddMeshes(st, data) {
       mat.color.setHex(0x9aa0a8);
     }
     const mesh = new THREE.Mesh(g, mat);
+    mesh.userData.mid = mi;
     mesh.userData.title = [m.name, m.node].filter(Boolean).join(" @ ");
     st.group.add(mesh);
     st.disposables.push(g, mat);
@@ -442,7 +444,53 @@ function cmp3dGrid(st) {
     }
   } catch (e) {}
 }
-// Домой: стартуем с Техаса крупно (как игра), дистанция — доля радиуса
+// ВРЕМЕННАЯ диагностика вуали (убрать после поимки): клавиши 1-5
+// гасят слои (террейн/подложка/декали/сетка/свечение), 0 — вернуть всё.
+// Работает только на открытой 3D-карте.
+function cmp3dDbg(view) {
+  if (view._cmp3dDbg) return;
+  view._cmp3dDbg = true;
+  document.addEventListener("keydown", e => {
+    if (!cmp3dIsOn() || !view._cmp3d || view.hidden) return;
+    const k = (e.key || "");
+    if (k !== "0" && k !== "1" && k !== "2" && k !== "3" && k !== "4" &&
+        k !== "5") return;
+    const st = view._cmp3d;
+    const show = what => {
+      st.group.children.forEach(m => {
+        const mid = m.userData.mid;
+        if (what === "all") { m.visible = true; return; }
+        if (what === "terrain" && mid === 3) m.visible = !m.visible;
+        if (what === "under" && (mid === 0 || mid === 1 || mid === 4))
+          m.visible = !m.visible;
+        if (what === "decal" && mid === 2) m.visible = !m.visible;
+      });
+      (st.sceneExtras || []).forEach(o => {
+        if (what === "all") { o.visible = true; return; }
+        if (what === "grid") o.visible = !o.visible;
+      });
+      if (what === "emis" || what === "all") {
+        st._emisOff = (what === "emis") ? !st._emisOff : false;
+        st.group.children.forEach(m => {
+          try {
+            if (m.material && m.material.emissive)
+              m.material.emissiveIntensity = st._emisOff ? 0 :
+                (m.material.userData.emissionPower || 0);
+          } catch (e2) {}
+        });
+      }
+      const vis = st.group.children.map(m => m.visible ? 1 : 0).join("");
+      cmp3dStatus(view, "DBG key=" + k + " meshes[" + vis + "]" +
+        (st._emisOff ? " EMIS-OFF" : ""));
+    };
+    if (k === "1") show("terrain");
+    else if (k === "2") show("under");
+    else if (k === "3") show("decal");
+    else if (k === "4") show("grid");
+    else if (k === "5") show("emis");
+    else show("all");
+  });
+}
 function cmp3dHome(st) {
   try {
     const bb = new THREE.Box3().setFromObject(st.group);
