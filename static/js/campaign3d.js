@@ -313,7 +313,16 @@ function cmp3dAddMeshes(st, data) {
     g.setIndex(ix);
     const mi = (m.material != null) ? m.material : -1;
     const md = (data.materials && data.materials[mi]) || null;
-    const mat = st.softGL
+    // Слои по именам текстур, не по индексам — порядок мешей
+    // в модели может плавать
+    var isGhost = /state_names/.test((md && md.albedo) || "");
+    var isUnder = /undercoat/.test((md && md.albedo) || "");
+    // Подложка — неосвещаемая: чёрная внутри своих ячеек всегда,
+    // светиться белым ей физически нечем (ни ключа, ни свечения).
+    // Только albedo-карта (тёмная) + прозрачность рамки
+    const mat = (isUnder && !st.softGL)
+      ? new THREE.MeshBasicMaterial({color: 0xffffff})
+      : st.softGL
       ? new THREE.MeshLambertMaterial({color: 0xffffff})
       : new THREE.MeshStandardMaterial({
         color: 0xffffff, metalness: 0.05, roughness: 0.85,
@@ -322,15 +331,17 @@ function cmp3dAddMeshes(st, data) {
     mat.userData.slots = {map: null, normalMap: null, roughnessMap: null,
       emissiveMap: null};
     if (md && !md.missing) {
-      // Слои по именам текстур, не по индексам — порядок мешей
-      // в модели может плавать
-      var isGhost = /state_names/.test(md.albedo || "");
-      var isUnder = /undercoat/.test(md.albedo || "");
       mat.userData.albedoRel = md.albedo || "";
       cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, "map", md.albedo, true);
-      cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, "normalMap", md.normal, false);
-      if (!st.softGL) cmp3dWantTex(st, texLoader, maxAniso, texUrl,
-        mat, "roughnessMap", md.rough, false);
+      if (isUnder) {
+        // Подложке — только карту и прозрачность, остального нет:
+        // ни нормалей, ни шершавости, ни свечения
+        mat.userData.emissionPower = 0;
+      } else {
+        cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, "normalMap", md.normal, false);
+        if (!st.softGL) cmp3dWantTex(st, texLoader, maxAniso, texUrl,
+          mat, "roughnessMap", md.rough, false);
+      }
       // Ночные огни и светящиеся дороги: сила — из материала
       // (террейн 0.6). Подложка свечения не получает вообще: её
       // белёсый emissive в 2 см под террейном и давал вуаль
@@ -425,7 +436,9 @@ function cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, slot, rel, srgb) {
   if (!tx) {
     try {
       tx = texLoader.load(texUrl(rel, slot),
-        () => cmp3dTexReady(st, mat, slot));
+        () => cmp3dTexReady(st, mat, slot), undefined,
+        () => { try { cmp3dStatus(st.view, "tex FAIL " + rel); }
+          catch (e2) {} });
       if (srgb) tx.encoding = THREE.sRGBEncoding;
       tx.anisotropy = maxAniso;
       tx.wrapS = THREE.RepeatWrapping;
