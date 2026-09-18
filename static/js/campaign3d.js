@@ -122,7 +122,7 @@ function cmp3dBoot(view) {
     renderer.setSize(W(), H());
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.1;
+    renderer.toneMappingExposure = 1.55;
     box.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
@@ -139,8 +139,8 @@ function cmp3dBoot(view) {
     ctl.target.set(0, 0, 0);
     // Свой свет: ключ почти строго сверху по light.xml
     // (direction 0,0,-1.37), снизу — чистый чёрный, студийного нет
-    scene.add(new THREE.HemisphereLight(0x8fa3c7, 0x000000, 0.55));
-    const key = new THREE.DirectionalLight(0xffffff, 1.35);
+    scene.add(new THREE.HemisphereLight(0x8fa3c7, 0x000000, 0.85));
+    const key = new THREE.DirectionalLight(0xffffff, 1.7);
     key.position.set(0, 100, -14);
     scene.add(key);
     const group = new THREE.Group();
@@ -311,7 +311,7 @@ function cmp3dHome(st) {
     const c = bb.getCenter(new THREE.Vector3());
     const r = bb.getSize(new THREE.Vector3()).length() / 2;
     const el = CMP3D_ELEV * Math.PI / 180, az = CMP3D_AZIM * Math.PI / 180;
-    const dist = r * 1.9;
+    const dist = r * 1.45;
     st.camera.position.set(
       c.x + dist * Math.cos(el) * Math.sin(az),
       c.y + dist * Math.sin(el),
