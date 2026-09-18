@@ -905,6 +905,8 @@
   "ga_stuck": "Check is stuck — press Download again",
   "cpg_title": "Campaign Editor",
   "cpg_sub": "Settlement shops (base game shop_presets.xml)",
+  "cpg_3d": "3D",
+  "cpg_3d_soon": "3D scene coming (stage 1)",
   "cpg_shop": "Shop",
   "cpg_hire": "Hire",
   "cpg_supplies": "Supplies",

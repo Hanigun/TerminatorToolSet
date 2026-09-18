@@ -1,0 +1,33 @@
+/* TerminatorToolSet — campaign3d.css: 3D-превью глобальной карты.
+   Изолированные стили режима (префикс cmp3d-); плитки и панель кампании
+   не трогаем. */
+#cmp-3d.is-on {
+  outline: 2px solid var(--accent, #ffcf40);
+  outline-offset: -2px;
+}
+#cmp3d-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+}
+#cmp3d-view[hidden] {
+  display: none;
+}
+.cmp3d-view {
+  flex: 1 1 auto;
+  min-height: 320px;
+  position: relative;
+  overflow: hidden;
+  background: #000;
+}
+.cmp3d-status {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  color: var(--muted, #9aa);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -7,6 +7,8 @@ async function init() {
   state.swt = swtFreshState();
   state.uprising = uprFreshState();
   state.campaign = cmpFreshState();
+  // 3D-превью карты: свой файл campaign3d.js, зовём только когда загружен
+  if (typeof cmp3dFreshState === "function") state.camp3d = cmp3dFreshState();
   // фабрика untFreshState() приедет с units.js (T5): до тех пор state.units остаётся null
   if (typeof untFreshState === "function") state.units = untFreshState();
   document.body.classList.add("dark");
@@ -26,7 +28,8 @@ async function init() {
   setupSwtFind();
   setupSwt();
   setupUprising();
-  setupCampaign();
+   setupCampaign();
+  if (typeof setupCampaign3d === "function") setupCampaign3d();
   // setupUnits() приедет с units.js (T5): зовём только когда он уже загружен
   if (typeof setupUnits === "function") setupUnits();
   // иконки темы — одним запросом в память, фоном (дерево/вкладки больше
