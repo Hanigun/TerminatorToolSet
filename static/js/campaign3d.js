@@ -47,14 +47,34 @@ function cmp3dPaint() {
   }
   if (view) {
     view.hidden = !on;
-    // Уход со сцены — останавливаем цикл и возвращаем ресурсы;
-    // следующий вход строит сцену заново (корень мог смениться)
-    if (!on && view._cmp3dReady) {
-      view._cmp3dReady = false;
-      cmp3dDispose(view);
-    }
+    // Сцена переживает переключения: цикл спит, геометрия и текстуры
+    // остаются — повторный вход мгновенный, без перезаказа
+    if (!on && view._cmp3d) cmp3dSleep(view, true);
     if (on) cmp3dEnsure(view);
   }
+}
+// Пауза/продолжение цикла (вкладка скрыта — GPU не жжём, ресурсы держим)
+function cmp3dSleep(view, sleep) {
+  const st = view._cmp3d;
+  if (!st) return;
+  st.sleep = !!sleep;
+  if (sleep) {
+    try { cancelAnimationFrame(view._cmp3dRaf); } catch (e) {}
+    view._cmp3dRaf = 0;
+  } else if (!view._cmp3dRaf) {
+    cmp3dLoop(view, st);
+  }
+}
+// Кадровый цикл отдельно — чтобы будить его без перестройки сцены
+function cmp3dLoop(view, st) {
+  const loop = () => {
+    if (!view.isConnected || view._cmp3d !== st) return;
+    if (st.sleep || view.hidden) { view._cmp3dRaf = 0; return; }
+    st.ctl.update();
+    st.renderer.render(st.scene, st.camera);
+    view._cmp3dRaf = requestAnimationFrame(loop);
+  };
+  loop();
 }
 // ---------- tuning ----------
 // Наклон камеры как в игре (подобрать по camera_angle.jpg на этапе 5):
@@ -100,11 +120,26 @@ function cmp3dLibs(cb) {
   });
 }
 
-// Этап 1 построит здесь сцену; пока — заглушка со статусом
+// Вход на сцену: живая — будим цикл (корень тот же — мгновенно),
+// чужой корень (Проект|Игра|Мод переключили) — пересобираем
 function cmp3dEnsure(view) {
-  if (view._cmp3dReady) return;
-  view._cmp3dReady = true;
-  cmp3dBoot(view);
+  let root = "";
+  try {
+    root = (typeof cmpSrcRoot === "function") ? cmpSrcRoot() : "";
+  } catch (e) { root = ""; }
+  if (view._cmp3d && view._cmp3d.rootKey === (root || "")) {
+    try {
+      view._cmp3d.camera.aspect =
+        view._cmp3d.box.clientWidth / view._cmp3d.box.clientHeight;
+      view._cmp3d.camera.updateProjectionMatrix();
+      view._cmp3d.renderer.setSize(view._cmp3d.box.clientWidth,
+        view._cmp3d.box.clientHeight);
+    } catch (e) {}
+    cmp3dSleep(view, false);
+    return;
+  }
+  if (view._cmp3d) cmp3dDispose(view);
+  cmp3dBoot(view, root || "");
 }
 function cmp3dStatus(view, msg) {
   const st = view.querySelector(".cmp3d-status");
@@ -113,7 +148,7 @@ function cmp3dStatus(view, msg) {
 // Первая стадия: рендер, свой свет, камера-пан, цикл — копия m3dStage
 // под карту: чёрный фон + чёрный туман к краям, вращение и зум
 // запрещены (только панорама), студийного света ядра нет
-function cmp3dBoot(view) {
+function cmp3dBoot(view, root) {
   const box = view.querySelector(".cmp3d-view");
   cmp3dStatus(view, t("m3d_loading") || "Загрузка…");
   cmp3dLibs(ok => {
@@ -175,6 +210,7 @@ function cmp3dBoot(view) {
       group: group, softGL: softGL, texCache: {},
       disposables: [renderer], home: null, bounds: null};
     view._cmp3d = st;
+    st.rootKey = root || "";
     st.texMgr = new THREE.LoadingManager();
     st.texMgr.onStart = (url, loaded, total) => {
       cmp3dStatus(view, "tex " + loaded + "/" + total);
@@ -183,13 +219,7 @@ function cmp3dBoot(view) {
       cmp3dStatus(view, "tex " + loaded + "/" + total);
     };
     st.texMgr.onLoad = () => cmp3dStatus(view, "");
-    const loop = () => {
-      if (!view.isConnected || view._cmp3d !== st) return;
-      ctl.update();
-      renderer.render(scene, camera);
-      view._cmp3dRaf = requestAnimationFrame(loop);
-    };
-    loop();
+    cmp3dLoop(view, st);
     try {
       st.ro = new ResizeObserver(() => {
         try {
@@ -229,12 +259,12 @@ function cmp3dDispose(view) {
   try { st.renderer.dispose(); } catch (e) {}
   try { st.renderer.domElement.remove(); } catch (e) {}
 }
-// Геометрия карты — тот же /api/model_preview, башен нет
+// Геометрия карты — тот же /api/model_preview, башен нет.
+// Корень уже выбран в cmp3dEnsure (st.rootKey) — здесь не меняем,
+// иначе повторный вход перезакажет геометрию
 function cmp3dFetch(st) {
   const view = st.view;
-  try {
-    st.root = (typeof cmpSrcRoot === "function") ? cmpSrcRoot() : "";
-  } catch (e) { st.root = ""; }
+  st.root = st.rootKey || "";
   cmp3dStatus(view, t("m3d_loading") || "Загрузка…");
   fetch("/api/model_preview", {
     method: "POST",
