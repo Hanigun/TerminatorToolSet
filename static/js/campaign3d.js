@@ -89,7 +89,7 @@ var CMP3D_MAP_ROT = -Math.PI / 2;
 // игра открывает карту регионом, TEXAS читается крупно
 var CMP3D_HOME = [-165, 3, -338];
 // Свет карты одним местом (диагностика возвращает ровно эти значения)
-var CMP3D_KEY = 1.45, CMP3D_HEMI = 0.3, CMP3D_EXPO = 1.12;
+var CMP3D_KEY = 2.2, CMP3D_HEMI = 0.5, CMP3D_EXPO = 1.22;
 
 // ---------- libs ----------
 // Ленивая подгрузка three.js — копия m3dLibs своим состоянием,
@@ -410,6 +410,7 @@ function cmp3dDecalEmissive(st, url, mat, power) {
       mat.needsUpdate = true;
       mat.userData.tex.push(dt);
       st.disposables.push(dt);
+      cmp3dStatus(st.view, "decal TEXAS ok");
     } catch (e) {}
   }, undefined, () => {});
 }
