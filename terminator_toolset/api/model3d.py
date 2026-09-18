@@ -107,3 +107,29 @@ def register_model3d(app, ctx):
             return ("", 404)
         resp.headers["Cache-Control"] = "public, max-age=3600"
         return resp
+
+    @app.route("/api/model_dds")
+    def api_model_dds():
+        """ВРЕМЕННЫЙ эксперимент: сырой DDS без конвертации (проверка,
+        не даёт ли webp-конвертер вуаль на подложке глобальной карты).
+        Удалить вместе с клавишей 9 после опыта."""
+        from flask import request, send_file
+        root = store.normal(request.args.get("root", ""))
+        rel = m3.safe_rel(request.args.get("rel") or "")
+        try:
+            ovl = upr.unpacked_root() if upr is not None else ""
+        except Exception:  # noqa: BLE001
+            ovl = ""
+        try:
+            sub = m3.overlays_for(upr, root)
+        except Exception:  # noqa: BLE001
+            sub = ()
+        p = m3.find_file(root, rel, ovl, sub) if rel else ""
+        if not p or not os.path.isfile(p):
+            return ("", 404)
+        try:
+            resp = send_file(p, mimetype="application/octet-stream")
+        except OSError:
+            return ("", 404)
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp

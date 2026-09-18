@@ -116,7 +116,12 @@ function cmp3dLibs(cb) {
   };
   load("/static/js/vendor/three.min.js", ok => {
     if (!ok) { done(false); return; }
-    load("/static/js/vendor/OrbitControls.js", done);
+    load("/static/js/vendor/OrbitControls.js", ok2 => {
+      if (!ok2) { done(false); return; }
+      // ВРЕМЕННЫЙ эксперимент DDS без конвертации (клавиша 9):
+      // грузим всегда, файл маленький
+      load("/static/js/vendor/DDSLoader.js", done);
+    });
   });
 }
 
@@ -321,6 +326,7 @@ function cmp3dAddMeshes(st, data) {
       // в модели может плавать
       var isGhost = /state_names/.test(md.albedo || "");
       var isUnder = /undercoat/.test(md.albedo || "");
+      mat.userData.albedoRel = md.albedo || "";
       cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, "map", md.albedo, true);
       cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, "normalMap", md.normal, false);
       if (!st.softGL) cmp3dWantTex(st, texLoader, maxAniso, texUrl,
@@ -432,6 +438,55 @@ function cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, slot, rel, srgb) {
   } catch (e) {}
 }
 // ВРЕМЕННАЯ диагностика вуали (убрать после поимки): 1 террейн,
+// ВРЕМЕННЫЙ эксперимент (убрать после опыта): клавиша 9 гоняет
+// albedo подложки webp-кэш <-> сырой DDS напрямую (без конвертации).
+// Сжатым текстурам flipY не применяется — картинка может быть
+// перевёрнута по вертикали, для вопроса «вуаль или нет» неважно
+function cmp3dDdsSwap(view, st) {
+  st._ddsOn = !st._ddsOn;
+  if (st._ddsOn && typeof THREE.DDSLoader === "undefined") {
+    st._ddsOn = false;
+    cmp3dStatus(view, "DBG no DDSLoader");
+    return;
+  }
+  if (st._ddsOn) {
+    let s3tc = null;
+    try {
+      s3tc = st.renderer.extensions.get("WEBGL_compressed_texture_s3tc");
+    } catch (e) {}
+    if (!s3tc) {
+      st._ddsOn = false;
+      cmp3dStatus(view, "DBG no S3TC in GPU");
+      return;
+    }
+  }
+  const loader = st._ddsOn ? new THREE.DDSLoader() : null;
+  st.group.children.forEach(m => {
+    const mt = m.material;
+    if (!mt || !/undercoat/.test(mt.userData.albedoRel || "")) return;
+    if (st._ddsOn) {
+      if (!mt.userData.webpMap) mt.userData.webpMap = mt.map;
+      const url = "/api/model_dds?root=" + encodeURIComponent(st.root || "") +
+        "&rel=" + encodeURIComponent(mt.userData.albedoRel);
+      loader.load(url, tx => {
+        try {
+          tx.encoding = THREE.sRGBEncoding;
+          tx.anisotropy =
+            st.renderer.capabilities.getMaxAnisotropy();
+          mt.map = tx;
+          mt.needsUpdate = true;
+          mt.userData.tex.push(tx);
+          st.disposables.push(tx);
+        } catch (e) {}
+      }, undefined, () => cmp3dStatus(view, "DBG DDS load fail"));
+    } else if (mt.userData.webpMap) {
+      mt.map = mt.userData.webpMap;
+      mt.needsUpdate = true;
+    }
+  });
+  cmp3dStatus(view, st._ddsOn ? "DBG DDS direct (no convert)" :
+    "DBG WEBP cache");
+}
 // 2 подложка, 3 декали, 5 свечение, 6 свет, 7 туман,
 // 8 только террейн, 0 — вернуть всё. Только на открытой 3D-карте.
 function cmp3dDbg(view) {
@@ -441,7 +496,8 @@ function cmp3dDbg(view) {
     if (!cmp3dIsOn() || !view._cmp3d || view.hidden) return;
     const k = (e.key || "");
     if (k !== "0" && k !== "1" && k !== "2" && k !== "3" &&
-        k !== "5" && k !== "6" && k !== "7" && k !== "8") return;
+        k !== "5" && k !== "6" && k !== "7" && k !== "8" &&
+        k !== "9") return;
     const st = view._cmp3d;
     const show = what => {
       st.group.children.forEach(m => {
@@ -508,6 +564,7 @@ function cmp3dDbg(view) {
     else if (k === "6") show("lights");
     else if (k === "7") show("fog");
     else if (k === "8") show("tonly");
+    else if (k === "9") cmp3dDdsSwap(view, st);
     else show("all");
   });
 }
