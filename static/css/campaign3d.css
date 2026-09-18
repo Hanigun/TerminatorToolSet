@@ -88,6 +88,20 @@
   color: var(--accent, #ffcf40);
   user-select: all;
 }
+/* Подпись штата как в игре: крупно, полупрозрачно, поверх карты */
+.cmp3d-state-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: 44px;
+  font-weight: 700;
+  letter-spacing: 18px;
+  text-indent: 18px;
+  color: rgba(158, 178, 192, 0.55);
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  z-index: 2;
+}
 #cmp3d-light button {
   width: 100%;
   padding: 3px 0;

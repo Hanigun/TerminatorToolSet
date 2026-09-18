@@ -72,9 +72,44 @@ function cmp3dLoop(view, st) {
     if (st.sleep || view.hidden) { view._cmp3dRaf = 0; return; }
     st.ctl.update();
     st.renderer.render(st.scene, st.camera);
+    try { cmp3dLabelTick(st); } catch (e) {}
     view._cmp3dRaf = requestAnimationFrame(loop);
   };
   loop();
+}
+// Подпись штата — HTML-оверлей, как в игре: в текстуре state_names
+// букв нет физически (замер: 0 пикселей темнее R150 на весь 2048²),
+// TEXAS рисует сам интерфейс. Якорь — CMP3D_TEXAS, проекция каждый
+    // кадр (камера панится — подпись едет вместе с картой)
+function cmp3dLabels(box, st) {
+  let el = box.querySelector(".cmp3d-state-label");
+  if (!el) {
+    el = document.createElement("div");
+    el.className = "cmp3d-state-label";
+    el.textContent = "TEXAS";
+    box.appendChild(el);
+  }
+  st.labelEl = el;
+  st.labelWorld = null;
+}
+function cmp3dLabelTick(st) {
+  const el = st.labelEl;
+  if (!el) return;
+  try {
+    if (!st.labelWorld) {
+      st.group.updateMatrixWorld(true);
+      st.labelWorld = new THREE.Vector3(
+        CMP3D_TEXAS[0], CMP3D_TEXAS[1], CMP3D_TEXAS[2]
+      ).applyMatrix4(st.group.matrixWorld);
+      st.labelV = new THREE.Vector3();
+    }
+    st.labelV.copy(st.labelWorld).project(st.camera);
+    const w = st.box.clientWidth || 640, h = st.box.clientHeight || 480;
+    if (st.labelV.z > 1) { el.style.display = "none"; return; }
+    el.style.display = "block";
+    el.style.left = ((st.labelV.x * 0.5 + 0.5) * w) + "px";
+    el.style.top = ((-st.labelV.y * 0.5 + 0.5) * h) + "px";
+  } catch (e) {}
 }
 // ---------- tuning ----------
 // Наклон камеры как в игре (подобрать по camera_angle.jpg на этапе 5):
@@ -91,8 +126,12 @@ var CMP3D_HOME = [-165, 3, -338];
 // Свет карты одним местом (диагностика возвращает ровно эти значения).
 // Старт под линейный выход (GEM без кинокривой): альбедо террейна
 // тёмное (R~40) и полупрозрачное (альфа ~0.24 поверх чёрной плиты) —
-// яркость добирается силой света, а не тонемаппингом
-var CMP3D_KEY = 4.5, CMP3D_HEMI = 0.6, CMP3D_EXPO = 1.2;
+// яркость добирается силой света, а не тонемаппингом.
+// Ориентир — скриншот игры: яркий сине-серый террейн, светящиеся дороги
+var CMP3D_KEY = 8, CMP3D_HEMI = 0.8, CMP3D_EXPO = 1.2;
+// Якорь подписи штата в координатах модели (центр Техаса —
+// среднее POI, та же точка, что CMP3D_HOME)
+var CMP3D_TEXAS = [-165, 8, -338];
 
 // ---------- libs ----------
 // three.js — из моста three-bridge.mjs (шапка index.html, r185):
@@ -241,6 +280,8 @@ function cmp3dBoot(view, root) {
     cmp3dDbg(view);
     // Временный пульт света: ползунки + видимые значения для фиксации
     try { cmp3dPanel(box, st); } catch (e9) {}
+    // Подпись штата поверх карты
+    try { cmp3dLabels(box, st); } catch (e10) {}
     try {
       st.ro = new ResizeObserver(() => {
         try {
@@ -350,11 +391,11 @@ function cmp3dAddMeshes(st, data) {
     // Рамка (side/corner) — как обычная подложка: глухая и непрозрачная.
     // Их полупрозрачная альфа давала лишние ступени затемнения по краю;
     // main и так глухой (IsTransparent=false), теперь вся семья глухая.
-    // Плита пригашена (0x999999): её линии R~45, точки R~130 — под
-    // линейным выходом точки светились, множитель возвращает яркость
-    // как была при ACES. Света на плите нет и не было (unlit)
+    // Плита пригашена (0x333333): её линии R~45, точки R~130 — под
+    // линейным выходом точки светились. Теперь линии почти не видны,
+    // точки тускло тлеют — как в игре. Света на плите нет (unlit)
     mat.userData.isUnder = isUnder;
-    if (isUnder) mat.color.setHex(0x999999);
+    if (isUnder) mat.color.setHex(0x333333);
     if (md && !md.missing) {
       mat.userData.albedoRel = md.albedo || "";
       cmp3dWantTex(st, texLoader, maxAniso, texUrl, mat, "map", md.albedo, true);
@@ -709,7 +750,7 @@ function cmp3dHome(st) {
 // константы CMP3D_*
 function cmp3dLightDef() {
   return {key: CMP3D_KEY, hemi: CMP3D_HEMI, expo: CMP3D_EXPO,
-    night: 0, decal: 1.0, fog: 1.0, tm: "linear", dist: 1.0};
+    night: 1.0, decal: 0, fog: 1.0, tm: "linear", dist: 1.0};
 }
 function cmp3dLightLoad() {
   const d = cmp3dLightDef();
