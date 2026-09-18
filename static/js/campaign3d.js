@@ -367,14 +367,18 @@ function cmp3dAddMeshes(st, data) {
 }
 // Проявка текста декалей: буквы темнее фона в R — инверсия
 // с растяжкой в свечение (фон уходит в чёрный, вуали нет).
-// Тот же рантайм-кэш URL, обработка в фоне один раз на сцену
+// Грузим через общий менеджер — статус «tex» ждёт и проявку,
+// скрин раньше готовности исключён. Сила — decalPower, её же
+// возвращают клавиши 5/0 (иначе текст умирал до перезахода)
 function cmp3dDecalEmissive(st, url, mat, power) {
   if (!url || mat.userData.decalOn) return;
   mat.userData.decalOn = true;
-  const img = new Image();
-  img.crossOrigin = "anonymous";
-  img.onload = () => {
+  mat.userData.decalPower = power || 2.0;
+  const tl = new THREE.TextureLoader(st.texMgr);
+  tl.setCrossOrigin("anonymous");
+  tl.load(url, tx => {
     try {
+      const img = tx.image;
       const cv = document.createElement("canvas");
       cv.width = img.width; cv.height = img.height;
       const cx = cv.getContext("2d");
@@ -388,17 +392,16 @@ function cmp3dDecalEmissive(st, url, mat, power) {
         d[i + 3] = 255;
       }
       cx.putImageData(id, 0, 0);
-      const tx = new THREE.CanvasTexture(cv);
-      mat.emissiveMap = tx;
+      try { tx.dispose(); } catch (e0) {}
+      const dt = new THREE.CanvasTexture(cv);
+      mat.emissiveMap = dt;
       mat.emissive = new THREE.Color(0xffffff);
-      mat.emissiveIntensity = power || 2.0;
+      mat.emissiveIntensity = mat.userData.decalPower;
       mat.needsUpdate = true;
-      mat.userData.tex.push(tx);
-      st.disposables.push(tx);
+      mat.userData.tex.push(dt);
+      st.disposables.push(dt);
     } catch (e) {}
-  };
-  img.onerror = () => {};
-  img.src = url;
+  }, undefined, () => {});
 }
 function cmp3dTexReady(st, mat, slot) {
   try {
@@ -518,6 +521,7 @@ function cmp3dDbg(view) {
           try {
             if (m.material && m.material.emissive)
               m.material.emissiveIntensity =
+                m.material.userData.decalPower ||
                 m.material.userData.emissionPower || 0;
           } catch (e3) {}
         });
@@ -536,7 +540,8 @@ function cmp3dDbg(view) {
           try {
             if (m.material && m.material.emissive)
               m.material.emissiveIntensity = st._emisOff ? 0 :
-                (m.material.userData.emissionPower || 0);
+                (m.material.userData.decalPower ||
+                  m.material.userData.emissionPower || 0);
           } catch (e2) {}
         });
       }
